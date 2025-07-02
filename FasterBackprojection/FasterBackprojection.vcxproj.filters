@@ -1,0 +1,350 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="source">
+      <UniqueIdentifier>{f35fbff8-8bc7-43aa-8360-e1418ab2f3db}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="header">
+      <UniqueIdentifier>{d015e105-404e-47f9-a730-0434c2ae3f0a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="header\fonts">
+      <UniqueIdentifier>{29c0901d-dffd-4b8c-8378-3f020f4d1275}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="source\fonts">
+      <UniqueIdentifier>{81ea00f9-a3a3-498f-9a65-855d48b12a7b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="source\cuda">
+      <UniqueIdentifier>{84cae687-dba6-49d7-b337-1cd814d3fef3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="resources">
+      <UniqueIdentifier>{5a21eb52-f68b-494e-a219-38bc80258bf5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="resources\shaders">
+      <UniqueIdentifier>{98e3e856-db18-40f3-a877-b869f48873be}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="resources\shaders\shading">
+      <UniqueIdentifier>{74c0a2df-fd56-4506-9174-2fc476a752b7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="header\progressbar">
+      <UniqueIdentifier>{19e4244d-14d6-43be-9bae-39bfa8957887}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="header\cuda">
+      <UniqueIdentifier>{a79bd1f4-8d1c-4ad0-a728-e59655c3ae2c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Window.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="UnsignedImage.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="TriangleMesh.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="NLosData.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="TransientParameters.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="TransientImage.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="Texture.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="stdafx.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="Sphere.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="Singleton.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="ShaderProgram.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="SceneContent.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderingShader.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderer.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="RandomUtilities.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="Model3D.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="InterfaceAdapter.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="InputManager.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="Image.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="GuiUtilities.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="Gui.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="GeometricUtilities.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="FloatImage.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="ComputeShader.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="CameraProjection.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="CameraGuiAdapter.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="ApplicationState.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="AABB.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="fonts\font_awesome.hpp">
+      <Filter>header\fonts</Filter>
+    </ClInclude>
+    <ClInclude Include="fonts\IconsFontAwesome5.h">
+      <Filter>header\fonts</Filter>
+    </ClInclude>
+    <ClInclude Include="fonts\lato.hpp">
+      <Filter>header\fonts</Filter>
+    </ClInclude>
+    <ClInclude Include="CudaHelper.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="random_kernels.cuh">
+      <Filter>header\cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="Laser.cuh">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="progressbar\include\progressbar.hpp">
+      <Filter>header\progressbar</Filter>
+    </ClInclude>
+    <ClInclude Include="math.cuh">
+      <Filter>header\cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="FileUtilities.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="CudaContext.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="ChronoUtilities.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="transient_reconstruction.cuh">
+      <Filter>header\cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="fourier.cuh">
+      <Filter>header\cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="transient_utils.cuh">
+      <Filter>header\cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="DrawPointCloud.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="NLosDataVisualizer.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="Vao.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="ShaderProgramDB.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="DrawEllipsoids.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="DrawCube.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="GpuStructs.cuh">
+      <Filter>header</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Window.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="Vao.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="UnsignedImage.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="TriangleMesh.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="NLosData.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="TransientImage.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="Texture.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="stdafx.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="Sphere.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="ShaderProgram.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="SceneContent.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderingShader.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderer.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="Model3D.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="InputManager.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="GuiUtilities.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="Gui.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="GeometricUtilities.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="FloatImage.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="ComputeShader.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="CameraProjection.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="CameraGuiAdapter.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="Camera.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="AABB.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="fonts\font_awesome.cpp">
+      <Filter>source\fonts</Filter>
+    </ClCompile>
+    <ClCompile Include="fonts\font_awesome_2.cpp">
+      <Filter>source\fonts</Filter>
+    </ClCompile>
+    <ClCompile Include="fonts\lato.cpp">
+      <Filter>source\fonts</Filter>
+    </ClCompile>
+    <ClCompile Include="CudaHelper.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="FileUtilities.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="CudaContext.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="NLosDataVisualizer.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="DrawPointCloud.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="ShaderProgramDB.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="DrawEllipsoids.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="DrawCube.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="Laser.cu">
+      <Filter>source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="GpuStructs.cu">
+      <Filter>source</Filter>
+    </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="assets\shaders\shading\quad-fs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\quad-vs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\cube-fs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\cube-vs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="cpp.hint" />
+    <None Include="assets\shaders\shading\line-fs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\line-vs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\point-fs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\point-vs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\triangle-fs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\triangle-vs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\multi-triangle-fs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\multi-triangle-vs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\backprojection-fs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\backprojection-vs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+  </ItemGroup>
+</Project>
