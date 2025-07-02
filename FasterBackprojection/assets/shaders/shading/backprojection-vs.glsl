@@ -1,16 +1,16 @@
-#version 450
+#version 460
 
 layout(location = 0) in vec3 vPosition;
 layout(location = 3) in vec3 vTranslation;
 layout(location = 4) in vec3 vScale;
-layout(location = 6) in uint vIntensity;
+layout(location = 6) in float vIntensity;
 
 uniform vec3 voxelMin, voxelMax;
 uniform mat4 voxelModelMatrix; 
 uniform mat4 voxelProjectionMatrix; 
 
 out vec3 worldPos;
-out flat uint intensity;
+out flat float intensity;
 
 void main()
 {

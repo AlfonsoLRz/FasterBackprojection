@@ -150,7 +150,7 @@ void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuff
 	recInfo._hiddenVolumeMax = _hiddenGeometry.maxPoint();
 	recInfo._hiddenVolumeSize = _hiddenGeometry.size();
 
-	recInfo._voxelResolution = glm::uvec3(32u);
+	recInfo._voxelResolution = glm::uvec3(256u);
 	recInfo._hiddenVolumeVoxelSize = _hiddenGeometry.size() / glm::vec3(recInfo._voxelResolution);
 }
 

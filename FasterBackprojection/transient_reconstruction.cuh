@@ -6,6 +6,7 @@
 
 #define BLOCK_C 16
 #define BLOCK_D 16
+//#define ACCUMULATE_VOXEL_SCATTERING
 
 __global__ void backproject(float* __restrict__ activation, const double* __restrict__ depths, glm::uint numDepths, glm::uint checkPosIdx)
 {
@@ -107,12 +108,75 @@ __global__ void backprojectExhaustive(float* __restrict__ activation, const doub
 		atomicAdd(&activation[c * numDepths + d], intensity);
 }
 
-__global__ void backprojectVoxel(float* __restrict__ activation, glm::uint sliceSize, glm::uint voxelZ)
-{
-	glm::uint l = blockIdx.x * blockDim.x + threadIdx.x;
-	glm::uint v = blockIdx.y * blockDim.y + threadIdx.y;
+//__global__ void backprojectVoxelInverse(float* __restrict__ activation, glm::uint sliceSize)
+//{
+//	glm::uint vx = blockIdx.x * blockDim.x + threadIdx.x;
+//	glm::uint vy = blockIdx.y * blockDim.y + threadIdx.y;
+//	glm::uint voxelZ = blockIdx.z * blockDim.z + threadIdx.z; 
+//
+//	if (vx >= rtRecInfo._voxelResolution.x || vy >= rtRecInfo._voxelResolution.y || voxelZ >= rtRecInfo._voxelResolution.z)
+//		return;
+//
+//	const glm::vec3 currentVoxelCenterPos = rtRecInfo._hiddenVolumeMin + glm::vec3(vx, voxelZ, vy) * rtRecInfo._hiddenVolumeVoxelSize + 0.5f * rtRecInfo._hiddenVolumeVoxelSize;
+//	float totalLightGathered = 0.0f; // Accumulate contributions for this voxel
+//
+//	// Iterate through all possible laser targets (s or l)
+//	// This is the "reversal" - now each voxel checks all potential sources.
+//	for (glm::uint l_idx = 0; l_idx < rtRecInfo._numLaserTargets; ++l_idx)
+//	{
+//		const glm::vec3 lPos = laserTargets[l_idx];
+//
+//		// Calculate 'dist' for *this specific voxel* and *this specific laser target*
+//		// This 'dist' represents the total path length from laser -> relay wall (lPos) -> voxel -> sensor.
+//		// It's the same distance calculation as in your original kernel.
+//		float dist = glm::distance(lPos, currentVoxelCenterPos) * 2.0f - timeOffset;
+//		if (discardFirstLastBounces == 0) // Assuming 0 means not discarding
+//			dist += glm::distance(lPos, laserPosition) + glm::distance(lPos, sensorPosition);
+//
+//		float voxelExtent = glm::length(hiddenVolumeVoxelSize) / 2.0f;
+//		float minDist = glm::max(.0f, dist - voxelExtent);
+//		float maxDist = dist + voxelExtent;
+//
+//		// Iterate through relevant time bins
+//		// Note: You can optimize this loop to only iterate relevant time bins,
+//		// rather than all numTimeBins, for this (l, voxel) pair.
+//		// The loop is similar to your original kernel's 'while (d < maxDist)'
+//		for (float d = minDist; d < maxDist; d += timeStep)
+//		{
+//			const int timeBin = static_cast<int>(d / timeStep);
+//
+//			if (timeBin >= 0 && timeBin < numTimeBins) // Check bounds
+//			{
+//				// Access the intensityCube for this (laser target, timeBin)
+//				// getConfocalTransientIndex needs to be defined
+//				const float backscatteredLight = intensityCube[getConfocalTransientIndex(l_idx, timeBin)];
+//
+//				if (backscatteredLight > EPS) // Only add if there's significant light
+//				{
+//					totalLightGathered += backscatteredLight; // Accumulate
+//				}
+//			}
+//		}
+//	}
+//
+//	// Store the accumulated value for this voxel in the output buffer
+//	// This access is coalesced because voxelX is driven by threadIdx.x
+//	glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
+//	voxelOutputBuffer[voxelZ * sliceSize + vy * voxelResolution.x + vx] = totalLightGathered;
+//	// Note: No atomicAdd needed here if each voxel is calculated independently and written once.
+//	// If multiple source-target-timebin combinations might contribute to the same voxel *and*
+//	// those computations are split across different threads (which is not the case here, as each thread owns a unique voxel)
+//	// then an atomicAdd would be needed.
+//	// For "gather", usually each thread writes to its own unique output location.
+//}
 
-	if (l >= rtRecInfo._numLaserTargets || v >= sliceSize)
+__global__ void backprojectVoxel(float* __restrict__ activation, glm::uint sliceSize)
+{
+	glm::uint v = blockIdx.x * blockDim.x + threadIdx.x; 
+	glm::uint l = blockIdx.y * blockDim.y + threadIdx.y; 
+	glm::uint voxelZ = blockIdx.z * blockDim.z + threadIdx.z;
+
+	if (l >= rtRecInfo._numLaserTargets || v >= sliceSize || voxelZ >= rtRecInfo._voxelResolution.z)
 		return;
 
 	const glm::uint vx = v % rtRecInfo._voxelResolution.x;
@@ -125,6 +189,7 @@ __global__ void backprojectVoxel(float* __restrict__ activation, glm::uint slice
 	if (rtRecInfo._discardFirstLastBounces == 0)
 		dist += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(lPos, rtRecInfo._sensorPosition);
 
+#ifdef ACCUMULATE_VOXEL_SCATTERING
 	float voxelExtent = glm::length(rtRecInfo._hiddenVolumeVoxelSize) / 2.0f;
 	float minDist = glm::max(.0f, dist - voxelExtent), maxDist = dist + voxelExtent;
 	float d = minDist;
@@ -136,69 +201,18 @@ __global__ void backprojectVoxel(float* __restrict__ activation, glm::uint slice
 			return;
 		const float backscatteredLight = intensityCube[getConfocalTransientIndex(l, timeBin)];
 		if (backscatteredLight > EPS)
-			atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight);
+			atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight * safeRCP(dist * dist));
 		d += rtRecInfo._timeStep;
 	}
+#else
+	const int timeBin = static_cast<int>(dist / rtRecInfo._timeStep);
+	if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
+		return;
 
-	//const int timeBin = static_cast<int>(dist / rtRecInfo._timeStep);
-	//if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
-	//	return;
-
-	//const float backscatteredLight = rtRecInfo.intensityCube[getConfocalTransientIndex(l, timeBin)];
-	//if (backscatteredLight < EPS)
-	//	return;
-
-	//atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight);
-
-	//float traversedDistance = float(t) * rtRecInfo._timeStep - rtRecInfo._timeOffset;
-	//if (rtRecInfo._discardFirstLastBounces == 0)
-	//	traversedDistance -= (glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(lPos, rtRecInfo._sensorPosition));
-
-	//const float backscatteredLight = rtRecInfo.intensityCube[getConfocalTransientIndex(l, t)];
-	//const float extension = 0.001f;
-	//const float sigma = extension * glm::length(rtRecInfo._hiddenVolumeVoxelSize);
-	//const float error = glm::abs(traversedDistance - glm::distance(lPos, checkPos));
-	//const float weight = expf(-(error * error) / (2.0f * sigma * sigma));
-
-	//if (weight > EPS && backscatteredLight > EPS)
-	//	atomicAdd(&activation[voxelZ * sliceSize + v], backscatteredLight);
-
-	//const float maxRadius = 0.5f * distance;
-	//const float invSquaredDistance = safeRCP(distance * distance);
-	//const float backscatteredLight = rtRecInfo.intensityCube[getConfocalTransientIndex(l, s, t)];
-	//glm::vec3 minWorld = lPos - glm::vec3(maxRadius);
-	//glm::vec3 maxWorld = lPos + glm::vec3(maxRadius);
-
-	// Clamp to scene AABB
-	//minWorld = glm::max(minWorld, rtRecInfo._hiddenVolumeMin);
-	//maxWorld = glm::min(maxWorld, rtRecInfo._hiddenVolumeMax);
-
-	//glm::ivec3 minVoxel = glm::floor((minWorld - rtRecInfo._hiddenVolumeMin) / rtRecInfo._hiddenVolumeVoxelSize);
-	//glm::ivec3 maxVoxel = glm::ceil((maxWorld - rtRecInfo._hiddenVolumeMin) / rtRecInfo._hiddenVolumeVoxelSize);
-
-	//// Clamp to valid voxel indices
-	//minVoxel = glm::clamp(minVoxel, glm::ivec3(0), glm::ivec3(voxelResolution) - 1);
-	//maxVoxel = glm::clamp(maxVoxel, glm::ivec3(0), glm::ivec3(voxelResolution) - 1);
-
-	//for (int z = minVoxel.z; z <= maxVoxel.z; ++z)
-	//	for (int y = minVoxel.y; y <= maxVoxel.y; ++y)
-	//		for (int x = minVoxel.x; x <= maxVoxel.x; ++x) 
-	//		{
-	//			glm::vec3 voxelCenter = rtRecInfo._hiddenVolumeMin + (glm::vec3(x, y, z) + 0.5f) * rtRecInfo._hiddenVolumeVoxelSize;
-
-	//			const float estimatedDistance = glm::distance(lPos, voxelCenter) + glm::distance(voxelCenter, sPos);
-	//			const float error = estimatedDistance - distance;
-
-	//			const float extension = .3f;
-	//			const float sigma = extension * glm::length(rtRecInfo._hiddenVolumeVoxelSize);
-	//			const float weight = expf(-(error * error) / (2.0f * sigma * sigma));
-
-	//			if (weight > 0.01f)
-	//			{
-	//				int index = z * voxelResolution.y * voxelResolution.x + y * voxelResolution.x + x;
-	//				atomicAdd(&activation[index], weight * backscatteredLight * invSquaredDistance);
-	//			}
-	//		}
+	const float backscatteredLight = intensityCube[getConfocalTransientIndex(l, timeBin)];
+	if (backscatteredLight > EPS)
+		atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight * safeRCP(dist * dist));
+#endif
 }
 
 __global__ void precomputeDataConfocal(

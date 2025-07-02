@@ -29,8 +29,9 @@ void Window::init(const std::string& title, const uint16_t width, const uint16_t
     // OpenGL de la ventana que vamos a crear. Por ejemplo, el número de muestras o el
     // modo Core Profile.
     glfwWindowHint(GLFW_SAMPLES, 4); // - Activa antialiasing con 4 muestras.
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // - Esta y las 2
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4); // siguientes activan un contexto
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); 
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4); 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6); // OpenGL Core Profile 4.6
 
     // - Tamaño, título de la ventana, en ventana y no en pantalla completa, sin compartir recursos con otras ventanas.

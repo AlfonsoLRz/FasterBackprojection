@@ -3,11 +3,11 @@
 layout(location = 0) in vec3 vPosition;
 layout(location = 3) in vec3 vTranslation;
 layout(location = 4) in vec3 vScale;
-layout(location = 6) in uint vIntensity;
+layout(location = 6) in float vIntensity;
 
 uniform mat4 mModelViewProj;
 
-out flat uint intensity;
+out flat float intensity;
 
 void main()
 {

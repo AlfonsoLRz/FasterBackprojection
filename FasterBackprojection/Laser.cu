@@ -299,21 +299,21 @@ void Laser::reconstructAABBConfocal(const ReconstructionInfo& nlosInfo)
 	float* activationGPU = nullptr;
 	CudaHelper::initializeZeroBufferGPU(activationGPU, numVoxels);
 
-	//// Determine size of thread groups and threads within them
-	dim3 blockSize(8, 8, 8);
+	ChronoUtilities::startTimer();
+
+	dim3 blockSize(16, 16, 4); 
 	dim3 gridSize(
-		(nlosInfo._numLaserTargets + blockSize.x - 1) / blockSize.x,
-		(sliceSize + blockSize.y - 1) / blockSize.y);
+		(sliceSize + blockSize.x - 1) / blockSize.x,    
+		(nlosInfo._numLaserTargets + blockSize.y - 1) / blockSize.y, 
+		(voxelResolution.z + blockSize.z - 1) / blockSize.z  
+	);
 
-	for (glm::uint z = 0; z < voxelResolution.z; ++z)
-	{
-		backprojectVoxel<<<gridSize, blockSize>>>(activationGPU, sliceSize, z);
-		CudaHelper::synchronize("backprojectVoxel");
-
-		std::cout << "Voxel slice: " << z << "/" << voxelResolution.z << '\n';
-	}
+	backprojectVoxel<<<gridSize, blockSize>>>(activationGPU, sliceSize);
+	CudaHelper::synchronize("backprojectVoxel");
 
 	normalizeMatrix(activationGPU, numVoxels);
+
+	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// Prepare buckets and info for storing data in the local system
 	const std::string outputFolder = "output/";

@@ -2,6 +2,7 @@
 #include "stdafx.h"
 #include "DrawEllipsoids.h"
 
+#include "ChronoUtilities.h"
 #include "FileUtilities.h"
 #include "ShaderProgramDB.h"
 
@@ -11,41 +12,41 @@ DrawEllipsoids::DrawEllipsoids(NLosData* nlosData): _numInstances(0), _nlosData(
 	Component* component = &_components.front();
 
 	// Multi-instance rendering
-	//glm::uint timeIdx = 544;
-	//float* timeSlice = nlosData->getTimeSlice(timeIdx);
+	glm::uint timeIdx = 544;
+	float* timeSlice = nlosData->getTimeSlice(timeIdx);
 
-	//std::vector<glm::vec3> ellipsoidPositions, ellipsoidScale;
-	//std::vector<float> ellipsoidIntensities;
+	std::vector<glm::vec3> ellipsoidPositions, ellipsoidScale;
+	std::vector<float> ellipsoidIntensities;
 
-	//for (int t = 0; t < _nlosData->_temporalResolution; ++t)
-	//{
-	//	float* timeSlice = _nlosData->getTimeSlice(t);
+	for (int t = 543; t < nlosData->_temporalResolution; ++t)
+	{
+		float* timeSlice = _nlosData->getTimeSlice(t);
 
-	//	if (_nlosData->_isConfocal)
-	//	{
-	//		glm::uint pixelIdx = 0;
+		if (_nlosData->_isConfocal)
+		{
+			glm::uint pixelIdx = 0;
 
-	//		for (const glm::vec3& pos : _nlosData->_laserGridPositions)
-	//		{
-	//			if (timeSlice[pixelIdx] > glm::epsilon<float>())
-	//			{
-	//				const glm::vec3 lPos = _nlosData->_laserGridPositions[pixelIdx];
-	//				float traversalDistance = static_cast<float>(t) * _nlosData->_deltaT + _nlosData->_t0;
-	//				//if (_nlosData-> == 0)		// Measurements did not discard first and last bounces
-	//				traversalDistance -= (glm::distance(lPos, _nlosData->_laserPosition) + glm::distance(lPos, _nlosData->_cameraPosition));
-	//				//traversalDistance /= 2.0f;		// Disabled because radius is 0.5f and not 1.0f
+			for (const glm::vec3& pos : _nlosData->_laserGridPositions)
+			{
+				if (timeSlice[pixelIdx] > glm::epsilon<float>())
+				{
+					const glm::vec3 lPos = _nlosData->_laserGridPositions[pixelIdx];
+					float traversalDistance = static_cast<float>(t) * _nlosData->_deltaT + _nlosData->_t0;
+					//if (_nlosData-> == 0)		// Measurements did not discard first and last bounces
+					traversalDistance -= (glm::distance(lPos, _nlosData->_laserPosition) + glm::distance(lPos, _nlosData->_cameraPosition));
+					//traversalDistance /= 2.0f;		// Disabled because radius is 0.5f and not 1.0f
 
-	//				ellipsoidPositions.push_back(pos);
-	//				ellipsoidScale.emplace_back(traversalDistance); // Scale for confocal ellipsoids
-	//				ellipsoidIntensities.push_back(timeSlice[pixelIdx]);
-	//			}
+					ellipsoidPositions.push_back(pos);
+					ellipsoidScale.emplace_back(traversalDistance); // Scale for confocal ellipsoids
+					ellipsoidIntensities.push_back(timeSlice[pixelIdx]);
+				}
 
-	//			++pixelIdx;
-	//		}
-	//	}
-	//}
+				++pixelIdx;
+			}
+		}
+	}
 
-	//// Normalize intensity - (Same as before, check for maxIntensity == minIntensity for division by zero)
+	// Normalize intensity - (Same as before, check for maxIntensity == minIntensity for division by zero)
 	//float maxIntensity = *std::max_element(ellipsoidIntensities.begin(), ellipsoidIntensities.end());
 	//float minIntensity = *std::min_element(ellipsoidIntensities.begin(), ellipsoidIntensities.end());
 	//std::vector<uint32_t> ellipsoidUnsignedIntensity(ellipsoidIntensities.size());
@@ -55,34 +56,33 @@ DrawEllipsoids::DrawEllipsoids(NLosData* nlosData): _numInstances(0), _nlosData(
 	//	ellipsoidUnsignedIntensity[i] = static_cast<uint32_t>(normalizedIntensity * 255.0f);
 	//}
 
-	//// 
-	//createHalfEllipsoid(component, 45, 45);
-	//component->generateWireframe();
-	//component->buildVao();
+	// 
+	createHalfEllipsoid(component, 180, 180);
+	component->buildVao();
 
-	//component->_vao->createMultiInstanceVBO(Vao::TRANSLATION, glm::vec3(.0f), .0f, GL_FLOAT);
-	//component->_vao->setVBOData(Vao::TRANSLATION, ellipsoidPositions.data(), static_cast<GLsizei>(ellipsoidPositions.size()));
+	component->_vao->createMultiInstanceVBO(Vao::TRANSLATION, glm::vec3(.0f), .0f, GL_FLOAT);
+	component->_vao->setVBOData(Vao::TRANSLATION, ellipsoidPositions.data(), static_cast<GLsizei>(ellipsoidPositions.size()));
 
-	//component->_vao->createMultiInstanceVBO(Vao::SCALE, glm::vec3(.0f), .0f, GL_FLOAT);
-	//component->_vao->setVBOData(Vao::SCALE, ellipsoidScale.data(), static_cast<GLsizei>(ellipsoidScale.size()));
+	component->_vao->createMultiInstanceVBO(Vao::SCALE, glm::vec3(.0f), .0f, GL_FLOAT);
+	component->_vao->setVBOData(Vao::SCALE, ellipsoidScale.data(), static_cast<GLsizei>(ellipsoidScale.size()));
 
-	//component->_vao->createMultiInstanceIntVBO(Vao::INTENSITY, (uint32_t)0, (uint32_t)0, GL_UNSIGNED_INT);
-	//component->_vao->setVBOData(Vao::INTENSITY, ellipsoidUnsignedIntensity.data(), static_cast<GLsizei>(ellipsoidUnsignedIntensity.size()));
+	component->_vao->createMultiInstanceVBO(Vao::INTENSITY, .0f, .0f, GL_FLOAT);
+	component->_vao->setVBOData(Vao::INTENSITY, ellipsoidIntensities.data(), static_cast<GLsizei>(ellipsoidIntensities.size()));
 
-	//// Set up component properties
-	//_numInstances = static_cast<GLuint>(ellipsoidPositions.size());
+	// Set up component properties
+	_numInstances = static_cast<GLuint>(ellipsoidPositions.size());
 
-	//// Change model matrix according to difference between half ellipsoid and wall normal
-	//const glm::vec3 halfEllipsoid = glm::vec3(.0f, .0f, 1.0f);
-	//const glm::vec3 wallNormal = glm::vec3(.0f, .0f, -1.0f);
-	//const float angle = glm::acos(glm::dot(halfEllipsoid, wallNormal));
-	//_modelMatrix = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(1.0f, 0.0f, 0.0f));
+	// Change model matrix according to difference between half ellipsoid and wall normal
+	const glm::vec3 halfEllipsoid = glm::vec3(.0f, .0f, 1.0f);
+	const glm::vec3 wallNormal = glm::vec3(.0f, .0f, -1.0f);
+	const float angle = glm::acos(glm::dot(halfEllipsoid, wallNormal));
+	_modelMatrix = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(1.0f, 0.0f, 0.0f));
 
-	//// Retrieve shaders for rendering ellipsoids later
-	//_triangleShader = ShaderProgramDB::getInstance()->getShader(ShaderProgramDB::TRIANGLE_RENDERING);
-	//_lineShader = ShaderProgramDB::getInstance()->getShader(ShaderProgramDB::LINE_RENDERING);
-	//_multiInstanceTriangleShader = ShaderProgramDB::getInstance()->getShader(ShaderProgramDB::MULTI_INSTANCE_TRIANGLE_RENDERING);
-	//_backprojectionShader = ShaderProgramDB::getInstance()->getShader(ShaderProgramDB::BACKPROJECTION_RENDERING);
+	// Retrieve shaders for rendering ellipsoids later
+	_triangleShader = ShaderProgramDB::getInstance()->getShader(ShaderProgramDB::TRIANGLE_RENDERING);
+	_lineShader = ShaderProgramDB::getInstance()->getShader(ShaderProgramDB::LINE_RENDERING);
+	_multiInstanceTriangleShader = ShaderProgramDB::getInstance()->getShader(ShaderProgramDB::MULTI_INSTANCE_TRIANGLE_RENDERING);
+	_backprojectionShader = ShaderProgramDB::getInstance()->getShader(ShaderProgramDB::BACKPROJECTION_RENDERING);
 }
 
 DrawEllipsoids::~DrawEllipsoids()
@@ -100,11 +100,6 @@ void DrawEllipsoids::draw(MatrixRenderInformation* matrixInformation, Applicatio
 
 	const AABB hiddenGeometry = _nlosData->_hiddenGeometry;
 	glm::vec3 minBounds = hiddenGeometry.minPoint(), maxBounds = hiddenGeometry.maxPoint();
-	//glm::mat4 projectionMatrix = glm::ortho(
-	//	minBounds.x, maxBounds.x,  // left, right
-	//	minBounds.y, maxBounds.y,  // bottom, top
-	//	minBounds.z, maxBounds.z   // near, far
-	//) * this->_modelMatrix;
 
 	if (appState->_primitiveEnabled[Vao::TRIANGLE] && component->_enabled && component->_vao)
 	{
@@ -112,8 +107,8 @@ void DrawEllipsoids::draw(MatrixRenderInformation* matrixInformation, Applicatio
 		_multiInstanceTriangleShader->setUniform("mModelViewProj", viewProjectionMatrix);
 		_multiInstanceTriangleShader->applyActiveSubroutines();
 		component->_vao->drawObject(
-			Vao::TRIANGLE, GL_TRIANGLES, 
-			static_cast<GLsizei>(component->_indices[Vao::TRIANGLE].size()), static_cast<GLsizei>(_numInstances));
+			Vao::POINT, GL_POINTS, 
+			static_cast<GLsizei>(component->_indices[Vao::POINT].size()), static_cast<GLsizei>(glm::min(1u, _numInstances)));
 	}
 }
 
@@ -225,6 +220,7 @@ void DrawEllipsoids::createHalfEllipsoid(Component* component, int stacks, int s
 	}
 
 	component->_vertices = std::move(geometry);
+	component->generatePointCloud();
 }
 
 void DrawEllipsoids::solveBackprojection()
@@ -250,17 +246,17 @@ void DrawEllipsoids::solveBackprojection()
 	GLuint voxelTex;
 	glGenTextures(1, &voxelTex);
 	glBindTexture(GL_TEXTURE_3D, voxelTex);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); // Changed for debugging
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); // Changed for debugging
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-	glTexStorage3D(GL_TEXTURE_3D, 1, GL_R32UI, voxelRes.x, voxelRes.y, voxelRes.z); // Immutable storage
-	glBindImageTexture(0, voxelTex, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32UI);
+	glTexStorage3D(GL_TEXTURE_3D, 1, GL_R32F, voxelRes.x, voxelRes.y, voxelRes.z);
+	glBindImageTexture(0, voxelTex, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
 
 	// Clean texture
-	uint32_t clearValue = 0;
-	glClearTexImage(voxelTex, 0, GL_RED_INTEGER, GL_UNSIGNED_INT, &clearValue);
+	float clearValue = 0.0f; // Clear with a float 0.0
+	glClearTexImage(voxelTex, 0, GL_RED, GL_FLOAT, &clearValue);
 
 	// Set up rendering state
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
@@ -274,44 +270,49 @@ void DrawEllipsoids::solveBackprojection()
 	_backprojectionShader->setUniform("voxelRes", voxelRes);
 	_backprojectionShader->setUniform("voxelModelMatrix", this->_modelMatrix);
 	_backprojectionShader->setUniform("voxelProjectionMatrix", voxelProjectionMatrix); 
-	_backprojectionShader->applyActiveSubroutines(); 
+
+	ChronoUtilities::startTimer();
 
 	// Draw Call - (Standard instanced draw)
 	glBindVertexArray(component->_vao->_vao);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, component->_vao->_ibo[Vao::TRIANGLE]);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, component->_vao->_ibo[Vao::POINT]);
 
 	for (GLsizei i = 0; i < numEllipsoids; i += BATCH_SIZE) {
 		GLsizei currentBatchSize = glm::min(BATCH_SIZE, numEllipsoids - i);
 		GLuint offset = i; 
 
 		glDrawElementsInstancedBaseInstance(
-			GL_TRIANGLES,
-			static_cast<GLsizei>(component->_indices[Vao::TRIANGLE].size()),
+			GL_POINTS,
+			static_cast<GLsizei>(component->_indices[Vao::POINT].size()),
 			GL_UNSIGNED_INT,
 			nullptr, 
 			currentBatchSize,
-			offset); 
+			offset);
+		glFinish();
+		std::cout << "DrawEllipsoids::solveBackprojection: Drawn batch " << (i / BATCH_SIZE) + 1 << " of " << (numEllipsoids + BATCH_SIZE - 1) / BATCH_SIZE << "\n";
 	}
 
 	// Clean up and synchronize - (All good)
 	glBindVertexArray(0);
 	glUseProgram(0);
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-	//glFinish();
+	glFinish();
+
+	std::cout << "DrawEllipsoids::solveBackprojection: Backprojection completed in " << ChronoUtilities::getElapsedTime() << " milliseconds.\n";
 
 	// Read Back and Verify - (Correctly reads back the voxel texture)
 	glBindTexture(GL_TEXTURE_3D, voxelTex);
 	size_t voxelCount = voxelRes.x * voxelRes.y * voxelRes.z;
-	std::vector<uint32_t> voxelData(voxelCount);
+	std::vector<float> voxelData(voxelCount);
 
-	glGetTexImage(GL_TEXTURE_3D, 0, GL_RED_INTEGER, GL_UNSIGNED_INT, voxelData.data());
+	glGetTexImage(GL_TEXTURE_3D, 0, GL_RED, GL_FLOAT, voxelData.data());
 
 	bool anyNonZero = std::any_of(
 		voxelData.begin(), voxelData.end(),
-		[](uint32_t val) { return val != 0; }
+		[](uint32_t val) { return val > glm::epsilon<float>(); }
 	);
 
-	FileUtilities::write("D:/aabb.cube", voxelData);
+	FileUtilities::write("output/aabb.cube", voxelData);
 
 	if (anyNonZero)
 		std::cout << "Voxel texture contains non-zero data.\n";

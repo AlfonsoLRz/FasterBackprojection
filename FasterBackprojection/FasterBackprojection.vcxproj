@@ -63,7 +63,7 @@
       <CodeGeneration>compute_89,sm_89</CodeGeneration>
       <InterleaveSourceInPTX>false</InterleaveSourceInPTX>
       <ExtensibleWholeProgramCompilation>false</ExtensibleWholeProgramCompilation>
-      <FastMath>false</FastMath>
+      <FastMath>true</FastMath>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -91,7 +91,7 @@
       <CodeGeneration>compute_89,sm_89</CodeGeneration>
       <InterleaveSourceInPTX>false</InterleaveSourceInPTX>
       <ExtensibleWholeProgramCompilation>false</ExtensibleWholeProgramCompilation>
-      <FastMath>false</FastMath>
+      <FastMath>true</FastMath>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
