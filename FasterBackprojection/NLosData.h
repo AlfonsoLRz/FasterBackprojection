@@ -5,6 +5,8 @@
 #include "AABB.h"
 #include "transient_utils.cuh"
 
+using Complex = std::complex<float>;
+
 class NLosData
 {
 	friend class TransientReconstruction;
@@ -46,10 +48,14 @@ protected:
 	bool loadBinaryFile(const std::string& filename);
 	bool saveBinaryFile(const std::string& filename) const;
 
+    void padIntensity(std::vector<Complex>& paddedIntensity, size_t padding, const std::string& mode, size_t timeDim = 0) const;
+
 public:
 	NLosData(const TransientParameters& transientParams);
 	NLosData(const std::string& filename, bool saveBinary = true, bool useBinary = true);
 	virtual ~NLosData();
+
+	void filter_H_cuda(float wl_mean, float wl_sigma, const std::string& border = "edge");
 
 	void toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers);
 

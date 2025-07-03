@@ -295,10 +295,10 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="Laser.cu">
+    <CudaCompile Include="GpuStructs.cu">
       <Filter>source</Filter>
     </CudaCompile>
-    <CudaCompile Include="GpuStructs.cu">
+    <CudaCompile Include="Laser.cu">
       <Filter>source</Filter>
     </CudaCompile>
   </ItemGroup>

@@ -14,8 +14,9 @@
 void SceneContent::buildScenario()
 {
 	// Use real data and reconstruct the shape
-	//NLosData transientVoxels("assets/transient/z/Z_l[0.00,-1.00,0.00]_r[1.57,0.00,3.14]_v[0.81,0.01,0.81]_s[16]_l[16]_gs[1.00].hdf5");
+	//NLosData* transientVoxels = new NLosData("assets/transient/z/Z_l[0.00,-1.00,0.00]_r[1.57,0.00,3.14]_v[0.81,0.01,0.81]_s[16]_l[16]_gs[1.00].hdf5");
 	NLosData* transientVoxels = new NLosData("assets/transient/z/Z_l[0.00,-0.50,0.00]_r[1.57,0.00,3.14]_v[0.81,0.01,0.81]_s[256]_l[256]_gs[1.00]_conf.hdf5");
+	//transientVoxels->filter_H_cuda(0.25, 0.25);
 	//transientVoxels.saveImages("output/");
 	NLosDataVisualizer* nlosVisualizer = new NLosDataVisualizer(transientVoxels);
 	this->addNewModel(nlosVisualizer);

@@ -4,8 +4,12 @@
 #include "math.cuh"
 #include "transient_utils.cuh"
 
-#define BLOCK_C 16
-#define BLOCK_D 16
+#define BLOCK_X_CONFOCAL 16
+#define BLOCK_Y_CONFOCAL 16
+
+#define BLOCK_X_EXHAUSTIVE 16
+#define BLOCK_Y_EXHAUSTIVE 2
+
 //#define ACCUMULATE_VOXEL_SCATTERING
 
 __global__ void backproject(float* __restrict__ activation, const double* __restrict__ depths, glm::uint numDepths, glm::uint checkPosIdx)
@@ -40,21 +44,17 @@ __global__ void backprojectConfocal(float* __restrict__ activation, const double
 	glm::uint c = blockIdx.y * blockDim.y + threadIdx.y;
 	glm::uint d = blockIdx.z * blockDim.z + threadIdx.z;
 
-	// Local indices within the block tile
+	if (l >= rtRecInfo._numLaserTargets || c >= rtRecInfo._numLaserTargets || d >= numDepths)
+		return;
+
 	glm::uint localC = threadIdx.y;
 	glm::uint localD = threadIdx.z;
+	__shared__ float shActivation[BLOCK_X_CONFOCAL][BLOCK_Y_CONFOCAL];
 
-	// Allocate shared memory per (c, d) tile
-	__shared__ float shActivation[BLOCK_C][BLOCK_D];
-
-	// Initialize shared memory
-	if (localC < BLOCK_C && localD < BLOCK_D)
+	if (localC < BLOCK_X_CONFOCAL && localD < BLOCK_Y_CONFOCAL)
 		shActivation[localC][localD] = 0.0f;
 
 	__syncthreads();
-
-	if (l >= rtRecInfo._numLaserTargets || c >= rtRecInfo._numLaserTargets || d >= numDepths)
-		return;
 
 	const glm::vec3 lPos = laserTargets[l];
 	const glm::vec3 checkPos = laserTargets[c] + rtRecInfo._relayWallNormal * static_cast<float>(depths[d]);
@@ -73,104 +73,55 @@ __global__ void backprojectConfocal(float* __restrict__ activation, const double
 
 	__syncthreads();
 
-	// Write shared memory back to global memory
-	if (threadIdx.x == 0 && c < rtRecInfo._numLaserTargets && d < numDepths) 
+	// From shared memory back to global memory
+	if (threadIdx.x == 0) 
 		atomicAdd(&activation[c * numDepths + d], shActivation[localC][localD]);
 }
 
 __global__ void backprojectExhaustive(float* __restrict__ activation, const double* __restrict__ depths, glm::uint numDepths)
 {
-	glm::uint lc = blockIdx.x * blockDim.x + threadIdx.x;
-	glm::uint l = lc % 256;
-	glm::uint s = lc / 256;
-	glm::uint c = blockIdx.y * blockDim.y + threadIdx.y; 
+	glm::uint ls = blockIdx.x * blockDim.x + threadIdx.x;
+	glm::uint c = blockIdx.y * blockDim.y + threadIdx.y;
 	glm::uint d = blockIdx.z * blockDim.z + threadIdx.z;
 
-	if (l >= rtRecInfo._numLaserTargets || c >= rtRecInfo._numLaserTargets || d >= numDepths)
+	if (ls >= rtRecInfo._numLaserTargets * rtRecInfo._numSensorTargets || c >= rtRecInfo._numLaserTargets || d >= numDepths)
 		return;
 
-	// Compute traversal time
+	glm::uint localC = threadIdx.y;
+	glm::uint localD = threadIdx.z;
+	__shared__ float shActivation[BLOCK_X_EXHAUSTIVE][BLOCK_Y_EXHAUSTIVE];
+
+	if (localC < BLOCK_X_EXHAUSTIVE && localD < BLOCK_Y_EXHAUSTIVE)
+		shActivation[localC][localD] = 0.0f;
+
+	__syncthreads();
+
+	const glm::uint l = ls % rtRecInfo._numLaserTargets;
+	const glm::uint s = ls / rtRecInfo._numLaserTargets;
 	const glm::vec3 lPos = laserTargets[l];
+	const glm::vec3 sPos = laserTargets[s];
 	const glm::vec3 checkPos = laserTargets[c] + rtRecInfo._relayWallNormal * static_cast<float>(depths[d]);
-	float traversalTime = glm::distance(lPos, checkPos) * 2.0f - rtRecInfo._timeOffset;
 
-	if (rtRecInfo._discardFirstLastBounces == 0) 
-		traversalTime += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(lPos, rtRecInfo._sensorPosition);
+	float traversedDistance = glm::distance(lPos, checkPos) + glm::distance(checkPos, sPos) - rtRecInfo._timeOffset;
+	if (rtRecInfo._discardFirstLastBounces == 0)
+		traversedDistance += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(sPos, rtRecInfo._sensorPosition);
 
-	// Time bin check
-	const int timeBin = static_cast<int>(traversalTime / rtRecInfo._timeStep);
+	const int timeBin = static_cast<int>(traversedDistance / rtRecInfo._timeStep);
 	if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
 		return;
 
-	// Atomic update in shared memory
 	float intensity = intensityCube[getExhaustiveTransientIndex(l, s, timeBin)];
 	if (intensity > EPS)
-		atomicAdd(&activation[c * numDepths + d], intensity);
+		atomicAdd(&shActivation[localC][localD], intensity);
+
+	__syncthreads();
+
+	// From shared memory back to global memory
+	if (threadIdx.x == 0)
+		atomicAdd(&activation[c * numDepths + d], shActivation[localC][localD]);
 }
 
-//__global__ void backprojectVoxelInverse(float* __restrict__ activation, glm::uint sliceSize)
-//{
-//	glm::uint vx = blockIdx.x * blockDim.x + threadIdx.x;
-//	glm::uint vy = blockIdx.y * blockDim.y + threadIdx.y;
-//	glm::uint voxelZ = blockIdx.z * blockDim.z + threadIdx.z; 
-//
-//	if (vx >= rtRecInfo._voxelResolution.x || vy >= rtRecInfo._voxelResolution.y || voxelZ >= rtRecInfo._voxelResolution.z)
-//		return;
-//
-//	const glm::vec3 currentVoxelCenterPos = rtRecInfo._hiddenVolumeMin + glm::vec3(vx, voxelZ, vy) * rtRecInfo._hiddenVolumeVoxelSize + 0.5f * rtRecInfo._hiddenVolumeVoxelSize;
-//	float totalLightGathered = 0.0f; // Accumulate contributions for this voxel
-//
-//	// Iterate through all possible laser targets (s or l)
-//	// This is the "reversal" - now each voxel checks all potential sources.
-//	for (glm::uint l_idx = 0; l_idx < rtRecInfo._numLaserTargets; ++l_idx)
-//	{
-//		const glm::vec3 lPos = laserTargets[l_idx];
-//
-//		// Calculate 'dist' for *this specific voxel* and *this specific laser target*
-//		// This 'dist' represents the total path length from laser -> relay wall (lPos) -> voxel -> sensor.
-//		// It's the same distance calculation as in your original kernel.
-//		float dist = glm::distance(lPos, currentVoxelCenterPos) * 2.0f - timeOffset;
-//		if (discardFirstLastBounces == 0) // Assuming 0 means not discarding
-//			dist += glm::distance(lPos, laserPosition) + glm::distance(lPos, sensorPosition);
-//
-//		float voxelExtent = glm::length(hiddenVolumeVoxelSize) / 2.0f;
-//		float minDist = glm::max(.0f, dist - voxelExtent);
-//		float maxDist = dist + voxelExtent;
-//
-//		// Iterate through relevant time bins
-//		// Note: You can optimize this loop to only iterate relevant time bins,
-//		// rather than all numTimeBins, for this (l, voxel) pair.
-//		// The loop is similar to your original kernel's 'while (d < maxDist)'
-//		for (float d = minDist; d < maxDist; d += timeStep)
-//		{
-//			const int timeBin = static_cast<int>(d / timeStep);
-//
-//			if (timeBin >= 0 && timeBin < numTimeBins) // Check bounds
-//			{
-//				// Access the intensityCube for this (laser target, timeBin)
-//				// getConfocalTransientIndex needs to be defined
-//				const float backscatteredLight = intensityCube[getConfocalTransientIndex(l_idx, timeBin)];
-//
-//				if (backscatteredLight > EPS) // Only add if there's significant light
-//				{
-//					totalLightGathered += backscatteredLight; // Accumulate
-//				}
-//			}
-//		}
-//	}
-//
-//	// Store the accumulated value for this voxel in the output buffer
-//	// This access is coalesced because voxelX is driven by threadIdx.x
-//	glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
-//	voxelOutputBuffer[voxelZ * sliceSize + vy * voxelResolution.x + vx] = totalLightGathered;
-//	// Note: No atomicAdd needed here if each voxel is calculated independently and written once.
-//	// If multiple source-target-timebin combinations might contribute to the same voxel *and*
-//	// those computations are split across different threads (which is not the case here, as each thread owns a unique voxel)
-//	// then an atomicAdd would be needed.
-//	// For "gather", usually each thread writes to its own unique output location.
-//}
-
-__global__ void backprojectVoxel(float* __restrict__ activation, glm::uint sliceSize)
+__global__ void backprojectConfocalVoxel(float* __restrict__ activation, glm::uint sliceSize)
 {
 	glm::uint v = blockIdx.x * blockDim.x + threadIdx.x; 
 	glm::uint l = blockIdx.y * blockDim.y + threadIdx.y; 
@@ -213,6 +164,34 @@ __global__ void backprojectVoxel(float* __restrict__ activation, glm::uint slice
 	if (backscatteredLight > EPS)
 		atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight * safeRCP(dist * dist));
 #endif
+}
+
+__global__ void backprojectExhaustiveVoxel(float* __restrict__ activation, glm::uint sliceSize)
+{
+	glm::uint v = blockIdx.x * blockDim.x + threadIdx.x;
+	glm::uint l = blockIdx.y * blockDim.y + threadIdx.y;
+	glm::uint voxelZ = blockIdx.z * blockDim.z + threadIdx.z;
+
+	if (l >= rtRecInfo._numLaserTargets || v >= sliceSize || voxelZ >= rtRecInfo._voxelResolution.z)
+		return;
+
+	const glm::uint vx = v % rtRecInfo._voxelResolution.x;
+	const glm::uint vy = v / rtRecInfo._voxelResolution.x;
+
+	const glm::vec3 lPos = laserTargets[l];
+	const glm::vec3 checkPos = rtRecInfo._hiddenVolumeMin + glm::vec3(vx, voxelZ, vy) * rtRecInfo._hiddenVolumeVoxelSize + 0.5f * rtRecInfo._hiddenVolumeVoxelSize;
+
+	float dist = glm::distance(lPos, checkPos) * 2.0f - rtRecInfo._timeOffset;
+	if (rtRecInfo._discardFirstLastBounces == 0)
+		dist += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(lPos, rtRecInfo._sensorPosition);
+
+	const int timeBin = static_cast<int>(dist / rtRecInfo._timeStep);
+	if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
+		return;
+
+	const float backscatteredLight = intensityCube[getConfocalTransientIndex(l, timeBin)];
+	if (backscatteredLight > EPS)
+		atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight * safeRCP(dist * dist));
 }
 
 __global__ void precomputeDataConfocal(

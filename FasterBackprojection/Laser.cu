@@ -158,19 +158,19 @@ void Laser::reconstructShapeAABB(const ReconstructionInfo& nlosInfo)
 
 void Laser::reconstructShapeDepths(const ReconstructionInfo& nlosInfo)
 {
+	//std::vector<double> reconstructionDepths = transientParameters._reconstructionDepths;
+	std::vector<double> reconstructionDepths = linearSpace(nlosInfo.getFocusDepth() - 0.1f, nlosInfo.getFocusDepth() + 0.1f, 200);
+	assert(!reconstructionDepths.empty());
+
 	if (nlosInfo._captureSystem == CaptureSystem::Confocal)
-		reconstructDepthConfocal(nlosInfo);
+		reconstructDepthConfocal(nlosInfo, reconstructionDepths);
 	else if (nlosInfo._captureSystem == CaptureSystem::Exhaustive)
-		reconstructDepthExhaustive(nlosInfo);
+		reconstructDepthExhaustive(nlosInfo, reconstructionDepths);
 }
 
-void Laser::reconstructDepthConfocal(const ReconstructionInfo& nlosInfo)
+void Laser::reconstructDepthConfocal(const ReconstructionInfo& nlosInfo, std::vector<double>& reconstructionDepths)
 {
 	ChronoUtilities::startTimer();
-
-	//std::vector<double> reconstructionDepths = transientParameters._reconstructionDepths;
-	std::vector<double> reconstructionDepths = linearSpace(0.25, 0.75, 200);
-	assert(!reconstructionDepths.empty());
 
 	// Pointer to reconstruction depths in GPU memory
 	double* depthsGPU = nullptr;
@@ -183,7 +183,7 @@ void Laser::reconstructDepthConfocal(const ReconstructionInfo& nlosInfo)
 	CudaHelper::initializeZeroBufferGPU(activationGpu, numPixels);
 
 	// Determine size of thread groups and threads within them
-	dim3 blockSize(BLOCK_C, BLOCK_D);
+	dim3 blockSize(BLOCK_X_CONFOCAL, BLOCK_Y_CONFOCAL);
 	dim3 gridSize(
 		(nlosInfo._numLaserTargets + blockSize.x - 1) / blockSize.x,
 		(nlosInfo._numLaserTargets + blockSize.y - 1) / blockSize.y,			
@@ -193,7 +193,9 @@ void Laser::reconstructDepthConfocal(const ReconstructionInfo& nlosInfo)
 	normalizeMatrix(activationGpu, numPixels);
 	CudaHelper::synchronize("backprojectConfocal");
 
-	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+	long long elapsedTime = ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS);
+	std::cout << "Reconstruction finished in " << elapsedTime << " milliseconds.\n";
+	std::cout << "Time per depth: " << elapsedTime / numDepths << "\n";
 
 	// Prepare buckets and info for storing data in the local system
 	const std::string outputFolder = "output/";
@@ -218,13 +220,9 @@ void Laser::reconstructDepthConfocal(const ReconstructionInfo& nlosInfo)
 	CudaHelper::free(depthsGPU);
 }
 
-void Laser::reconstructDepthExhaustive(const ReconstructionInfo& nlosInfo)
+void Laser::reconstructDepthExhaustive(const ReconstructionInfo& nlosInfo, std::vector<double>& reconstructionDepths)
 {
 	ChronoUtilities::startTimer();
-
-	//std::vector<double> reconstructionDepths = transientParameters._reconstructionDepths;
-	std::vector<double> reconstructionDepths = linearSpace(0.9, 1.1, 200);
-	assert(!reconstructionDepths.empty());
 
 	// Pointer to reconstruction depths in GPU memory
 	double* depthsGPU = nullptr;
@@ -237,37 +235,19 @@ void Laser::reconstructDepthExhaustive(const ReconstructionInfo& nlosInfo)
 	CudaHelper::initializeZeroBufferGPU(activationGpu, numPixels);
 
 	// Determine size of thread groups and threads within them
-	constexpr glm::uint NUM_SPLITS = 16;
-
-	dim3 blockSize(BLOCK_C, BLOCK_D);
-	//dim3 gridSize(
-	//	(nlosInfo._numLaserTargets / NUM_SPLITS  + nlosInfo._numSensorTargets / NUM_SPLITS + blockSize.x - 1) / blockSize.x,
-	//	(nlosInfo._numLaserTargets + blockSize.y - 1) / blockSize.y,
-	//	(reconstructionDepths.size() + blockSize.z - 1) / blockSize.z);
-
-	//for (glm::uint laserSplitIdx = 0; laserSplitIdx < NUM_SPLITS; ++laserSplitIdx)
-	//{
-	//	for (glm::uint sensorSplitIdx = 0; sensorSplitIdx < NUM_SPLITS; ++sensorSplitIdx)
-	//	{
-	//		backprojectExhaustive<<<gridSize, blockSize>>>(activationGpu, depthsGPU, numDepths);
-	//	}
-
-	//	std::cout << "Laser split: " << laserSplitIdx << "/" << NUM_SPLITS << '\n';
-	//	std::cout.flush();
-	//}
-
+	dim3 blockSize(BLOCK_X_EXHAUSTIVE, BLOCK_Y_EXHAUSTIVE);
 	dim3 gridSize(
-		(nlosInfo._numLaserTargets + blockSize.x - 1) / blockSize.x,
-		(nlosInfo._numSensorTargets + blockSize.y - 1) / blockSize.y,
+		(nlosInfo._numLaserTargets * nlosInfo._numSensorTargets + blockSize.x - 1) / blockSize.x,
+		(nlosInfo._numLaserTargets + blockSize.y - 1) / blockSize.y,
 		(reconstructionDepths.size() + blockSize.z - 1) / blockSize.z);
 
-	for (glm::uint c = 0; c < nlosInfo._numLaserTargets; ++c)
-		backproject<<<gridSize, blockSize>>>(activationGpu, depthsGPU, numDepths, c);
-
+	backprojectExhaustive<<<gridSize, blockSize>>>(activationGpu, depthsGPU, numDepths);
 	normalizeMatrix(activationGpu, numPixels);
 	CudaHelper::synchronize("backprojectExhaustive");
 
-	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+	long long elapsedTime = ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS);
+	std::cout << "Reconstruction finished in " << elapsedTime << " milliseconds.\n";
+	std::cout << "Time per depth: " << elapsedTime / numDepths << "\n";
 
 	// Prepare buckets and info for storing data in the local system
 	const std::string outputFolder = "output/";
@@ -308,10 +288,9 @@ void Laser::reconstructAABBConfocal(const ReconstructionInfo& nlosInfo)
 		(voxelResolution.z + blockSize.z - 1) / blockSize.z  
 	);
 
-	backprojectVoxel<<<gridSize, blockSize>>>(activationGPU, sliceSize);
-	CudaHelper::synchronize("backprojectVoxel");
-
+	backprojectConfocalVoxel<<<gridSize, blockSize>>>(activationGPU, sliceSize);
 	normalizeMatrix(activationGPU, numVoxels);
+	CudaHelper::synchronize("backprojectConfocalVoxel");
 
 	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 

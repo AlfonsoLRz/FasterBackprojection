@@ -1,9 +1,12 @@
 #include "stdafx.h"
 #include "NLosData.h"
 
+#include <cufft.h>
 #include <highfive/highfive.hpp>
+#include <print>
 
 #include "CudaHelper.h"
+#include "fourier.cuh"
 #include "progressbar.hpp"
 #include "TransientImage.h"
 #include "TransientParameters.h"
@@ -124,6 +127,199 @@ NLosData::NLosData(const std::string& filename, bool saveBinary, bool useBinary)
 
 NLosData::~NLosData() = default;
 
+void NLosData::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& border)
+{
+	using Complex = std::complex<float>;
+
+	size_t nt = _temporalResolution;
+
+	if (wl_sigma == 0.0f) 
+	{ 
+		std::print("tal.reconstruct.filter_H: wl_sigma not specified, using wl_mean / sqrt(2)");
+		wl_sigma = wl_mean / std::numbers::sqrt2_v<float>;
+	}
+
+	int t_6sigma = static_cast<int>(std::round(6 * wl_sigma / _deltaT));
+	if (t_6sigma % 2 == 1)
+		t_6sigma += 1;
+
+	size_t nt_pad = nt + 2 * (t_6sigma - 1);
+	float t_max = _deltaT * (nt_pad - 1);
+	std::vector<float> t_vals(nt_pad);
+
+	for (size_t i = 0; i < nt_pad; ++i)
+		t_vals[i] = static_cast<float>(i) * _deltaT;
+
+	// K 
+	std::vector<Complex> K(nt_pad);
+	float sumGaussianEnvelope = 0.0f;
+	std::vector<float> gaussianEnvelope(nt_pad);
+
+	for (size_t i = 0; i < nt_pad; ++i) 
+	{
+		float val = (t_vals[i] - t_max / 2.0f) / wl_sigma;
+		gaussianEnvelope[i] = std::exp(-(val * val) / 2.0f);
+		sumGaussianEnvelope += gaussianEnvelope[i];
+	}
+
+	for (size_t i = 0; i < nt_pad; ++i) 
+		K[i] = gaussianEnvelope[i] / sumGaussianEnvelope * std::polar(1.0f, 2.0f * glm::pi<float>() * t_vals[i] / wl_mean); 
+
+	// This prepares K for FFT since cuFFT computes the unshifted FFT.
+	std::vector<Complex> K_ifftShifted(nt_pad);
+	int shift = (nt_pad + 1) / 2;
+	for (size_t i = 0; i < nt_pad; ++i) 
+		K_ifftShifted[i] = K[(i + shift) % nt_pad];
+	K = K_ifftShifted; 
+
+	// --- Padding H on Host ---
+	size_t padding = (nt_pad - nt) / 2;
+	std::vector<Complex> H_pad_host;
+	padIntensity(H_pad_host, padding, border, 0);
+
+	// Calculate total elements for padded H
+	size_t totalPaddedElements = 1;
+	std::vector<size_t> paddedDims = _dims;
+	paddedDims[0] = nt_pad; // Time dimension
+	for (size_t dim : paddedDims) {
+		totalPaddedElements *= dim;
+	}
+
+	size_t totalOriginalElements = 1;
+	for (size_t dim : _dims) {
+		totalOriginalElements *= dim;
+	}
+
+	// Memory allocation on device
+	Complex* d_H_pad, * d_K, * d_HoK;
+	CudaHelper::checkError(cudaMalloc((void**)&d_H_pad, totalPaddedElements * sizeof(Complex)));
+	CudaHelper::checkError(cudaMalloc((void**)&d_K, nt_pad * sizeof(Complex)));
+	CudaHelper::checkError(cudaMalloc((void**)&d_HoK, totalPaddedElements * sizeof(Complex)));
+
+	// Move buffers to device
+	CudaHelper::checkError(cudaMemcpy(d_H_pad, H_pad_host.data(), totalPaddedElements * sizeof(Complex), cudaMemcpyHostToDevice));
+	CudaHelper::checkError(cudaMemcpy(d_K, K.data(), nt_pad * sizeof(Complex), cudaMemcpyHostToDevice));
+
+	// CUFFT plans
+	cufftHandle plan_H_fft;
+	cufftHandle plan_K_fft;
+	cufftHandle plan_HoK_ifft;
+
+	// For H_fft (multi-dimensional FFT along axis 0)
+	// rank: number of dimensions for the FFT (1 for 1D FFT along time_dim)
+	// n: array of sizes of each dimension (nt_pad)
+	// idist, odist: distance between input/output batches (stride for non-time dims)
+	// istride, ostride: distance between elements in a dimension (1 for contiguous)
+	// batch: number of FFTs to perform (size of non-time dims)
+	int rank = 1; // 1D FFT
+	int n[] = { (int)nt_pad };
+	int istride = 1, ostride = 1; // Contiguous elements along time dim
+
+	int batch = 1; // Default for 1D, will be overwritten for multi-dim H
+	for (size_t i = 1; i < _dims.size(); ++i) { // Multiply all other dimensions
+		batch *= _dims[i];
+	}
+
+	istride = 1; // Stride within the 1D FFT block (elements in time dim)
+	ostride = 1;
+
+	// inembed and onembed for rank = 1: array with one element, which is the physical length of this dimension
+	int inembed_H[] = { (int)nt_pad };
+	int onembed_H[] = { (int)nt_pad };
+
+	// The distance between the start of consecutive 1D FFTs
+	// This is the total number of elements in one (non-time) slice
+	size_t dist = 1;
+	for (size_t i = 1; i < _dims.size(); ++i) 
+		dist *= _dims[i]; 
+
+	// Correct for padded dimension
+	dist = totalPaddedElements / nt_pad; // Total elements per time slice (across non-time dims)
+	CUFFT_CHECK((cufftPlanMany(&plan_H_fft, rank, n,
+		inembed_H, istride, (int)dist,
+		onembed_H, ostride, (int)dist,
+		CUFFT_C2C, batch)));
+
+	CUFFT_CHECK(cufftPlan1d(&plan_K_fft, nt_pad, CUFFT_C2C, 1)); // K is always 1D
+	CUFFT_CHECK(cufftPlanMany(&plan_HoK_ifft, rank, n,
+		inembed_H, istride, (int)dist, // Use same strides/distances as for H_fft
+		onembed_H, ostride, (int)dist,
+		CUFFT_C2C, batch));
+
+	// --- Perform FFTs ---
+	std::print("Performing FFT on H...");
+	CUFFT_CHECK(cufftExecC2C(plan_H_fft, (cufftComplex*)d_H_pad, (cufftComplex*)d_H_pad, CUFFT_FORWARD));
+
+	std::print("Performing FFT on K...");
+	CUFFT_CHECK(cufftExecC2C(plan_K_fft, (cufftComplex*)d_K, (cufftComplex*)d_K, CUFFT_FORWARD));
+
+	// --- Element-wise Multiplication (CUDA Kernel) ---
+	// Reshape K_fft as K_shape = (nt_pad,) + (1,) * (H.ndim - 1)
+	// This implies multiplying each slice of H_fft by the same K_fft vector.
+	// The kernel will broadcast d_K across the other dimensions.
+	dim3 threadsPerBlock(256); // Adjust as needed
+	dim3 numBlocks((totalPaddedElements + threadsPerBlock.x - 1) / threadsPerBlock.x);
+
+	std::print("Performing element-wise multiplication...");
+	//elementwise_multiply_kernel<<<numBlocks, threadsPerBlock>>>((float2*)d_H_pad, (float2*)d_K, totalPaddedElements, nt_pad);
+
+
+	// --- Perform IFFT ---
+	std::print("Performing IFFT on HoK...");
+	CUFFT_CHECK(cufftExecC2C(plan_HoK_ifft, (cufftComplex*)d_H_pad, (cufftComplex*)d_H_pad, CUFFT_INVERSE));
+
+	// Normalize IFFT output (cuFFT output is scaled by N)
+	// Since HoK is in-place with d_H_pad, we apply normalization to d_H_pad.
+	//normalize_kernel<<<numBlocks, threadsPerBlock>>>((float2*)d_H_pad, totalPaddedElements, nt_pad);
+
+
+	// --- Copy Result back to Host ---
+	std::vector<Complex> HoK_padded_host(totalPaddedElements);
+	CudaHelper::checkError(cudaMemcpy(HoK_padded_host.data(), d_H_pad, totalPaddedElements * sizeof(Complex), cudaMemcpyDeviceToHost));
+
+	// --- Cleanup CUDA Resources ---
+	CUFFT_CHECK(cufftDestroy(plan_H_fft));
+	CUFFT_CHECK(cufftDestroy(plan_K_fft));
+	CUFFT_CHECK(cufftDestroy(plan_HoK_ifft));
+	CudaHelper::free(d_H_pad);
+	CudaHelper::free(d_K);
+	CudaHelper::free(d_HoK); // This was allocated but not used as d_H_pad was in-place
+
+	// --- Unpadding and Final Crop (Host Side) ---
+	// `HoK = HoK[padding:-padding, ...]`
+	std::vector<Complex> HoK_unpadded_host(totalOriginalElements);
+	size_t unpadded_time_stride = 1;
+	for (size_t i = 1; i < _dims.size(); ++i) {
+		unpadded_time_stride *= _dims[i];
+	}
+
+	for (size_t j = 0; j < totalOriginalElements / nt; ++j) { // Iterate over non-time slices
+		for (size_t i = 0; i < nt; ++i) { // Iterate over original time dimension
+			size_t original_idx_padded = (i + padding) * unpadded_time_stride + j;
+			size_t final_idx = i * unpadded_time_stride + j;
+			HoK_unpadded_host[final_idx] = HoK_padded_host[original_idx_padded];
+		}
+	}
+
+	if (border == "erase") {
+		size_t erase_padding_half = padding / 2; // Python's padding//2
+		for (size_t j = 0; j < totalOriginalElements / nt; ++j) {
+			// Erase beginning
+			for (size_t i = 0; i < erase_padding_half; ++i) {
+				size_t final_idx = i * unpadded_time_stride + j;
+				HoK_unpadded_host[final_idx] = Complex(0.0f, 0.0f);
+			}
+			// Erase end
+			for (size_t i = nt - erase_padding_half; i < nt; ++i) {
+				size_t final_idx = i * unpadded_time_stride + j;
+				HoK_unpadded_host[final_idx] = Complex(0.0f, 0.0f);
+			}
+		}
+	}
+
+	//return HoK_unpadded_host;
+}
+
 void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers)
 {
 	CudaHelper::initializeBufferGPU(recBuffers._intensity, _data.size(), _data.data());
@@ -160,9 +356,6 @@ float* NLosData::getTimeSlice(glm::uint t)
 		throw std::out_of_range("NLosData: Time index out of range.");
 
 	glm::uint sliceSize = static_cast<glm::uint>(_data.size()) / _dims[0];
-	if (_dims.size() > 3)
-		throw std::runtime_error("NLosData: Invalid dimensions for time slice retrieval.");
-
 	return _data.data() + t * sliceSize;
 }
 
@@ -377,4 +570,72 @@ bool NLosData::saveBinaryFile(const std::string& filename) const
 
 	file.close();
 	return true;
+}
+
+void NLosData::padIntensity(std::vector<Complex>& paddedIntensity, size_t padding, const std::string& mode, size_t timeDim) const
+{
+	size_t nt = _dims[timeDim];
+	size_t nt_pad = nt + 2 * padding;
+
+	std::vector<size_t> paddedDims = _dims;
+	paddedDims[timeDim] = nt_pad;
+
+	size_t totalOriginalElements = 1;
+	for (size_t dim : _dims) totalOriginalElements *= dim;
+
+	size_t totalPaddedElements = 1;
+	for (size_t dim : paddedDims) totalPaddedElements *= dim;
+
+	std::vector<Complex> H_pad(totalPaddedElements);
+
+	// Calculate stride for non-time dimensions
+	size_t nonTimeStride = 1;
+	for (size_t i = timeDim + 1; i < _dims.size(); ++i)
+		nonTimeStride *= _dims[i];
+
+	if (mode == "constant") 
+	{
+		for (size_t j = 0; j < totalOriginalElements / nt; ++j) { 
+			for (size_t i = 0; i < nt; ++i) { 
+				size_t original_idx = i * nonTimeStride + j;
+				size_t padded_idx = (i + padding) * nonTimeStride + j; 
+				H_pad[padded_idx] = _data[original_idx];
+			}
+		}
+	}
+	else if (mode == "edge") 
+	{
+		for (size_t j = 0; j < totalOriginalElements / nt; ++j) {
+			for (size_t i = 0; i < nt; ++i) {
+				size_t original_idx = i * nonTimeStride + j;
+				size_t padded_idx = (i + padding) * nonTimeStride + j;
+				H_pad[padded_idx] = _data[original_idx];
+			}
+		}
+
+		// Fill padding
+		for (size_t j = 0; j < totalOriginalElements / nt; ++j) 
+		{
+			// Before padding
+			for (size_t i = 0; i < padding; ++i) 
+			{
+				size_t padded_idx = i * nonTimeStride + j;
+				size_t original_edge_idx = 0 * nonTimeStride + j; 
+				H_pad[padded_idx] = _data[original_edge_idx];
+			}
+			// After padding
+			for (size_t i = nt + padding; i < nt_pad; ++i) 
+			{
+				size_t padded_idx = i * nonTimeStride + j;
+				size_t original_edge_idx = (nt - 1) * nonTimeStride + j; 
+				H_pad[padded_idx] = _data[original_edge_idx];
+			}
+		}
+	}
+	else 
+	{
+		std::cerr << "Unsupported padding mode: " << mode << '\n';
+	}
+
+	paddedIntensity = std::move(H_pad);
 }

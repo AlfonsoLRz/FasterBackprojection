@@ -30,6 +30,11 @@ struct ReconstructionInfo
 	glm::vec3		_relayWallNormal;
 
 	glm::uvec3		_voxelResolution;
+
+	__host__ float getFocusDepth() const
+	{
+		return glm::abs(_relayWallMinPosition[1] - _hiddenVolumeMin[1]);
+	}
 };
 
 struct ReconstructionBuffers
