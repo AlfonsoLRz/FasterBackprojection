@@ -146,6 +146,7 @@
     <ClInclude Include="TransientImage.h" />
     <ClInclude Include="TransientParameters.h" />
     <ClInclude Include="NLosData.h" />
+    <ClInclude Include="transient_processing.cuh" />
     <ClInclude Include="transient_reconstruction.cuh" />
     <ClInclude Include="transient_utils.cuh" />
     <ClInclude Include="TriangleMesh.h" />
@@ -293,6 +294,14 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </None>
     <None Include="assets\shaders\shading\backprojection-vs.glsl">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="assets\shaders\shading\backprojection_mesh-fs.glsl">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="assets\shaders\shading\backprojection_mesh-vs.glsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </None>

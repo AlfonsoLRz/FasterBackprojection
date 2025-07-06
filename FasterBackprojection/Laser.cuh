@@ -1,24 +1,27 @@
 #pragma once
 
+#include <cufft.h>
+
 #include "ApplicationState.h"
 #include "TransientParameters.h"
 
 class Camera;
 class SceneContent;
 
+using Complex = std::complex<float>;
+
 class Laser
 {
 private:
-	static std::vector<double> fftFrequencies(int n, float d);
-	template<typename T>
-	static std::vector<double> fftShift(const std::vector<T>& frequencies);
-	template<typename T>
-	std::vector<T> ifftshift(const std::vector<T>& input);
+	NLosData* _nlosData = nullptr;
 
+private:
 	static std::vector<double> linearSpace(double minValue, double maxValue, int n);
-	void fourierFilter(const TransientParameters& transientParameters);
+	void padIntensity(std::vector<cufftComplex>& paddedIntensity, size_t padding, const std::string& mode) const;
 
-	static void normalizeMatrix(float* v, glm::uint numVoxels);
+	static void fftLoG(float*& inputVoxels, const glm::uvec3& resolution, float sigma);
+	static void laplacianFilter(float*& inputVoxels, const glm::uvec3& resolution, glm::uint filterSize);
+	static void normalizeMatrix(float* v, glm::uint size);
 
 	static void reconstructShapeAABB(const ReconstructionInfo& recInfo);
 	static void reconstructShapeDepths(const ReconstructionInfo& recInfo);
@@ -30,36 +33,9 @@ private:
 	static void reconstructAABBExhaustive(const ReconstructionInfo& recInfo);
 
 public:
-	Laser();
+	Laser(NLosData* nlosData);
 	virtual ~Laser();
 
+	void filter_H_cuda(float wl_mean, float wl_sigma = .0f, const std::string& border = "zero");
 	static void reconstructShape(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, bool reconstructAABB);
 };
-
-template <typename T>
-std::vector<double> Laser::fftShift(const std::vector<T>& frequencies)
-{
-	int n = static_cast<int>(frequencies.size());
-	std::vector<T> shiftedFrequencies(n);
-	int half = (n + 1) / 2;
-
-	for (int i = half; i < n; ++i)
-		shiftedFrequencies[i - half] = frequencies[i];
-	for (int i = 0; i < half; ++i)
-		shiftedFrequencies[i + half] = frequencies[i];
-
-	return shiftedFrequencies;
-}
-
-template <typename T>
-std::vector<T> Laser::ifftshift(const std::vector<T>& input)
-{
-	int n = static_cast<int>(input.size());
-	int shift = n / 2; // floor(n / 2) — works for both even and odd
-	std::vector<T> output(n);
-
-	for (int i = 0; i < n; ++i) 
-		output[i] = input[(i + shift) % n];
-
-	return output;
-}

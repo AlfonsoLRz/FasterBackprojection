@@ -1,6 +1,6 @@
 #pragma once
 
-#define DEBUG_UNIFORMS true
+#define DEBUG_UNIFORMS false
 
 class ShaderProgram
 {

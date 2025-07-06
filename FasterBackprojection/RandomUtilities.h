@@ -2,6 +2,8 @@
 
 #include "stdafx.h"
 
+#include "CudaHelper.h"
+
 typedef std::mt19937							RandomNumberGenerator;
 typedef std::uniform_real_distribution<float>	DoubleUniformDistribution;
 

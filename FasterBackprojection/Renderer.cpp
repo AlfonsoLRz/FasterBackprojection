@@ -58,7 +58,6 @@ void Renderer::prepareOpenGL(uint16_t width, uint16_t height)
     glPrimitiveRestartIndex(RESTART_PRIMITIVE_INDEX);
 
     glEnable(GL_PROGRAM_POINT_SIZE);
-
     glEnable(GL_POLYGON_OFFSET_FILL);
 
     _content._camera.push_back(std::make_unique<Camera>(width, height));

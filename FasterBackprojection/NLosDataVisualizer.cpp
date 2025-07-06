@@ -20,7 +20,8 @@ NLosDataVisualizer::NLosDataVisualizer(NLosData* nlosData) :
 	_hiddenGeometryCube->setTriangleColor(glm::vec4(0.5f));
 
 	_ellipsoids = new DrawEllipsoids(nlosData);
-	_ellipsoids->setTriangleColor({ 1.0f, 0.0f, 1.0f, 0.8f });
+	_ellipsoids->setTriangleColor({ 1.0f, 0.0f, 1.0f, 0.2f });
+	_ellipsoids->setLineColor({ 1.0f, 1.0f, 1.0f });
 	//_ellipsoids->solveBackprojection();
 }
 

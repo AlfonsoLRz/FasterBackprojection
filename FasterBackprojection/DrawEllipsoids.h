@@ -13,14 +13,19 @@ protected:
 	NLosData*			_nlosData;
 	glm::uint			_numInstances;
 
+protected:
+	static void createEllipsoid(Component* component, int stacks, int sectors);
+	static void createHalfEllipsoid(Component* component, int stacks, int sectors);
+
+	void reorder(std::vector<glm::vec3>& ellipsoidPositions, std::vector<glm::vec3>& ellipsoidScale, std::vector<float>& ellipsoidIntensities, const AABB& relayWall);
+
 public:
 	DrawEllipsoids(NLosData* nlosData);
 	~DrawEllipsoids() override;
 
 	void draw(MatrixRenderInformation* matrixInformation, ApplicationState* appState) override;
-	static void createEllipsoid(Component* component, int stacks, int sectors);
-	static void createHalfEllipsoid(Component* component, int stacks, int sectors);
 
 	void solveBackprojection();
+	void solveBackprojection2();
 };
 

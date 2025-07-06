@@ -8,7 +8,8 @@ std::unordered_map<uint8_t, std::string> ShaderProgramDB::RENDERING_SHADER_PATH 
 		{RenderingShaderId::POINT_RENDERING, "assets/shaders/shading/point"},
 		{RenderingShaderId::TRIANGLE_RENDERING, "assets/shaders/shading/triangle"},
 		{RenderingShaderId::MULTI_INSTANCE_TRIANGLE_RENDERING, "assets/shaders/shading/multi-triangle"},
-		{RenderingShaderId::BACKPROJECTION_RENDERING, "assets/shaders/shading/backprojection"}
+		{RenderingShaderId::BACKPROJECTION_RENDERING, "assets/shaders/shading/backprojection"},
+		{RenderingShaderId::BACKPROJECTION_MESH_RENDERING, "assets/shaders/shading/backprojection_mesh"}
 };
 
 std::unordered_map<uint8_t, std::unique_ptr<RenderingShader>> ShaderProgramDB::_renderingShader;

@@ -14,34 +14,29 @@
         } \
     } while (0)
 
-// Kernel for element-wise multiplication H_fft * K_fft.reshape(K_shape)
-inline __global__ void elementwise_multiply_kernel(float2 * d_H_fft, const float2 * d_K_fft, size_t total_elements, size_t nt_pad)
+inline __global__ void multiplyHK(cufftComplex *d_H, const cufftComplex *d_K, size_t batch, size_t numTimeBins)
 {
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= batch * numTimeBins) 
+        return;
 
-    if (idx < total_elements) 
-    {
-        size_t k_idx = idx % nt_pad;
+    int t = idx % numTimeBins;
+    cufftComplex h = d_H[idx];
+    cufftComplex k = d_K[t];
 
-		float h_real = d_H_fft[idx].x;
-		float h_imag = d_H_fft[idx].y;
-		float k_real = d_K_fft[k_idx].x;
-		float k_imag = d_K_fft[k_idx].y;
-		float result_real = h_real * k_real - h_imag * k_imag;
-		float result_imag = h_real * k_imag + h_imag * k_real;
+    float real = (h.x * k.x - h.y * k.y);
+    float imag = (h.x * k.y + h.y * k.x);
 
-		d_H_fft[idx] = make_float2(result_real, result_imag);
-    }
+    d_H[idx] = { real, imag };
 }
 
-// Kernel for normalizing IFFT output (cuFFT scales by N)
-inline __global__ void normalize_kernel(float2 * data, size_t total_elements, size_t n_fft)
+inline __global__ void normalizeH(cufftComplex* d_H, size_t batch, size_t timeSize)
 {
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (idx < total_elements) {
-        data[idx].x /= n_fft;
-        data[idx].y /= n_fft;
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < batch * timeSize)
+    {
+        d_H[idx].x /= static_cast<float>(timeSize);
+        d_H[idx].y /= static_cast<float>(timeSize);
     }
 }
 

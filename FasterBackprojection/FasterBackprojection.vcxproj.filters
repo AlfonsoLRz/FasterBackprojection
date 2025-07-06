@@ -183,6 +183,9 @@
     <ClInclude Include="GpuStructs.cuh">
       <Filter>header</Filter>
     </ClInclude>
+    <ClInclude Include="transient_processing.cuh">
+      <Filter>header\cuda</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Window.cpp">
@@ -195,9 +198,6 @@
       <Filter>source</Filter>
     </ClCompile>
     <ClCompile Include="TriangleMesh.cpp">
-      <Filter>source</Filter>
-    </ClCompile>
-    <ClCompile Include="NLosData.cpp">
       <Filter>source</Filter>
     </ClCompile>
     <ClCompile Include="TransientImage.cpp">
@@ -293,6 +293,9 @@
     <ClCompile Include="DrawCube.cpp">
       <Filter>source</Filter>
     </ClCompile>
+    <ClCompile Include="NLosData.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="GpuStructs.cu">
@@ -344,6 +347,12 @@
       <Filter>resources\shaders\shading</Filter>
     </None>
     <None Include="assets\shaders\shading\backprojection-vs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\backprojection_mesh-fs.glsl">
+      <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\shading\backprojection_mesh-vs.glsl">
       <Filter>resources\shaders\shading</Filter>
     </None>
   </ItemGroup>

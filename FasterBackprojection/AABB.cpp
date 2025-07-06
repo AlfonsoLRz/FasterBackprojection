@@ -29,13 +29,8 @@ void AABB::update(const AABB& aabb)
 
 void AABB::update(const glm::vec3& point)
 {
-	_min.x = std::min(point.x, _min.x);
-	_min.y = std::min(point.y, _min.y);
-	_min.z = std::min(point.z, _min.z);
-
-	_max.x = std::max(point.x, _max.x);
-	_max.y = std::max(point.y, _max.y);
-	_max.z = std::max(point.z, _max.z);
+	_min = glm::min(_min, point);
+	_max = glm::max(_max, point);
 }
 
 std::ostream& operator<<(std::ostream& os, const AABB& aabb)

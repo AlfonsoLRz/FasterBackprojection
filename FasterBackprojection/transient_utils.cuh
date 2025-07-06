@@ -5,7 +5,7 @@
 
 __forceinline__ __device__ glm::uint getConfocalTransientIndex(glm::uint laserTargetIdx, glm::uint timeBin)
 {
-	return timeBin * rtRecInfo._numLaserTargets + laserTargetIdx;
+	return laserTargetIdx * rtRecInfo._numTimeBins + timeBin;
 }
 
 __forceinline__ __device__ glm::uint getExhaustiveTransientIndex(glm::uint laserTargetIdx, glm::uint sensorTargetIdx, glm::uint timeBin)

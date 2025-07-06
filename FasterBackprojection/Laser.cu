@@ -3,11 +3,11 @@
 #include "Laser.cuh"
 
 #include <cub/device/device_reduce.cuh>
-#include <cufft.h>
 
 #include "ChronoUtilities.h"
 #include "GpuStructs.cuh"
 #include "fourier.cuh"
+#include "transient_processing.cuh"
 #include "transient_reconstruction.cuh"
 
 #include "CudaHelper.h"
@@ -17,12 +17,144 @@
 
 //
 
-Laser::Laser() 
+Laser::Laser(NLosData* nlosData) : _nlosData(nlosData)
 {
 }
 
 Laser::~Laser()
 {
+}
+
+void Laser::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& border)
+{
+	size_t nt = _nlosData->_temporalResolution;
+	if (glm::epsilonEqual(wl_sigma, .0f, glm::epsilon<float>()))
+	{
+		std::cout << "tal.reconstruct.filter_H: wl_sigma not specified, using wl_mean / sqrt(2)\n";
+		wl_sigma = wl_mean / sqrtf(2);
+	}
+
+	int t_6sigma = static_cast<int>(std::round(6 * wl_sigma / _nlosData->_deltaT));
+	if (t_6sigma % 2 == 1)
+		t_6sigma += 1;
+
+	size_t nt_pad = nt + 2 * (t_6sigma - 1);
+	float t_max = _nlosData->_deltaT * (nt_pad - 1);
+	std::vector<float> t_vals(nt_pad);
+
+	for (size_t i = 0; i < nt_pad; ++i)
+		t_vals[i] = static_cast<float>(i) * _nlosData->_deltaT;
+
+	// C++
+	for (int i = 0; i < 5; ++i) std::cout << t_vals[i] << " ";
+	std::cout << "\n";
+	for (int i = nt_pad - 5; i < nt_pad; ++i) std::cout << t_vals[i] << " ";
+
+	// K 
+	std::vector<cufftComplex> K(nt_pad);
+	float sumGaussianEnvelope = 0.0f;
+	std::vector<float> gaussianEnvelope(nt_pad);
+
+	for (size_t i = 0; i < nt_pad; ++i)
+	{
+		float val = (t_vals[i] - t_max * 0.5f) / wl_sigma;
+		gaussianEnvelope[i] = std::exp(-(val * val) * 0.5f);
+		sumGaussianEnvelope += gaussianEnvelope[i];
+	}
+
+	const float two_pi = 2.0f * 3.14159265358979323846f; 
+	for (size_t i = 0; i < nt_pad; ++i) {
+		float phase = two_pi * t_vals[i] / wl_mean;
+		K[i].x = gaussianEnvelope[i] * std::cos(phase) / sumGaussianEnvelope;
+		K[i].y = gaussianEnvelope[i] * std::sin(phase) / sumGaussianEnvelope;
+	}
+
+	// This prepares K for FFT since cuFFT computes the unshifted FFT.
+	std::vector<cufftComplex> K_ifftShifted(nt_pad);
+	int shift = nt_pad / 2;  
+	for (size_t i = 0; i < nt_pad; ++i) 
+		K_ifftShifted[i] = K[(i + shift) % nt_pad];
+	K = K_ifftShifted;
+
+	std::cout << K[1].x << " " << K[1].y << '\n';
+	std::cout << K[nt_pad / 2].x << " " << K[nt_pad / 2].y << '\n';
+	std::cout << K[nt_pad - 2].x << " " << K[nt_pad - 2].y << '\n';
+
+	// --- Padding H on Host ---
+	size_t padding = (nt_pad - nt) / 2;
+	std::vector<cufftComplex> H_pad_host;
+	padIntensity(H_pad_host, padding, border);
+
+	// Transfer H_pad_host and K to device
+	cufftComplex* d_H = nullptr, *d_K = nullptr;
+	CudaHelper::initializeBufferGPU(d_H, H_pad_host.size(), H_pad_host.data());
+	CudaHelper::initializeBufferGPU(d_K, K.size(), K.data());
+
+	//
+	size_t dimProduct = 1;
+	std::vector<size_t> newDims = _nlosData->_dims;
+	newDims[newDims.size() - 1] = nt_pad; // Last dimension is time, set to padded size
+	for (size_t dim : newDims)
+		dimProduct *= dim;
+
+	cufftHandle planH;
+	int n[1] = { static_cast<int>(nt_pad) };
+	int rank = 1;
+	int istride = 1;      // stride between elements in time dimension (contiguous)
+	int ostride = 1;
+	int idist = nt_pad;  // distance between consecutive batches in input
+	int odist = nt_pad;  // distance between consecutive batches in output
+	int batch = static_cast<int>(dimProduct / nt_pad);
+
+	// Create 1D FFT plan for batches
+	CUFFT_CHECK(cufftPlanMany(&planH, rank, n, NULL, istride, idist, NULL, ostride, odist, CUFFT_C2C, batch));
+	CUFFT_CHECK(cufftExecC2C(planH, d_H, d_H, CUFFT_FORWARD));
+
+	//
+	cufftHandle planK;
+	CUFFT_CHECK(cufftPlan1d(&planK, nt_pad, CUFFT_C2C, 1));
+	CUFFT_CHECK(cufftExecC2C(planK, d_K, d_K, CUFFT_FORWARD));
+
+	CudaHelper::downloadBufferGPU(d_K, K.data(), K.size(), 0);
+
+	std::cout << K[0].x << " " << K[0].y << '\n';
+	std::cout << K[nt_pad / 2].x << " " << K[nt_pad / 2].y << '\n';
+	std::cout << K[nt_pad - 1].x << " " << K[nt_pad - 1].y << '\n';
+
+	// 
+	dim3 block(256);
+	dim3 grid((batch * nt_pad + block.x - 1) / block.x);
+
+	multiplyHK<<<grid, block>>>(d_H, d_K, batch, nt_pad);
+	cudaDeviceSynchronize();
+
+	CUFFT_CHECK(cufftExecC2C(planH, d_H, d_H, CUFFT_INVERSE));
+
+	//
+	normalizeH<<<grid, block>>>(d_H, batch, nt_pad);
+
+	// Copy result back to host
+	CudaHelper::downloadBufferGPU(d_H, H_pad_host.data(), dimProduct, 0);
+
+	//
+	float phaseCorrection = atan2(H_pad_host[0].y, H_pad_host[0].x);
+	size_t inner = nt, outer = dimProduct / nt_pad;  
+
+	for (size_t i = 0; i < outer; ++i) {
+		size_t paddedOffset = i * nt_pad + padding;
+		size_t unpaddedOffset = i * nt;
+
+		for (size_t j = 0; j < inner; ++j)
+		{
+			cufftComplex val = H_pad_host[paddedOffset + j];
+			_nlosData->_data[unpaddedOffset + j] = val.x * cos(phaseCorrection) - val.y * sin(phaseCorrection);
+		}
+	}
+
+	// 
+	CUFFT_CHECK(cufftDestroy(planH));
+	CudaHelper::free(d_H);
+	CudaHelper::free(d_K);
 }
 
 void Laser::reconstructShape(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, bool reconstructAABB)
@@ -48,20 +180,6 @@ void Laser::reconstructShape(ReconstructionInfo& recInfo, ReconstructionBuffers&
 	CudaHelper::free(recBuffers._intensity);
 }
 
-std::vector<double> Laser::fftFrequencies(int n, float d)
-{
-	std::vector<double> frequencies(n);
-	double inv_nd = 1.0f / (n * d);
-	int half = (n + 1) / 2;
-
-	for (int i = 0; i < half; ++i)
-		frequencies[i] = i * inv_nd;
-	for (int i = half; i < n; ++i)
-		frequencies[i] = static_cast<double>(i - n) * inv_nd;
-
-	return frequencies;
-}
-
 std::vector<double> Laser::linearSpace(double minValue, double maxValue, int n)
 {
 	std::vector<double> v(n);
@@ -73,55 +191,114 @@ std::vector<double> Laser::linearSpace(double minValue, double maxValue, int n)
 	return v;
 }
 
-void Laser::fourierFilter(const TransientParameters& transientParameters)
+void Laser::padIntensity(std::vector<cufftComplex>& paddedIntensity, size_t padding, const std::string& mode) const
 {
-	// Filter with Fourier transform
-	int numTimeBins = transientParameters._numTimeBins;
-	int numPaddedTimeBins = numTimeBins;
-	double deltaT = transientParameters._temporalResolution;
-	int numSigmaBins = static_cast<int>(transientParameters._wavelengthMean / deltaT * 6.0f);
-	if (numSigmaBins % 2 == 1)
-		++numSigmaBins;
+	size_t timeDim = _nlosData->_dims.size() - 1;
 
-	numPaddedTimeBins += numSigmaBins * 2;
+	size_t nt = _nlosData->_dims[timeDim];
+	size_t nt_pad = nt + 2 * padding;
 
-	double tMax = deltaT * (static_cast<double>(numPaddedTimeBins) - 1);
-	std::vector<double> frequencies = fftShift(fftFrequencies(numPaddedTimeBins, deltaT));
-	std::vector<double> t = linearSpace(.0f, tMax, numPaddedTimeBins);
+	std::vector<size_t> paddedDims = _nlosData->_dims;
+	paddedDims[timeDim] = nt_pad;
 
-	double meanIndex = (static_cast<float>(numPaddedTimeBins) * deltaT) / transientParameters._wavelengthMean;
-	double sigmaIdx = (static_cast<float>(numPaddedTimeBins) * deltaT) / (transientParameters._wavelengthSigma * 6.0f);
-	int frequencyMinIndex = numPaddedTimeBins / 2 + static_cast<int>(glm::floor(meanIndex - 3.0f * sigmaIdx));
-	int frequencyMaxIndex = numPaddedTimeBins / 2 + static_cast<int>(glm::ceil(meanIndex + 3.0f * sigmaIdx));
+	size_t sliceSize = 1;
+	for (size_t i = 0; i < _nlosData->_dims.size() - 1; ++i)
+		sliceSize *= _nlosData->_dims[i];
 
-	double sumGaussianEnvelope = 0.0f;
-	std::vector<float> gaussianEnvelope(numPaddedTimeBins);
+	paddedIntensity.resize(sliceSize * nt_pad);
 
-	for (int i = 0; i < numPaddedTimeBins; ++i)
+	for (size_t i = 0; i < sliceSize; ++i)
 	{
-		double normalizedTime = (t[i] - tMax / 2.0f) / transientParameters._wavelengthSigma;
-		gaussianEnvelope[i] = glm::exp(-0.5f * normalizedTime * normalizedTime);
-		sumGaussianEnvelope += gaussianEnvelope[i];
+		for (size_t t = 0; t < nt; ++t)
+			paddedIntensity[i * nt_pad + (t + padding)] = cufftComplex{ _nlosData->_data[i * nt + t], 0.0f };
+
+		if (mode == "constant" || mode == "zero")
+		{
+			for (size_t t = 0; t < padding; ++t) {
+				paddedIntensity[i * nt_pad + t] = { 0.0f, 0.0f };
+			}
+			for (size_t t = nt + padding; t < nt_pad; ++t) {
+				paddedIntensity[i * nt_pad + t] = { 0.0f, 0.0f };
+			}
+		}
+		else if (mode == "edge")
+		{
+			float first = _nlosData->_data[i * nt + 0];
+			float last = _nlosData->_data[i * nt + nt - 1];
+
+			for (size_t t = 0; t < padding; ++t)
+				paddedIntensity[i * nt_pad + t] = cufftComplex{ first, .0f };
+			for (size_t t = nt + padding; t < nt_pad; ++t)
+				paddedIntensity[i * nt_pad + t] = cufftComplex{ last, .0f };
+		}
+		else
+		{
+			std::cerr << "Unsupported padding mode: " << mode << '\n';
+			return;
+		}
 	}
+}
 
-	std::vector<cuComplex> K(numPaddedTimeBins);
-	for (int i = 0; i < numPaddedTimeBins; ++i)
-	{
-		double phase = 2.0 * glm::pi<double>() * t[i] / transientParameters._wavelengthMean;
-		double normalizedEnvelope = gaussianEnvelope[i] / sumGaussianEnvelope;
-		K[i] = make_cuComplex(normalizedEnvelope * glm::cos(phase), normalizedEnvelope * glm::sin(phase));
-	}
+void Laser::fftLoG(float*& inputVoxels, const glm::uvec3& resolution, float sigma)
+{
+	// Calculate sizes
+	glm::uint size = resolution.x * resolution.y * resolution.z;
+	size_t complex_size = (resolution.x / 2 + 1) * resolution.y * resolution.z;
 
-	K = ifftshift<cuComplex>(K);
+	// Allocate memory - note different sizes!
+	cufftComplex* fourierReconstruction, * kernel;
+	CudaHelper::initializeZeroBufferGPU(fourierReconstruction, complex_size);
+	CudaHelper::initializeZeroBufferGPU(kernel, complex_size);
 
-	std::cout << "Frequency min index: " << frequencyMinIndex << '\n';
+	// Create FFT plans
+	cufftHandle forward_plan, inverse_plan;
+	cufftPlan3d(&forward_plan, resolution.x, resolution.y, resolution.z, CUFFT_R2C);
+	cufftPlan3d(&inverse_plan, resolution.x, resolution.y, resolution.z, CUFFT_C2R);
 
-	glm::uint padding = numPaddedTimeBins - numTimeBins;
-	assert(padding % 2 == 0);
-	padding /= 2;
+	// Forward FFT
+	CUFFT_CHECK(cufftExecR2C(forward_plan, (cufftReal*)inputVoxels, fourierReconstruction));
 
-	//float debugValue;
-	//CudaHelper::downloadBufferGPU(intensity, &debugValue, 1);
+	// Build LoG kernel - must respect complex_size layout!
+	dim3 block(8, 8, 8);
+	dim3 grid(
+		((resolution.x / 2 + 1) + block.x - 1) / block.x,
+		(resolution.y + block.y - 1) / block.y,
+		(resolution.z + block.z - 1) / block.z
+	);
+	buildLoGKernel3D<<<grid, block>>>(kernel, resolution.x, resolution.y, resolution.z, sigma);
+
+	// Multiply in frequency domain
+	glm::uint threads = 256;
+	glm::uint blocks = CudaHelper::getNumBlocks(complex_size, threads);
+	multiplyKernel<<<blocks, threads>>>(fourierReconstruction, kernel, complex_size);
+
+	// Inverse FFT
+	CUFFT_CHECK(cufftExecC2R(inverse_plan, fourierReconstruction, (cufftReal*)inputVoxels));
+
+	// Normalize
+	normalizeIFFT<<<blocks, threads>>>(inputVoxels, size);
+
+	// Cleanup
+	cufftDestroy(forward_plan);
+	cufftDestroy(inverse_plan);
+	CudaHelper::free(fourierReconstruction);
+	CudaHelper::free(kernel);
+}
+
+void Laser::laplacianFilter(float*& inputVoxels, const glm::uvec3& resolution, glm::uint filterSize)
+{
+	float* laplacianGPU = nullptr;
+	CudaHelper::initializeZeroBufferGPU(laplacianGPU, resolution.x * resolution.y * resolution.z);
+
+	dim3 blockSize = dim3(8, 8, 8);
+	dim3 gridSize = dim3(
+		(resolution.x + blockSize.x - 1) / blockSize.x,
+		(resolution.y + blockSize.y - 1) / blockSize.y,
+		(resolution.z + blockSize.z - 1) / blockSize.z
+	);
+	laplace<<<gridSize, blockSize>>>(inputVoxels, laplacianGPU, resolution, filterSize);
+	std::swap(laplacianGPU, inputVoxels);
+	CudaHelper::free(laplacianGPU);
 }
 
 void Laser::normalizeMatrix(float* v, glm::uint size)
@@ -281,7 +458,7 @@ void Laser::reconstructAABBConfocal(const ReconstructionInfo& nlosInfo)
 
 	ChronoUtilities::startTimer();
 
-	dim3 blockSize(16, 16, 4); 
+	dim3 blockSize(16, 16); 
 	dim3 gridSize(
 		(sliceSize + blockSize.x - 1) / blockSize.x,    
 		(nlosInfo._numLaserTargets + blockSize.y - 1) / blockSize.y, 
@@ -291,6 +468,9 @@ void Laser::reconstructAABBConfocal(const ReconstructionInfo& nlosInfo)
 	backprojectConfocalVoxel<<<gridSize, blockSize>>>(activationGPU, sliceSize);
 	normalizeMatrix(activationGPU, numVoxels);
 	CudaHelper::synchronize("backprojectConfocalVoxel");
+
+	//fftLoG(activationGPU, voxelResolution, 1.0f);
+	laplacianFilter(activationGPU, voxelResolution, 5);
 
 	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 

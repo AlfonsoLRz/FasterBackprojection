@@ -5,7 +5,6 @@ layout(location = 3) in vec3 vTranslation;
 layout(location = 4) in vec3 vScale;
 layout(location = 6) in float vIntensity;
 
-uniform vec3 voxelMin, voxelMax;
 uniform mat4 voxelModelMatrix; 
 uniform mat4 voxelProjectionMatrix; 
 
@@ -25,5 +24,5 @@ void main()
     worldPos = world.xyz;
     intensity = vIntensity;
 
-    gl_Position = voxelProjectionMatrix * world; // Correct transformation to clip space
+    gl_Position = voxelProjectionMatrix * world; 
 }
