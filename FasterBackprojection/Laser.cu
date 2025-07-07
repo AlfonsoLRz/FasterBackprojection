@@ -2,6 +2,7 @@
 #include "stdafx.h"
 #include "Laser.cuh"
 
+#include <valarray>
 #include <cub/cub.cuh>
 #include <cub/device/device_reduce.cuh>
 #include <thrust/device_ptr.h>
@@ -479,42 +480,84 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
 	const glm::uint numVoxels = voxelResolution.x * voxelResolution.y * voxelResolution.z;
 	const glm::uint numTimeBins = recInfo._numTimeBins;
+	const glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
 
-	size_t totalElements = 1;
+	glm::uint totalElements = 1;
 	for (const auto& dim : _nlosData->_dims)
-		totalElements *= dim;
+		totalElements *= static_cast<glm::uint>(dim);
 
 	float* activationGPU = nullptr;
 	CudaHelper::initializeZeroBufferGPU(activationGPU, numVoxels);
 
-	float* timePrefixSum = nullptr, * spatialPrefixSum = nullptr;
-	CudaHelper::initializeBufferGPU(timePrefixSum, totalElements * sizeof(float));
-	CudaHelper::initializeBufferGPU(spatialPrefixSum, totalElements / numTimeBins * sizeof(float));
+	float* spatioTemporalSum = nullptr, * spatialSum = nullptr;
+	CudaHelper::initializeBufferGPU(spatioTemporalSum, totalElements);
+	CudaHelper::initializeBufferGPU(spatialSum, totalElements / numTimeBins);
 
-	thrust::device_vector<int> keys(totalElements);
+	float* noise = nullptr;
+	std::vector<float> noiseHost(numVoxels);
+	for (glm::uint i = 0; i < numVoxels; ++i)
+		noiseHost[i] = RandomUtilities::getUniformRandom();
+	CudaHelper::initializeBufferGPU(noise, numVoxels, noiseHost.data());
 
-	// iota in CUDA & the key is the flattened (l, s) bin
-	thrust::sequence(keys.begin(), keys.end(), 0);
-	thrust::transform(keys.begin(), keys.end(), keys.begin(), 
-	[=] __device__(int i) {
-		return i / numTimeBins;
-	});
+	// CUB's inclusive sum
+	{
+		size_t storageBytes = 0;
+		cub::DeviceScan::InclusiveSum(nullptr, storageBytes, recBuffers._intensity, spatioTemporalSum, static_cast<int>(totalElements));
 
-	// Temporal prefix sum
-	thrust::inclusive_scan_by_key(
-		keys.begin(), keys.end(), 
-		thrust::device_pointer_cast(recBuffers._intensity), 
-		thrust::device_pointer_cast(timePrefixSum));
+		void* tempStorage = nullptr;
+		cudaMalloc(&tempStorage, storageBytes);
+
+		// Perform the inclusive scan
+		cub::DeviceScan::InclusiveSum(tempStorage, storageBytes, recBuffers._intensity, spatioTemporalSum, static_cast<int>(totalElements));
+
+		CudaHelper::free(tempStorage);
+	}
 
 	// Spatio-temporal prefix sum
-	glm::uint blockSize = 256, blocks = CudaHelper::getNumBlocks(totalElements / numTimeBins, blockSize);
-	spatioTemporalPrefixSum<<<blocks, blockSize>>>(timePrefixSum, spatialPrefixSum, totalElements / numTimeBins, numTimeBins);
+	{
+		glm::uint blockSize = 512, blocks = CudaHelper::getNumBlocks(totalElements / numTimeBins, blockSize);
+		spatioTemporalPrefixSum<<<blocks, blockSize>>>(spatioTemporalSum, spatialSum, totalElements / numTimeBins, numTimeBins);
+	}
 
-	//std::vector<float> timePrefixSumHost(totalElements);
-	//CudaHelper::downloadBufferGPU(timePrefixSum, timePrefixSumHost.data(), totalElements, 0);
+	// Normalize spatio-temporal sum
+	{
+		glm::uint threadsBlock = 512, numBlocks = CudaHelper::getNumBlocks(totalElements / numTimeBins, threadsBlock);
+		normalizeSpatioTemporalPrefixSum<<<numBlocks, threadsBlock>>>(spatioTemporalSum, numTimeBins, totalElements);
+	}
 
-	std::vector<float> spatialPrefixSumHost(totalElements / numTimeBins);
-	CudaHelper::downloadBufferGPU(spatialPrefixSum, spatialPrefixSumHost.data(), totalElements / numTimeBins, 0);
+	// Normalize the spatial sum
+	normalizeMatrix(spatialSum, totalElements / numTimeBins);
 
-	std::cout << ChronoUtilities::getElapsedTime();
+	//std::vector<float> spatialSumHost(totalElements / numTimeBins);
+	//CudaHelper::downloadBufferGPU(spatialSum, spatialSumHost.data(), totalElements / numTimeBins);
+
+	//std::vector<float> timePrefixSumHost(numTimeBins * 2);
+	//CudaHelper::downloadBufferGPU(spatioTemporalSum, timePrefixSumHost.data(), numTimeBins * 2, numTimeBins);
+
+	glm::uint numSamples = recInfo._numLaserTargets / 4;
+	dim3 blockSize(BLOCK_X_CONFOCAL, 4);
+	dim3 gridSize(
+		(sliceSize + blockSize.x - 1) / blockSize.x,
+		(numSamples + blockSize.y - 1) / blockSize.y,
+		(voxelResolution.z + blockSize.z - 1) / blockSize.z
+	);
+
+	backprojectConfocalVoxelMIS<<<gridSize, blockSize>>>(spatialSum, activationGPU, noise, sliceSize, numSamples, numVoxels);
+	normalizeMatrix(activationGPU, numVoxels);
+	CudaHelper::synchronize("backprojectConfocalVoxelMIS");
+
+	laplacianFilter(activationGPU, voxelResolution, 5);
+
+	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+
+	// Prepare buckets and info for storing data in the local system
+	const std::string outputFolder = "output/";
+	std::vector<float> voxels(numVoxels);
+	CudaHelper::downloadBufferGPU(activationGPU, voxels.data(), numVoxels);
+	FileUtilities::write<float>(outputFolder + "aabb.cube", voxels);
+
+	CudaHelper::free(activationGPU);
+	CudaHelper::free(spatioTemporalSum);
+	CudaHelper::free(spatialSum);
+	CudaHelper::free(noise);
 }

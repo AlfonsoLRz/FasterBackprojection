@@ -191,3 +191,48 @@ __global__ void spatioTemporalPrefixSum(
 
 	spatialPrefixSum[spatialIdx] = temporalPrefixSum[spatialIdx * numTimeBins + numTimeBins - 1];
 }
+
+__global__ void normalizeSpatioTemporalPrefixSum(
+	float* __restrict__ spatioTemporalPrefixSum, glm::uint numTimeBins, glm::uint size)
+{
+	const glm::uint idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (idx >= size)
+		return;
+
+	glm::uint spatialIdx = idx / numTimeBins, temporalIdx = idx % numTimeBins;
+	float minValue = spatioTemporalPrefixSum[spatialIdx * numTimeBins], maxValue = spatioTemporalPrefixSum[spatialIdx * numTimeBins + numTimeBins - 1];
+
+	spatioTemporalPrefixSum[idx] = (spatioTemporalPrefixSum[idx] - minValue) * safeRCP(maxValue - minValue);
+}
+
+__global__ void backprojectConfocalVoxelMIS(
+	const float* __restrict__ spatialSum, float* __restrict__ activation, const float* __restrict__ noise,
+	glm::uint sliceSize, glm::uint numSamples, glm::uint noiseBufferSize)
+{
+	glm::uint v = blockIdx.x * blockDim.x + threadIdx.x;
+	glm::uint s = blockIdx.y * blockDim.y + threadIdx.y;
+	glm::uint voxelZ = blockIdx.z * blockDim.z + threadIdx.z;
+
+	if (s >= numSamples || v >= sliceSize || voxelZ >= rtRecInfo._voxelResolution.z)
+		return;
+
+	const glm::uint vx = v % rtRecInfo._voxelResolution.x;
+	const glm::uint vy = v / rtRecInfo._voxelResolution.x;
+
+	glm::uint randomState = sliceSize * voxelZ + v + s;
+	const glm::uint l = getMISIndex(randomState, spatialSum, rtRecInfo._numLaserTargets, noise, noiseBufferSize);
+	const glm::vec3 lPos = laserTargets[l];
+	const glm::vec3 checkPos = rtRecInfo._hiddenVolumeMin + glm::vec3(vx, voxelZ, vy) * rtRecInfo._hiddenVolumeVoxelSize + 0.5f * rtRecInfo._hiddenVolumeVoxelSize;
+
+	float dist = glm::distance(lPos, checkPos) * 2.0f - rtRecInfo._timeOffset;
+	if (rtRecInfo._discardFirstLastBounces == 0)
+		dist += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(lPos, rtRecInfo._sensorPosition);
+
+	const int timeBin = static_cast<int>(dist / rtRecInfo._timeStep);
+	if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
+		return;
+
+	const float backscatteredLight = intensityCube[getConfocalTransientIndex(l, timeBin)];
+	if (backscatteredLight > EPS)
+		atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight * safeRCP(dist * dist));
+}
