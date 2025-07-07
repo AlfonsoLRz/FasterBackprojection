@@ -6,7 +6,7 @@ protected:
 	glm::vec3	_max, _min;
 
 public:
-	explicit AABB(const glm::vec3& min = glm::vec3(INFINITY), const glm::vec3& max = glm::vec3(-INFINITY));
+	explicit AABB(const glm::vec3& min = glm::vec3(FLT_MAX), const glm::vec3& max = glm::vec3(-FLT_MAX));
 	AABB(const AABB& aabb);
 	virtual ~AABB();
 	AABB& operator=(const AABB& aabb);

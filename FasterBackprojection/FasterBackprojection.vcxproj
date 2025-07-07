@@ -50,7 +50,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <OpenMPSupport>true</OpenMPSupport>
       <AdditionalIncludeDirectories>brdf-loader;progressbar/include;vox-writer;C:/ProgramData/NVIDIA Corporation/OptiX SDK 9.0.0/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalOptions>-openmp:experimental -openmp:llvm %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-openmp:llvm %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -64,6 +64,7 @@
       <InterleaveSourceInPTX>false</InterleaveSourceInPTX>
       <ExtensibleWholeProgramCompilation>false</ExtensibleWholeProgramCompilation>
       <FastMath>true</FastMath>
+      <AdditionalOptions>--extended-lambda %(AdditionalOptions)</AdditionalOptions>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -76,7 +77,7 @@
       <OpenMPSupport>true</OpenMPSupport>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <AdditionalIncludeDirectories>progressbar/include;C:/ProgramData/NVIDIA Corporation/OptiX SDK 9.0.0/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalOptions>-openmp:experimental -openmp:llvm %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-openmp:llvm %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -92,6 +93,7 @@
       <InterleaveSourceInPTX>false</InterleaveSourceInPTX>
       <ExtensibleWholeProgramCompilation>false</ExtensibleWholeProgramCompilation>
       <FastMath>true</FastMath>
+      <AdditionalOptions>--extended-lambda %(AdditionalOptions)</AdditionalOptions>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>

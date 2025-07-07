@@ -23,7 +23,7 @@ private:
 	static void laplacianFilter(float*& inputVoxels, const glm::uvec3& resolution, glm::uint filterSize);
 	static void normalizeMatrix(float* v, glm::uint size);
 
-	static void reconstructShapeAABB(const ReconstructionInfo& recInfo);
+	void reconstructShapeAABB(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
 	static void reconstructShapeDepths(const ReconstructionInfo& recInfo);
 
 	static void reconstructDepthConfocal(const ReconstructionInfo& recInfo, std::vector<double>& reconstructionDepths);
@@ -33,9 +33,12 @@ private:
 	static void reconstructAABBExhaustive(const ReconstructionInfo& recInfo);
 
 public:
+	void reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
+
+public:
 	Laser(NLosData* nlosData);
 	virtual ~Laser();
 
-	void filter_H_cuda(float wl_mean, float wl_sigma = .0f, const std::string& border = "zero");
-	static void reconstructShape(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, bool reconstructAABB);
+	void filter_H_cuda(float wl_mean, float wl_sigma = .0f, const std::string& border = "zero") const;
+	void reconstructShape(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, bool reconstructAABB);
 };

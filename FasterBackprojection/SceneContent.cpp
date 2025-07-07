@@ -27,7 +27,7 @@ void SceneContent::buildScenario()
 	laser.filter_H_cuda(0.03f, 0.0f);
 
 	transientVoxels->toGpu(recInfo, recBuffers);
-	Laser::reconstructShape(recInfo, recBuffers, true);
+	laser.reconstructShape(recInfo, recBuffers, true);
 }
 
 SceneContent::SceneContent() : _numVertices(0), _numMeshes(0), _numTextures(0), _numTriangles(0)

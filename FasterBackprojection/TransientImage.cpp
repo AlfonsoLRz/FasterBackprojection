@@ -49,11 +49,11 @@ void TransientImage::normalizeImage(float* slice)
 	float maxVal = .0f;
 	const glm::uint size = this->getWidth() * this->getHeight();
 
-	#pragma omp parallel reduction(max:maxVal)
+	#pragma omp parallel for reduction(max:maxVal)
 	for (glm::uint idx = 0; idx < size; ++idx)
 		maxVal = glm::max(maxVal, slice[idx]);
 
-	#pragma omp simd
+	#pragma omp parallel for
 	for (glm::uint idx = 0; idx < size; ++idx)
 		slice[idx] /= maxVal;
 }

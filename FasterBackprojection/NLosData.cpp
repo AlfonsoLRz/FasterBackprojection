@@ -235,7 +235,7 @@ void NLosData::setUp(std::vector<float>& data, const std::vector<std::vector<std
 	assert(numChannels == 1);
 	data.resize(numTimeBins * numCols * numRows, 0);
 
-	#pragma omp simd
+	#pragma omp parallel for
 	for (size_t t = 0; t < numTimeBins; ++t)
 	{
 		for (size_t x = 0; x < numCols; ++x)

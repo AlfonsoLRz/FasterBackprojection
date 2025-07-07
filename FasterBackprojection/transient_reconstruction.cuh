@@ -40,21 +40,12 @@ __global__ void backproject(float* __restrict__ activation, const double* __rest
 
 __global__ void backprojectConfocal(float* __restrict__ activation, const double* __restrict__ depths, glm::uint numDepths)
 {
-	glm::uint l = blockIdx.x * blockDim.x + threadIdx.x;
-	glm::uint c = blockIdx.y * blockDim.y + threadIdx.y;
+	glm::uint c = blockIdx.x * blockDim.x + threadIdx.x;
+	glm::uint l = blockIdx.y * blockDim.y + threadIdx.y;
 	glm::uint d = blockIdx.z * blockDim.z + threadIdx.z;
 
 	if (l >= rtRecInfo._numLaserTargets || c >= rtRecInfo._numLaserTargets || d >= numDepths)
 		return;
-
-	glm::uint localC = threadIdx.y;
-	glm::uint localD = threadIdx.z;
-	__shared__ float shActivation[BLOCK_X_CONFOCAL][BLOCK_Y_CONFOCAL];
-
-	if (localC < BLOCK_X_CONFOCAL && localD < BLOCK_Y_CONFOCAL)
-		shActivation[localC][localD] = 0.0f;
-
-	__syncthreads();
 
 	const glm::vec3 lPos = laserTargets[l];
 	const glm::vec3 checkPos = laserTargets[c] + rtRecInfo._relayWallNormal * static_cast<float>(depths[d]);
@@ -69,13 +60,7 @@ __global__ void backprojectConfocal(float* __restrict__ activation, const double
 
 	float intensity = intensityCube[getConfocalTransientIndex(l, timeBin)];
 	if (intensity > EPS)
-		atomicAdd(&shActivation[localC][localD], intensity);
-
-	__syncthreads();
-
-	// From shared memory back to global memory
-	if (threadIdx.x == 0) 
-		atomicAdd(&activation[c * numDepths + d], shActivation[localC][localD]);
+		atomicAdd(&activation[c * numDepths + d], intensity);
 }
 
 __global__ void backprojectExhaustive(float* __restrict__ activation, const double* __restrict__ depths, glm::uint numDepths)
@@ -194,3 +179,15 @@ __global__ void backprojectExhaustiveVoxel(float* __restrict__ activation, glm::
 		atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight * safeRCP(dist * dist));
 }
 
+// MIS
+
+__global__ void spatioTemporalPrefixSum(
+	const float* __restrict__ temporalPrefixSum, float* __restrict__ spatialPrefixSum, 
+	glm::uint numSpatialElements, glm::uint numTimeBins)
+{
+	glm::uint spatialIdx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (spatialIdx >= numSpatialElements)
+		return;
+
+	spatialPrefixSum[spatialIdx] = temporalPrefixSum[spatialIdx * numTimeBins + numTimeBins - 1];
+}
