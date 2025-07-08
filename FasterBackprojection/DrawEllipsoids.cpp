@@ -9,7 +9,7 @@
 
 #include "libmorton/morton.h"
 
-DrawEllipsoids::DrawEllipsoids(NLosData* nlosData): _numInstances(0), _nlosData(nlosData)
+DrawEllipsoids::DrawEllipsoids(NLosData* nlosData) : _numInstances(0), _nlosData(nlosData)
 {
 	_components.resize(2);
 
@@ -26,43 +26,43 @@ DrawEllipsoids::DrawEllipsoids(NLosData* nlosData): _numInstances(0), _nlosData(
 
 	ChronoUtilities::startTimer();
 
-	//for (int t = 0; t < _nlosData->_temporalResolution; ++t)
-	//{
-	//	float* timeSlice = _nlosData->getTimeSlice(t);
+	if (_nlosData->_isConfocal)
+	{
+		float* data = _nlosData->_data.data();
+		glm::uint pixelIdx = 0;
 
-	//	if (_nlosData->_isConfocal)
-	//	{
-	//		glm::uint pixelIdx = 0;
+		for (const glm::vec3& pos : _nlosData->_laserGridPositions)
+		{
+			for (int t = 0; t < 700; ++t)
+			{
+				float* timeSlice = data + pixelIdx * _nlosData->_temporalResolution;
 
-	//		for (const glm::vec3& pos : _nlosData->_laserGridPositions)
-	//		{
-	//			if (timeSlice[pixelIdx] > glm::epsilon<float>())
-	//			{
-	//				const glm::vec3 lPos = _nlosData->_laserGridPositions[pixelIdx];
-	//				float traversalDistance = static_cast<float>(t) * _nlosData->_deltaT + _nlosData->_t0;
-	//				//if (_nlosData-> == 0)		// Measurements did not discard first and last bounces
-	//				traversalDistance -= (glm::distance(lPos, _nlosData->_laserPosition) + glm::distance(lPos, _nlosData->_cameraPosition));
-	//				//traversalDistance /= 2.0f;		// Disabled because radius is 0.5f and not 1.0f
+				if (timeSlice[t] > glm::epsilon<float>())
+				{
+					const glm::vec3 lPos = _nlosData->_laserGridPositions[pixelIdx];
+					float traversalDistance = static_cast<float>(t) * _nlosData->_deltaT + _nlosData->_t0;
+					traversalDistance -= (glm::distance(lPos, _nlosData->_laserPosition) + glm::distance(lPos, _nlosData->_cameraPosition));
+					//traversalDistance /= 2.0f;		// Disabled because radius is 0.5f and not 1.0f
 
-	//				ellipsoidPositions.push_back(pos);
-	//				ellipsoidScale.emplace_back(traversalDistance); // Uniform cale for confocal ellipsoids
-	//				ellipsoidIntensities.push_back(timeSlice[pixelIdx]);
-	//				relayWall.update(pos);
-	//			}
+					ellipsoidPositions.push_back(pos);
+					ellipsoidScale.emplace_back(traversalDistance); // Uniform cale for confocal ellipsoids
+					ellipsoidIntensities.push_back(timeSlice[t]);
+					relayWall.update(pos);
+				}
+			}
 
-	//			++pixelIdx;
-	//		}
-	//	}
-	//}
+			++pixelIdx;
+		}
+	}
 
-	this->reorder(ellipsoidPositions, ellipsoidScale, ellipsoidIntensities, relayWall);
+	//this->reorder(ellipsoidPositions, ellipsoidScale, ellipsoidIntensities, relayWall);
 
 	std::cout << "Ellipsoids created in " << ChronoUtilities::getElapsedTime() << " ms.\n";
 
 	// Half ellipsoid
 	Component* ellipsoid = &_components.front();
 
-	createHalfEllipsoid(ellipsoid, 256, 256);
+	createHalfEllipsoid(ellipsoid, 100, 100);
 	ellipsoid->buildVao();
 
 	ellipsoid->_vao->createMultiInstanceVBO(Vao::TRANSLATION, glm::vec3(.0f), .0f, GL_FLOAT);
@@ -263,6 +263,20 @@ void DrawEllipsoids::createHalfEllipsoid(Component* component, int stacks, int s
 	component->generateWireframe();
 }
 
+void DrawEllipsoids::MIS(std::vector<glm::vec3>& ellipsoidPositions, std::vector<glm::vec3>& ellipsoidScale,
+	std::vector<float>& ellipsoidIntensities, glm::uint numSamples)
+{
+	// Order ellipsoids by their intensity, from highest to lowest
+	std::vector<std::pair<float, glm::uint>> intensityIndex(ellipsoidIntensities.size());
+	for (glm::uint i = 0; i < ellipsoidIntensities.size(); ++i)
+	{
+		intensityIndex[i] = std::make_pair(ellipsoidIntensities[i], i);
+	}
+	std::sort(std::execution::par_unseq, intensityIndex.begin(), intensityIndex.end(), std::greater<>());
+
+	// Pick numSamples ellipsoids with 
+}
+
 static unsigned int expandBits(unsigned int v)
 {
 	v = (v | (v << 16)) & 0x030000FF;
@@ -321,7 +335,7 @@ void DrawEllipsoids::solveBackprojection()
 
 	// 
 	const GLsizei BATCH_SIZE = 65536; 
-	const glm::ivec3 voxelRes(256);
+	const glm::ivec3 voxelRes(64);
 	GLsizei numEllipsoids = static_cast<GLsizei>(_numInstances);
 	std::printf("DrawEllipsoids::solveBackprojection: Number of instances: %i\n", numEllipsoids);
 
@@ -338,8 +352,8 @@ void DrawEllipsoids::solveBackprojection()
 	GLuint voxelTex;
 	glGenTextures(1, &voxelTex);
 	glBindTexture(GL_TEXTURE_3D, voxelTex);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
@@ -386,7 +400,7 @@ void DrawEllipsoids::solveBackprojection()
 			currentBatchSize,
 			offset);
 
-		glFinish();
+		//glFinish();
 
 		//bar.update();
 		std::cout << "DrawEllipsoids::solveBackprojection: Drawn batch " << (i / BATCH_SIZE) + 1 << " of " << (numEllipsoids + BATCH_SIZE - 1) / BATCH_SIZE << "\n";
@@ -418,114 +432,6 @@ void DrawEllipsoids::solveBackprojection()
 		std::cout << "Voxel texture contains non-zero data.\n";
 	else
 		std::cout << "Voxel texture is all zeros.\n"; 
-
-	// Restore OpenGL State - (Good practice)
-	glColorMask(true, true, true, true);
-	glDepthMask(true);
-	glEnable(GL_DEPTH_TEST);
-}
-
-void DrawEllipsoids::solveBackprojection2()
-{
-	Component* component = &_components.back();
-
-	// 
-	const GLsizei BATCH_SIZE = 1;
-	const glm::ivec3 voxelRes(256, 256, 256);
-	GLsizei numEllipsoids = static_cast<GLsizei>(_numInstances);
-	std::printf("DrawEllipsoids::solveBackprojection: Number of instances: %i\n", numEllipsoids);
-
-	//
-	const AABB hiddenGeometry = _nlosData->_hiddenGeometry;
-	glm::vec3 minBounds = hiddenGeometry.minPoint(), maxBounds = hiddenGeometry.maxPoint();
-	glm::mat4 voxelProjectionMatrix = glm::ortho(
-		minBounds.x, maxBounds.x, // left, right
-		minBounds.y, maxBounds.y, // bottom, top
-		minBounds.z, maxBounds.z  // near, far
-	);
-
-	// 3D texture
-	GLuint voxelTex;
-	glGenTextures(1, &voxelTex);
-	glBindTexture(GL_TEXTURE_3D, voxelTex);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-	glTexStorage3D(GL_TEXTURE_3D, 1, GL_R32F, voxelRes.x, voxelRes.y, voxelRes.z);
-	glBindImageTexture(0, voxelTex, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
-
-	// Clean texture
-	float clearValue = 0.0f;
-	glClearTexImage(voxelTex, 0, GL_RED, GL_FLOAT, &clearValue);
-
-	// Set up rendering state
-	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-	glDepthMask(GL_FALSE);
-	glDisable(GL_DEPTH_TEST);
-
-	// Shader Uniforms - (All correct uniforms now passed to the shader)
-	_backprojectionShader->use();
-	_backprojectionShader->setUniform("voxelMin", minBounds);
-	_backprojectionShader->setUniform("voxelMax", maxBounds);
-	_backprojectionShader->setUniform("voxelRes", voxelRes);
-	_backprojectionShader->setUniform("voxelModelMatrix", this->_modelMatrix);
-	_backprojectionShader->setUniform("voxelProjectionMatrix", voxelProjectionMatrix);
-
-	ChronoUtilities::startTimer();
-
-	// Draw Call - (Standard instanced draw)
-	glBindVertexArray(component->_vao->_vao);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, component->_vao->_ibo[Vao::POINT]);
-
-	progressbar bar(numEllipsoids / BATCH_SIZE + 1, true);
-
-	for (GLsizei i = 0; i < numEllipsoids; i += BATCH_SIZE) {
-		GLsizei currentBatchSize = glm::min(BATCH_SIZE, numEllipsoids - i);
-		GLuint offset = i;
-
-		glDrawElementsInstancedBaseInstance(
-			GL_POINTS,
-			static_cast<GLsizei>(component->_indices[Vao::POINT].size()),
-			GL_UNSIGNED_INT,
-			nullptr,
-			currentBatchSize,
-			offset);
-
-		glFinish();
-		break;
-
-		//bar.update();
-		std::cout << "DrawEllipsoids::solveBackprojection: Drawn batch " << (i / BATCH_SIZE) + 1 << " of " << (numEllipsoids + BATCH_SIZE - 1) / BATCH_SIZE << "\n";
-	}
-
-	// Synchronize
-	glBindVertexArray(0);
-	glUseProgram(0);
-	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-	glFinish();
-
-	std::cout << "DrawEllipsoids::solveBackprojection: Backprojection completed in " << ChronoUtilities::getElapsedTime() << " milliseconds.\n";
-
-	// Read back 
-	glBindTexture(GL_TEXTURE_3D, voxelTex);
-	size_t voxelCount = voxelRes.x * voxelRes.y * voxelRes.z;
-	std::vector<float> voxelData(voxelCount);
-
-	glGetTexImage(GL_TEXTURE_3D, 0, GL_RED, GL_FLOAT, voxelData.data());
-
-	bool anyNonZero = std::any_of(
-		voxelData.begin(), voxelData.end(),
-		[](uint32_t val) { return val > glm::epsilon<float>(); }
-	);
-
-	FileUtilities::write("output/aabb.cube", voxelData);
-
-	if (anyNonZero)
-		std::cout << "Voxel texture contains non-zero data.\n";
-	else
-		std::cout << "Voxel texture is all zeros.\n";
 
 	// Restore OpenGL State - (Good practice)
 	glColorMask(true, true, true, true);

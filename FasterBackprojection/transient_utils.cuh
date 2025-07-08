@@ -41,3 +41,17 @@ inline __device__ int getMISIndex(glm::uint& idx, const float* __restrict__ sum,
 
 	return left;
 }
+
+inline __device__ glm::uint getMISIndexAlias(
+	glm::uint& idx, const glm::uint* __restrict__ aliasTable, const float* __restrict__ probTable, glm::uint size, 
+	const float* __restrict__ noise, glm::uint noiseBufferSize)
+{
+	const float r1 = getUniformRandom(noise, noiseBufferSize, idx);
+	const float r2 = getUniformRandom(noise, noiseBufferSize, idx);
+	glm::uint k = static_cast<glm::uint>(r1 * size);
+
+	if (r2 < probTable[k])
+		return k;
+
+	return aliasTable[k];
+}

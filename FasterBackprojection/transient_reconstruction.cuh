@@ -207,6 +207,7 @@ __global__ void normalizeSpatioTemporalPrefixSum(
 
 __global__ void backprojectConfocalVoxelMIS(
 	const float* __restrict__ spatialSum, float* __restrict__ activation, const float* __restrict__ noise,
+	const glm::uint* __restrict__ aliasTable, const float* __restrict__ probTable, 
 	glm::uint sliceSize, glm::uint numSamples, glm::uint noiseBufferSize)
 {
 	glm::uint v = blockIdx.x * blockDim.x + threadIdx.x;
@@ -220,7 +221,24 @@ __global__ void backprojectConfocalVoxelMIS(
 	const glm::uint vy = v / rtRecInfo._voxelResolution.x;
 
 	glm::uint randomState = sliceSize * voxelZ + v + s;
-	const glm::uint l = getMISIndex(randomState, spatialSum, rtRecInfo._numLaserTargets, noise, noiseBufferSize);
+
+	// Randomize pdf selection
+	glm::uint l;
+	float pdf, globalPDF;
+	if (getUniformRandom(noise, noiseBufferSize, randomState) < 0.5f)
+	{
+		l = getMISIndexAlias(randomState, aliasTable, probTable, rtRecInfo._numLaserTargets, noise, noiseBufferSize);
+		pdf = l > 0 ? spatialSum[l] - spatialSum[l - 1] : spatialSum[l];
+		globalPDF = pdf + 1.0f * safeRCP(static_cast<float>(rtRecInfo._numLaserTargets));
+	}
+	else
+	{
+		l = static_cast<glm::uint>(getUniformRandom(noise, noiseBufferSize, randomState) * static_cast<float>(rtRecInfo._numLaserTargets));
+		pdf = 1.0f * safeRCP(static_cast<float>(rtRecInfo._numLaserTargets));
+		globalPDF = pdf + (l > 0 ? spatialSum[l] - spatialSum[l - 1] : spatialSum[l]);
+	}
+
+	// Check distance to the laser target
 	const glm::vec3 lPos = laserTargets[l];
 	const glm::vec3 checkPos = rtRecInfo._hiddenVolumeMin + glm::vec3(vx, voxelZ, vy) * rtRecInfo._hiddenVolumeVoxelSize + 0.5f * rtRecInfo._hiddenVolumeVoxelSize;
 
@@ -232,7 +250,9 @@ __global__ void backprojectConfocalVoxelMIS(
 	if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
 		return;
 
+	// MIS
+	const float misWeight = pdf * safeRCP(globalPDF);
 	const float backscatteredLight = intensityCube[getConfocalTransientIndex(l, timeBin)];
 	if (backscatteredLight > EPS)
-		atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight * safeRCP(dist * dist));
+		atomicAdd(&activation[sliceSize * voxelZ + v], misWeight * backscatteredLight * safeRCP(dist * dist));
 }

@@ -349,11 +349,5 @@
     <None Include="assets\shaders\shading\backprojection-vs.glsl">
       <Filter>resources\shaders\shading</Filter>
     </None>
-    <None Include="assets\shaders\shading\backprojection_mesh-fs.glsl">
-      <Filter>resources\shaders\shading</Filter>
-    </None>
-    <None Include="assets\shaders\shading\backprojection_mesh-vs.glsl">
-      <Filter>resources\shaders\shading</Filter>
-    </None>
   </ItemGroup>
 </Project>

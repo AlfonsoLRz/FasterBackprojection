@@ -88,7 +88,7 @@ NLosData::NLosData(const std::string& filename, bool saveBinary, bool useBinary)
 		std::vector<double> volumeSize;
 		dataset = file.getDataSet("hiddenVolumeSize");
 		if (dataset.getDimensions().empty())
-			volumeSize = { dataset.read<double>(), 0.001, dataset.read<double>() };
+			volumeSize = { dataset.read<double>(), 0.01, dataset.read<double>() };
 		else
 			volumeSize = dataset.read<std::vector<double>>();
 
@@ -153,15 +153,6 @@ void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuff
 
 	recInfo._voxelResolution = glm::uvec3(256u);
 	recInfo._hiddenVolumeVoxelSize = _hiddenGeometry.size() / glm::vec3(recInfo._voxelResolution);
-}
-
-float* NLosData::getTimeSlice(glm::uint t)
-{
-	if (t >= _temporalResolution)
-		throw std::out_of_range("NLosData: Time index out of range.");
-
-	glm::uint sliceSize = static_cast<glm::uint>(_data.size()) / _dims[0];
-	return _data.data() + t * sliceSize;
 }
 
 void NLosData::saveImages(const std::string& outPath)

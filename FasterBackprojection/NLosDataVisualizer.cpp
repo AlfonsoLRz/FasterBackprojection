@@ -35,8 +35,8 @@ NLosDataVisualizer::~NLosDataVisualizer()
 
 void NLosDataVisualizer::draw(MatrixRenderInformation* matrixInformation, ApplicationState* appState)
 {
-	//_relayWallCameraTargets->draw(matrixInformation, appState);
-	//_hiddenGeometryCube->draw(matrixInformation, appState);
+	_relayWallCameraTargets->draw(matrixInformation, appState);
+	_hiddenGeometryCube->draw(matrixInformation, appState);
 	_ellipsoids->draw(matrixInformation, appState);
 	//_ellipsoids->solveBackprojection();
 }

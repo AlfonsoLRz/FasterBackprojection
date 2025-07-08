@@ -54,7 +54,6 @@ public:
 
 	void toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers);
 
-	float* getTimeSlice(glm::uint t);
 	void saveImages(const std::string& outPath);
 };
 

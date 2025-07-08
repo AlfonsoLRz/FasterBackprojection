@@ -146,7 +146,7 @@ void Laser::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& bord
 	CudaHelper::free(d_K);
 }
 
-void Laser::reconstructShape(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, bool reconstructAABB)
+void Laser::reconstructShape(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, bool reconstructAABB, bool filterFourier)
 {
 	CudaHelper::checkError(cudaMemcpyToSymbol(rtRecInfo, &recInfo, sizeof(ReconstructionInfo)));
 	CudaHelper::checkError(cudaMemcpyToSymbol(laserTargets, &recBuffers._laserTargets, sizeof(glm::vec3*)));
@@ -156,7 +156,7 @@ void Laser::reconstructShape(ReconstructionInfo& recInfo, ReconstructionBuffers&
 	std::cout << "Reconstructing shape...\n";
 
 	if (reconstructAABB)
-		reconstructShapeAABB(recInfo, recBuffers);
+		reconstructShapeAABB(recInfo, recBuffers, filterFourier);
 	else
 		reconstructShapeDepths(recInfo);
 
@@ -221,6 +221,81 @@ void Laser::padIntensity(std::vector<cufftComplex>& paddedIntensity, size_t padd
 			std::cerr << "Unsupported padding mode: " << mode << '\n';
 			return;
 		}
+	}
+}
+
+/**
+ * @brief Implements Vose's Alias Method for efficient sampling from a discrete probability distribution.
+ *
+ * This function pre-computes the alias and probability tables on the CPU, which can then
+ * be used for O(1) sampling on the GPU.
+ *
+ * @param cdf A vector of probabilities for each outcome. Must sum to approximately 1.0.
+ * @param aliasTable An output vector that will store the alias indices.
+ * @param probTable An output vector that will store the probabilities for direct sampling.
+ * @throws std::runtime_error if probabilities are invalid (e.g., negative, sum not approx 1).
+ */
+void Laser::buildAliasTables(const std::vector<float>& cdf, std::vector<glm::uint>& aliasTable, std::vector<float>& probTable)
+{
+	// Build probabilities from CDF
+	const glm::uint N = static_cast<glm::uint>(cdf.size());
+
+	std::vector<float> probabilities(N);
+	probabilities[0] = cdf[0];
+	for (glm::uint i = 1; i < N; ++i)
+		probabilities[i] = cdf[i] - cdf[i - 1];
+
+	aliasTable.resize(N);
+	probTable.resize(N);
+
+	// Validate probabilities and scale them
+	std::vector<glm::uint> smallProbs; // Indices of bins with probability < 1.0
+	std::vector<glm::uint> largeProbs; // Indices of bins with probability >= 1.0
+
+	float sumProbabilities = 0.0f;
+	for (glm::uint i = 0; i < N; ++i)
+	{
+		if (probabilities[i] < 0.0f)
+			throw std::runtime_error("Probabilities cannot be negative.");
+
+		probTable[i] = probabilities[i] * N; // Scale P_i by N
+		sumProbabilities += probabilities[i];
+
+		if (probTable[i] < 1.0f)
+			smallProbs.push_back(i);
+		else
+			largeProbs.push_back(i);
+	}
+
+	// Check if sum is close to 1.0
+	if (std::abs(sumProbabilities - 1.0f) > 1e-5f)
+		throw std::runtime_error("Probabilities do not sum to approximately 1.0.");
+
+	while (!smallProbs.empty() && !largeProbs.empty())
+	{
+		glm::uint s = smallProbs.back();
+		smallProbs.pop_back();
+		glm::uint l = largeProbs.back();
+		largeProbs.pop_back();
+
+		aliasTable[s] = l;
+		probTable[l] += probTable[s] - 1.0f;
+
+		if (probTable[l] < 1.0f)
+			smallProbs.push_back(l);
+		else
+			largeProbs.push_back(l);
+
+	}
+
+	// Handle any remaining bins (due to floating point inaccuracies)
+	while (!smallProbs.empty()) {
+		probTable[smallProbs.back()] = 1.0f; // Set to 1.0 (means it always picks itself)
+		smallProbs.pop_back();
+	}
+	while (!largeProbs.empty()) {
+		probTable[largeProbs.back()] = 1.0f; // Set to 1.0
+		largeProbs.pop_back();
 	}
 }
 
@@ -310,13 +385,13 @@ void Laser::normalizeMatrix(float* v, glm::uint size)
 	CudaHelper::free(minValue);
 }
 
-void Laser::reconstructShapeAABB(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
+void Laser::reconstructShapeAABB(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers, bool filterFourier)
 {
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
-		//reconstructAABBConfocal(recInfo);
-		reconstructAABBConfocalMIS(recInfo, recBuffers);
+		reconstructAABBConfocal(recInfo, filterFourier);
+		//reconstructAABBConfocalMIS(recInfo, recBuffers);
 	else if (recInfo._captureSystem == CaptureSystem::Exhaustive)
-		reconstructAABBExhaustive(recInfo);
+		reconstructAABBExhaustive(recInfo, filterFourier);
 }
 
 void Laser::reconstructShapeDepths(const ReconstructionInfo& recInfo)
@@ -434,7 +509,7 @@ void Laser::reconstructDepthExhaustive(const ReconstructionInfo& recInfo, std::v
 	CudaHelper::free(depthsGPU);
 }
 
-void Laser::reconstructAABBConfocal(const ReconstructionInfo& recInfo)
+void Laser::reconstructAABBConfocal(const ReconstructionInfo& recInfo, bool filterFourier)
 {
 	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
 	const glm::uint numVoxels = voxelResolution.x * voxelResolution.y * voxelResolution.z;
@@ -461,16 +536,21 @@ void Laser::reconstructAABBConfocal(const ReconstructionInfo& recInfo)
 	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// Prepare buckets and info for storing data in the local system
-	const std::string outputFolder = "output/";
-	std::vector<float> voxels(numVoxels);
-	CudaHelper::downloadBufferGPU(activationGPU, voxels.data(), numVoxels);
-	FileUtilities::write<float>(outputFolder + "aabb.cube", voxels);
+	saveReconstructedAABB("output/aabb.cube", activationGPU, numVoxels);
 
 	CudaHelper::free(activationGPU);
 }
 
-void Laser::reconstructAABBExhaustive(const ReconstructionInfo& recInfo)
+void Laser::reconstructAABBExhaustive(const ReconstructionInfo& recInfo, bool filterFourier)
 {
+}
+
+bool Laser::saveReconstructedAABB(const std::string& filename, float* voxels, glm::uint numVoxels)
+{
+	std::vector<float> voxelsCpu(numVoxels);
+	CudaHelper::downloadBufferGPU(voxels, voxelsCpu.data(), numVoxels);
+
+	return FileUtilities::write<float>(filename, voxelsCpu);
 }
 
 void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
@@ -528,25 +608,33 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 	// Normalize the spatial sum
 	normalizeMatrix(spatialSum, totalElements / numTimeBins);
 
-	//std::vector<float> spatialSumHost(totalElements / numTimeBins);
-	//CudaHelper::downloadBufferGPU(spatialSum, spatialSumHost.data(), totalElements / numTimeBins);
+	glm::uint* aliasTableGpu = nullptr;
+	float* probTableGpu = nullptr;
+	{
+		std::vector<float> spatialCDF(totalElements / numTimeBins);
+		CudaHelper::downloadBufferGPU(spatialSum, spatialCDF.data(), totalElements / numTimeBins);
 
-	//std::vector<float> timePrefixSumHost(numTimeBins * 2);
-	//CudaHelper::downloadBufferGPU(spatioTemporalSum, timePrefixSumHost.data(), numTimeBins * 2, numTimeBins);
+		std::vector<glm::uint> aliasTable;
+		std::vector<float> probTable;
+		buildAliasTables(spatialCDF, aliasTable, probTable);
+
+		CudaHelper::initializeBufferGPU(aliasTableGpu, aliasTable.size(), aliasTable.data());
+		CudaHelper::initializeBufferGPU(probTableGpu, probTable.size(), probTable.data());
+	}
 
 	glm::uint numSamples = recInfo._numLaserTargets / 4;
-	dim3 blockSize(BLOCK_X_CONFOCAL, 4);
+	dim3 blockSize(32, BLOCK_Y_CONFOCAL);
 	dim3 gridSize(
 		(sliceSize + blockSize.x - 1) / blockSize.x,
 		(numSamples + blockSize.y - 1) / blockSize.y,
 		(voxelResolution.z + blockSize.z - 1) / blockSize.z
 	);
 
-	backprojectConfocalVoxelMIS<<<gridSize, blockSize>>>(spatialSum, activationGPU, noise, sliceSize, numSamples, numVoxels);
+	backprojectConfocalVoxelMIS<<<gridSize, blockSize>>>(spatialSum, activationGPU, noise, aliasTableGpu, probTableGpu, sliceSize, numSamples, numVoxels);
 	normalizeMatrix(activationGPU, numVoxels);
 	CudaHelper::synchronize("backprojectConfocalVoxelMIS");
 
-	laplacianFilter(activationGPU, voxelResolution, 5);
+	//laplacianFilter(activationGPU, voxelResolution, 5);
 
 	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
@@ -560,4 +648,6 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 	CudaHelper::free(spatioTemporalSum);
 	CudaHelper::free(spatialSum);
 	CudaHelper::free(noise);
+	CudaHelper::free(aliasTableGpu);
+	CudaHelper::free(probTableGpu);
 }

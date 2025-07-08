@@ -17,6 +17,7 @@ protected:
 	static void createEllipsoid(Component* component, int stacks, int sectors);
 	static void createHalfEllipsoid(Component* component, int stacks, int sectors);
 
+	void MIS(std::vector<glm::vec3>& ellipsoidPositions, std::vector<glm::vec3>& ellipsoidScale, std::vector<float>& ellipsoidIntensities, glm::uint numSamples);
 	void reorder(std::vector<glm::vec3>& ellipsoidPositions, std::vector<glm::vec3>& ellipsoidScale, std::vector<float>& ellipsoidIntensities, const AABB& relayWall);
 
 public:
@@ -26,6 +27,5 @@ public:
 	void draw(MatrixRenderInformation* matrixInformation, ApplicationState* appState) override;
 
 	void solveBackprojection();
-	void solveBackprojection2();
 };
 
