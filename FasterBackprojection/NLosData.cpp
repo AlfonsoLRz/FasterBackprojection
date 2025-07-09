@@ -11,18 +11,6 @@
 
 //
 
-NLosData::NLosData(const TransientParameters& transientParams):
-	_cameraPosition(), _cameraGridSize(),
-	_laserPosition(), _laserGridSize()
-{
-	this->_laserPosition = transientParams._laserPosition;
-	this->_cameraPosition = transientParams._cameraPosition;
-	this->_temporalResolution = transientParams._numTimeBins;
-	this->_deltaT = transientParams._temporalResolution;
-	this->_t0 = transientParams._timeOffset;
-	this->_isConfocal = transientParams._captureSystem == CaptureSystem::Confocal;
-}
-
 NLosData::NLosData(const std::string& filename, bool saveBinary, bool useBinary)
 {
 	const std::string binaryFile = filename.substr(0, filename.find_last_of('.')) + ".nlos";
@@ -88,7 +76,7 @@ NLosData::NLosData(const std::string& filename, bool saveBinary, bool useBinary)
 		std::vector<double> volumeSize;
 		dataset = file.getDataSet("hiddenVolumeSize");
 		if (dataset.getDimensions().empty())
-			volumeSize = { dataset.read<double>(), 0.01, dataset.read<double>() };
+			volumeSize = { dataset.read<double>(), 0.1, dataset.read<double>() };
 		else
 			volumeSize = dataset.read<std::vector<double>>();
 
@@ -111,7 +99,14 @@ NLosData::NLosData(const std::string& filename, bool saveBinary, bool useBinary)
 	if (_isConfocal)
 	{
 		dataset = file.getDataSet("data");
-		setUp(_data, dataset.read<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>());
+		auto dims = dataset.getDimensions();
+
+		if (dims.size() == 5)
+			setUp(_data, dataset.read<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>());
+		else if (dims.size() == 4)
+			setUp(_data, dataset.read<std::vector<std::vector<std::vector<std::vector<double>>>>>());
+		else
+			throw std::runtime_error("NLosData: Invalid dimensions for confocal data.");
 	}
 	else
 	{
@@ -244,8 +239,31 @@ void NLosData::setUp(std::vector<float>& data, const std::vector<std::vector<std
 	_dims = { numRows, numCols, numTimeBins };
 }
 
+void NLosData::setUp(std::vector<float>& data, const std::vector<std::vector<std::vector<std::vector<double>>>>& rawData)
+{
+	size_t	numTimeBins = rawData.size(), numBounces = rawData[0].size(), numRows = rawData[0][0].size(), numCols = rawData[0][0][0].size();
+	data.resize(numTimeBins * numCols * numRows, 0);
+
+	#pragma omp parallel for
+	for (size_t t = 0; t < numTimeBins; ++t)
+	{
+		for (size_t x = 0; x < numCols; ++x)
+		{
+			for (size_t y = 0; y < numRows; ++y)
+			{
+				for (size_t b = 0; b < numBounces; ++b)
+				{
+					data[y * numCols * numTimeBins + x * numTimeBins + t] += static_cast<float>(rawData[t][b][y][x]);
+				}
+			}
+		}
+	}
+
+	_dims = { numRows, numCols, numTimeBins };
+}
+
 void NLosData::setUp(std::vector<float>& data,
-	const std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>>& rawData)
+                     const std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>>& rawData)
 {
 	size_t	numChannels = rawData.size(), numTimeBins = rawData[0].size(), numBounces = rawData[0][0].size(),
 			numRowsLaser = rawData[0][0][0].size(), numColsLaser = rawData[0][0][0][0].size(),

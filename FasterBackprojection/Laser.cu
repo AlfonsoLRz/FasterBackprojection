@@ -1,25 +1,33 @@
 // ReSharper disable CppExpressionWithoutSideEffects
+// ReSharper disable CppClangTidyClangDiagnosticShadow
 #include "stdafx.h"
 #include "Laser.cuh"
 
 #include <valarray>
 #include <cub/cub.cuh>
 #include <cub/device/device_reduce.cuh>
-#include <thrust/device_ptr.h>
-#include <thrust/device_vector.h>
-#include <thrust/sequence.h>
-#include <thrust/scan.h>
 
 #include "ChronoUtilities.h"
 #include "GpuStructs.cuh"
 #include "fourier.cuh"
-#include "transient_processing.cuh"
 #include "transient_reconstruction.cuh"
 
 #include "CudaHelper.h"
 #include "FileUtilities.h"
+#include "LCT.h"
+#include "PostprocessingFilters.h"
 #include "RandomUtilities.h"
 #include "TransientImage.h"
+#include "transient_postprocessing.cuh"
+
+//
+
+const PostprocessingFilters* Laser::_postprocessingFilters[PostprocessingFilterType::NUM_POSTPROCESSING_FILTERS] = {
+	new None(),
+	new Laplacian(),
+	new LoG(),
+	new LoGFFT()
+};
 
 //
 
@@ -27,127 +35,20 @@ Laser::Laser(NLosData* nlosData) : _nlosData(nlosData)
 {
 }
 
-Laser::~Laser()
+Laser::~Laser() = default;
+
+void Laser::reconstructShape(const TransientParameters& transientParams)
 {
-}
+	ReconstructionInfo recInfo;
+	ReconstructionBuffers recBuffers;
 
-void Laser::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& border) const
-{
-	size_t nt = _nlosData->_temporalResolution;
-	if (glm::epsilonEqual(wl_sigma, .0f, glm::epsilon<float>()))
-	{
-		std::cout << "tal.reconstruct.filter_H: wl_sigma not specified, using wl_mean / sqrt(2)\n";
-		wl_sigma = wl_mean / sqrtf(2);
-	}
+	// Fourier?
+	if (transientParams._useFourierFilter)
+		filter_H_cuda(_nlosData->_deltaT * 10.0f, 0.0f);		// Sigma zero equals to non-valid, thus it is being calculated from wl_mean
 
-	int t_6sigma = static_cast<int>(std::round(6 * wl_sigma / _nlosData->_deltaT));
-	if (t_6sigma % 2 == 1)
-		t_6sigma += 1;
+	// Transfer data to GPU
+	_nlosData->toGpu(recInfo, recBuffers);
 
-	size_t nt_pad = nt + 2 * (t_6sigma - 1);
-	float t_max = _nlosData->_deltaT * (nt_pad - 1);
-	std::vector<float> t_vals(nt_pad);
-
-	for (size_t i = 0; i < nt_pad; ++i)
-		t_vals[i] = static_cast<float>(i) * _nlosData->_deltaT;
-
-	// K 
-	std::vector<cufftComplex> K(nt_pad);
-	float sumGaussianEnvelope = 0.0f;
-	std::vector<float> gaussianEnvelope(nt_pad);
-
-	for (size_t i = 0; i < nt_pad; ++i)
-	{
-		float val = (t_vals[i] - t_max * 0.5f) / wl_sigma;
-		gaussianEnvelope[i] = std::exp(-(val * val) * 0.5f);
-		sumGaussianEnvelope += gaussianEnvelope[i];
-	}
-
-	for (size_t i = 0; i < nt_pad; ++i) 
-	{
-		float phase = TWO_PI * t_vals[i] / wl_mean;
-		K[i].x = gaussianEnvelope[i] * std::cos(phase) / sumGaussianEnvelope;
-		K[i].y = gaussianEnvelope[i] * std::sin(phase) / sumGaussianEnvelope;
-	}
-
-	// This prepares K for FFT since cuFFT computes the unshifted FFT
-	std::vector<cufftComplex> K_ifftShifted(nt_pad);
-	size_t shift = nt_pad / 2;  
-	for (size_t i = 0; i < nt_pad; ++i) 
-		K_ifftShifted[i] = K[(i + shift) % nt_pad];
-	K = K_ifftShifted;
-
-	// Pad H in host
-	size_t padding = (nt_pad - nt) / 2;
-	std::vector<cufftComplex> H_pad_host;
-	padIntensity(H_pad_host, padding, border);
-
-	// Transfer H_pad_host and K to device
-	cufftComplex* d_H = nullptr, *d_K = nullptr;
-	CudaHelper::initializeBufferGPU(d_H, H_pad_host.size(), H_pad_host.data());
-	CudaHelper::initializeBufferGPU(d_K, K.size(), K.data());
-
-	//
-	size_t dimProduct = 1;
-	std::vector<size_t> newDims = _nlosData->_dims;
-	newDims[newDims.size() - 1] = nt_pad; // Last dimension is time, set to padded size
-	for (size_t dim : newDims)
-		dimProduct *= dim;
-
-	cufftHandle planH;
-	int n[1] = { static_cast<int>(nt_pad) };
-	int rank = 1;
-	int istride = 1, ostride = 1;												// stride between elements in time dimension (contiguous)
-	int idist = static_cast<int>(nt_pad), odist = static_cast<int>(nt_pad);		// distance between consecutive batches in output
-	int batch = static_cast<int>(dimProduct / nt_pad);
-
-	// Create 1D FFT plan for batches
-	CUFFT_CHECK(cufftPlanMany(&planH, rank, n, NULL, istride, idist, NULL, ostride, odist, CUFFT_C2C, batch));
-	CUFFT_CHECK(cufftExecC2C(planH, d_H, d_H, CUFFT_FORWARD));
-
-	//
-	cufftHandle planK;
-	CUFFT_CHECK(cufftPlan1d(&planK, (int)nt_pad, CUFFT_C2C, 1));
-	CUFFT_CHECK(cufftExecC2C(planK, d_K, d_K, CUFFT_FORWARD));
-
-	// 
-	dim3 block(256);
-	dim3 grid((batch * nt_pad + block.x - 1) / block.x);
-
-	multiplyHK<<<grid, block>>>(d_H, d_K, batch, nt_pad);
-	cudaDeviceSynchronize();
-
-	CUFFT_CHECK(cufftExecC2C(planH, d_H, d_H, CUFFT_INVERSE));
-
-	//
-	normalizeH<<<grid, block>>>(d_H, batch, nt_pad);
-
-	// Copy result back to host
-	CudaHelper::downloadBufferGPU(d_H, H_pad_host.data(), dimProduct, 0);
-
-	//
-	float phaseCorrection = atan2(H_pad_host[0].y, H_pad_host[0].x);
-	size_t inner = nt, outer = dimProduct / nt_pad;  
-
-	for (size_t i = 0; i < outer; ++i) {
-		size_t paddedOffset = i * nt_pad + padding;
-		size_t unpaddedOffset = i * nt;
-
-		for (size_t j = 0; j < inner; ++j)
-		{
-			cufftComplex val = H_pad_host[paddedOffset + j];
-			_nlosData->_data[unpaddedOffset + j] = val.x * cos(phaseCorrection) - val.y * sin(phaseCorrection);
-		}
-	}
-
-	// 
-	CUFFT_CHECK(cufftDestroy(planH));
-	CudaHelper::free(d_H);
-	CudaHelper::free(d_K);
-}
-
-void Laser::reconstructShape(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, bool reconstructAABB, bool filterFourier)
-{
 	CudaHelper::checkError(cudaMemcpyToSymbol(rtRecInfo, &recInfo, sizeof(ReconstructionInfo)));
 	CudaHelper::checkError(cudaMemcpyToSymbol(laserTargets, &recBuffers._laserTargets, sizeof(glm::vec3*)));
 	CudaHelper::checkError(cudaMemcpyToSymbol(sensorTargets, &recBuffers._sensorTargets, sizeof(glm::vec3*)));
@@ -155,10 +56,10 @@ void Laser::reconstructShape(ReconstructionInfo& recInfo, ReconstructionBuffers&
 
 	std::cout << "Reconstructing shape...\n";
 
-	if (reconstructAABB)
-		reconstructShapeAABB(recInfo, recBuffers, filterFourier);
+	if (transientParams._reconstructAABB)
+		reconstructShapeAABB(recInfo, recBuffers, transientParams);
 	else
-		reconstructShapeDepths(recInfo);
+		reconstructShapeDepths(recInfo, transientParams);
 
 	CudaHelper::free(recBuffers._laserTargets);
 	CudaHelper::free(recBuffers._sensorTargets);
@@ -222,6 +123,120 @@ void Laser::padIntensity(std::vector<cufftComplex>& paddedIntensity, size_t padd
 			return;
 		}
 	}
+}
+
+void Laser::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& border) const
+{
+	size_t nt = _nlosData->_temporalResolution;
+	if (glm::epsilonEqual(wl_sigma, .0f, glm::epsilon<float>()))
+	{
+		std::cout << "tal.reconstruct.filter_H: wl_sigma not specified, using wl_mean / sqrt(2)\n";
+		wl_sigma = wl_mean / sqrtf(2);
+	}
+
+	int t_6sigma = static_cast<int>(std::round(6 * wl_sigma / _nlosData->_deltaT));
+	if (t_6sigma % 2 == 1)
+		t_6sigma += 1;
+
+	size_t nt_pad = nt + 2 * (t_6sigma - 1);
+	float t_max = _nlosData->_deltaT * (nt_pad - 1);
+	std::vector<float> t_vals(nt_pad);
+
+	for (size_t i = 0; i < nt_pad; ++i)
+		t_vals[i] = static_cast<float>(i) * _nlosData->_deltaT;
+
+	// K 
+	std::vector<cufftComplex> K(nt_pad);
+	float sumGaussianEnvelope = 0.0f;
+	std::vector<float> gaussianEnvelope(nt_pad);
+
+	for (size_t i = 0; i < nt_pad; ++i)
+	{
+		float val = (t_vals[i] - t_max * 0.5f) / wl_sigma;
+		gaussianEnvelope[i] = std::exp(-(val * val) * 0.5f);
+		sumGaussianEnvelope += gaussianEnvelope[i];
+	}
+
+	for (size_t i = 0; i < nt_pad; ++i)
+	{
+		float phase = TWO_PI * t_vals[i] / wl_mean;
+		K[i].x = gaussianEnvelope[i] * std::cos(phase) / sumGaussianEnvelope;
+		K[i].y = gaussianEnvelope[i] * std::sin(phase) / sumGaussianEnvelope;
+	}
+
+	// This prepares K for FFT since cuFFT computes the unshifted FFT
+	std::vector<cufftComplex> K_ifftShifted(nt_pad);
+	size_t shift = nt_pad / 2;
+	for (size_t i = 0; i < nt_pad; ++i)
+		K_ifftShifted[i] = K[(i + shift) % nt_pad];
+	K = K_ifftShifted;
+
+	// Pad H in host
+	size_t padding = (nt_pad - nt) / 2;
+	std::vector<cufftComplex> H_pad_host;
+	padIntensity(H_pad_host, padding, border);
+
+	// Transfer H_pad_host and K to device
+	cufftComplex* d_H = nullptr, * d_K = nullptr;
+	CudaHelper::initializeBufferGPU(d_H, H_pad_host.size(), H_pad_host.data());
+	CudaHelper::initializeBufferGPU(d_K, K.size(), K.data());
+
+	//
+	size_t dimProduct = 1;
+	std::vector<size_t> newDims = _nlosData->_dims;
+	newDims[newDims.size() - 1] = nt_pad;		// Last dimension is time, set to padded size
+	for (size_t dim : newDims)
+		dimProduct *= dim;
+
+	cufftHandle planH;
+	int n[1] = { static_cast<int>(nt_pad) };
+	int rank = 1;
+	int inStride = 1, outStride = 1;														// Stride between elements in time dimension (contiguous)
+	int inDistance = static_cast<int>(nt_pad), outDistance = static_cast<int>(nt_pad);		// Distance between consecutive batches in output
+	int batch = static_cast<int>(dimProduct / nt_pad);
+
+	// Create 1D FFT plan for batches
+	CUFFT_CHECK(cufftPlanMany(&planH, rank, n, NULL, inStride, inDistance, NULL, outStride, outDistance, CUFFT_C2C, batch));
+	CUFFT_CHECK(cufftExecC2C(planH, d_H, d_H, CUFFT_FORWARD));
+
+	//
+	cufftHandle planK;
+	CUFFT_CHECK(cufftPlan1d(&planK, static_cast<int>(nt_pad), CUFFT_C2C, 1));
+	CUFFT_CHECK(cufftExecC2C(planK, d_K, d_K, CUFFT_FORWARD));
+
+	// 
+	dim3 block(256);
+	dim3 grid((batch * nt_pad + block.x - 1) / block.x);
+
+	multiplyHK << <grid, block >> > (d_H, d_K, batch, nt_pad);
+	cudaDeviceSynchronize();
+
+	CUFFT_CHECK(cufftExecC2C(planH, d_H, d_H, CUFFT_INVERSE));
+
+	//
+	//normalizeH<<<grid, block>>>(d_H, batch, nt_pad);		// I read the IFFT results, and they were too small; I think this is not needed
+
+	// Copy result back to host
+	CudaHelper::downloadBufferGPU(d_H, H_pad_host.data(), dimProduct, 0);
+
+	//
+	size_t inner = nt, outer = dimProduct / nt_pad;
+
+	for (size_t i = 0; i < outer; ++i) {
+		size_t paddedOffset = i * nt_pad + padding;
+		size_t unpaddedOffset = i * nt;
+
+		for (size_t j = 0; j < inner; ++j)
+		{
+			cufftComplex val = H_pad_host[paddedOffset + j];
+			_nlosData->_data[unpaddedOffset + j] = val.x;
+		}
+	}
+
+	// 
+	CUFFT_CHECK(cufftDestroy(planH));
+	CudaHelper::free(d_H);
+	CudaHelper::free(d_K);
 }
 
 /**
@@ -299,68 +314,6 @@ void Laser::buildAliasTables(const std::vector<float>& cdf, std::vector<glm::uin
 	}
 }
 
-void Laser::fftLoG(float*& inputVoxels, const glm::uvec3& resolution, float sigma)
-{
-	// Calculate sizes
-	glm::uint size = resolution.x * resolution.y * resolution.z;
-	glm::uint complexDimensionSize = (resolution.x / 2 + 1) * resolution.y * resolution.z;
-
-	// Allocate memory - note different sizes!
-	cufftComplex* fourierReconstruction, * kernel;
-	CudaHelper::initializeZeroBufferGPU(fourierReconstruction, complexDimensionSize);
-	CudaHelper::initializeZeroBufferGPU(kernel, complexDimensionSize);
-
-	// Create FFT plans
-	cufftHandle forward_plan, inverse_plan;
-	cufftPlan3d(&forward_plan, resolution.x, resolution.y, resolution.z, CUFFT_R2C);
-	cufftPlan3d(&inverse_plan, resolution.x, resolution.y, resolution.z, CUFFT_C2R);
-
-	// Forward FFT
-	CUFFT_CHECK(cufftExecR2C(forward_plan, (cufftReal*)inputVoxels, fourierReconstruction));
-
-	// Build LoG kernel - must respect complex_size layout!
-	dim3 block(8, 8, 8);
-	dim3 grid(
-		((resolution.x / 2 + 1) + block.x - 1) / block.x,
-		(resolution.y + block.y - 1) / block.y,
-		(resolution.z + block.z - 1) / block.z
-	);
-	buildLoGKernel3D<<<grid, block>>>(kernel, resolution.x, resolution.y, resolution.z, sigma);
-
-	// Multiply in frequency domain
-	glm::uint threads = 256;
-	glm::uint blocks = CudaHelper::getNumBlocks(complexDimensionSize, threads);
-	multiplyKernel<<<blocks, threads>>>(fourierReconstruction, kernel, complexDimensionSize);
-
-	// Inverse FFT
-	CUFFT_CHECK(cufftExecC2R(inverse_plan, fourierReconstruction, (cufftReal*)inputVoxels));
-
-	// Normalize
-	normalizeIFFT<<<blocks, threads>>>(inputVoxels, size);
-
-	// Cleanup
-	cufftDestroy(forward_plan);
-	cufftDestroy(inverse_plan);
-	CudaHelper::free(fourierReconstruction);
-	CudaHelper::free(kernel);
-}
-
-void Laser::laplacianFilter(float*& inputVoxels, const glm::uvec3& resolution, glm::uint filterSize)
-{
-	float* laplacianGPU = nullptr;
-	CudaHelper::initializeZeroBufferGPU(laplacianGPU, static_cast<size_t>(resolution.x) * resolution.y * resolution.z);
-
-	dim3 blockSize = dim3(8, 8, 8);
-	dim3 gridSize = dim3(
-		(resolution.x + blockSize.x - 1) / blockSize.x,
-		(resolution.y + blockSize.y - 1) / blockSize.y,
-		(resolution.z + blockSize.z - 1) / blockSize.z
-	);
-	laplace<<<gridSize, blockSize>>>(inputVoxels, laplacianGPU, resolution, static_cast<float>(filterSize));
-	std::swap(laplacianGPU, inputVoxels);
-	CudaHelper::free(laplacianGPU);
-}
-
 void Laser::normalizeMatrix(float* v, glm::uint size)
 {
 	size_t tempStorageBytes = 0;
@@ -385,19 +338,22 @@ void Laser::normalizeMatrix(float* v, glm::uint size)
 	CudaHelper::free(minValue);
 }
 
-void Laser::reconstructShapeAABB(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers, bool filterFourier)
+void Laser::reconstructShapeAABB(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers, const TransientParameters& transientParams)
 {
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
-		reconstructAABBConfocal(recInfo, filterFourier);
-		//reconstructAABBConfocalMIS(recInfo, recBuffers);
+	{
+		reconstructAABBConfocal(recInfo, transientParams);
+		//reconstructAABBConfocalMIS(recInfo, recBuffers, transientParams);
+	}
 	else if (recInfo._captureSystem == CaptureSystem::Exhaustive)
-		reconstructAABBExhaustive(recInfo, filterFourier);
+		reconstructAABBExhaustive(recInfo, transientParams);
 }
 
-void Laser::reconstructShapeDepths(const ReconstructionInfo& recInfo)
+void Laser::reconstructShapeDepths(const ReconstructionInfo& recInfo, const TransientParameters& transientParams)
 {
-	//std::vector<double> reconstructionDepths = transientParameters._reconstructionDepths;
-	std::vector<double> reconstructionDepths = linearSpace(recInfo.getFocusDepth() - 0.1f, recInfo.getFocusDepth() + 0.1f, 200);
+	std::vector<double> reconstructionDepths = linearSpace(
+		recInfo.getFocusDepth() - 0.1f, recInfo.getFocusDepth() + 0.1f, transientParams._numReconstructionDepths
+	);
 	assert(!reconstructionDepths.empty());
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
@@ -509,7 +465,7 @@ void Laser::reconstructDepthExhaustive(const ReconstructionInfo& recInfo, std::v
 	CudaHelper::free(depthsGPU);
 }
 
-void Laser::reconstructAABBConfocal(const ReconstructionInfo& recInfo, bool filterFourier)
+void Laser::reconstructAABBConfocal(const ReconstructionInfo& recInfo, const TransientParameters& transientParams)
 {
 	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
 	const glm::uint numVoxels = voxelResolution.x * voxelResolution.y * voxelResolution.z;
@@ -527,11 +483,10 @@ void Laser::reconstructAABBConfocal(const ReconstructionInfo& recInfo, bool filt
 	);
 
 	backprojectConfocalVoxel<<<gridSize, blockSize>>>(activationGPU, sliceSize);
-	normalizeMatrix(activationGPU, numVoxels);
 	CudaHelper::synchronize("backprojectConfocalVoxel");
 
-	//fftLoG(activationGPU, voxelResolution, 1.0f);
-	laplacianFilter(activationGPU, voxelResolution, 5);
+	_postprocessingFilters[transientParams._postprocessingFilterType]->compute(activationGPU, voxelResolution, transientParams);
+	normalizeMatrix(activationGPU, numVoxels);
 
 	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
@@ -541,7 +496,7 @@ void Laser::reconstructAABBConfocal(const ReconstructionInfo& recInfo, bool filt
 	CudaHelper::free(activationGPU);
 }
 
-void Laser::reconstructAABBExhaustive(const ReconstructionInfo& recInfo, bool filterFourier)
+void Laser::reconstructAABBExhaustive(const ReconstructionInfo& recInfo, const TransientParameters& transientParams)
 {
 }
 
@@ -553,7 +508,7 @@ bool Laser::saveReconstructedAABB(const std::string& filename, float* voxels, gl
 	return FileUtilities::write<float>(filename, voxelsCpu);
 }
 
-void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
+void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers, const TransientParameters& transientParams) const
 {
 	ChronoUtilities::startTimer();
 
@@ -569,15 +524,15 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 	float* activationGPU = nullptr;
 	CudaHelper::initializeZeroBufferGPU(activationGPU, numVoxels);
 
-	float* spatioTemporalSum = nullptr, * spatialSum = nullptr;
+	float* spatioTemporalSum = nullptr, * spatialSumGpu = nullptr;
 	CudaHelper::initializeBufferGPU(spatioTemporalSum, totalElements);
-	CudaHelper::initializeBufferGPU(spatialSum, totalElements / numTimeBins);
+	CudaHelper::initializeBufferGPU(spatialSumGpu, totalElements / numTimeBins);
 
-	float* noise = nullptr;
+	float* noiseGpu = nullptr;
 	std::vector<float> noiseHost(numVoxels);
 	for (glm::uint i = 0; i < numVoxels; ++i)
 		noiseHost[i] = RandomUtilities::getUniformRandom();
-	CudaHelper::initializeBufferGPU(noise, numVoxels, noiseHost.data());
+	CudaHelper::initializeBufferGPU(noiseGpu, numVoxels, noiseHost.data());
 
 	// CUB's inclusive sum
 	{
@@ -596,7 +551,7 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 	// Spatio-temporal prefix sum
 	{
 		glm::uint blockSize = 512, blocks = CudaHelper::getNumBlocks(totalElements / numTimeBins, blockSize);
-		spatioTemporalPrefixSum<<<blocks, blockSize>>>(spatioTemporalSum, spatialSum, totalElements / numTimeBins, numTimeBins);
+		spatioTemporalPrefixSum<<<blocks, blockSize>>>(spatioTemporalSum, spatialSumGpu, totalElements / numTimeBins, numTimeBins);
 	}
 
 	// Normalize spatio-temporal sum
@@ -606,13 +561,13 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 	}
 
 	// Normalize the spatial sum
-	normalizeMatrix(spatialSum, totalElements / numTimeBins);
+	normalizeMatrix(spatialSumGpu, totalElements / numTimeBins);
 
 	glm::uint* aliasTableGpu = nullptr;
 	float* probTableGpu = nullptr;
 	{
 		std::vector<float> spatialCDF(totalElements / numTimeBins);
-		CudaHelper::downloadBufferGPU(spatialSum, spatialCDF.data(), totalElements / numTimeBins);
+		CudaHelper::downloadBufferGPU(spatialSumGpu, spatialCDF.data(), totalElements / numTimeBins);
 
 		std::vector<glm::uint> aliasTable;
 		std::vector<float> probTable;
@@ -622,15 +577,20 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 		CudaHelper::initializeBufferGPU(probTableGpu, probTable.size(), probTable.data());
 	}
 
-	glm::uint numSamples = recInfo._numLaserTargets / 4;
-	dim3 blockSize(32, BLOCK_Y_CONFOCAL);
+	glm::uint numSamples = recInfo._numLaserTargets / 8;
+	dim3 blockSize(BLOCK_X_CONFOCAL, BLOCK_Y_CONFOCAL);
 	dim3 gridSize(
 		(sliceSize + blockSize.x - 1) / blockSize.x,
 		(numSamples + blockSize.y - 1) / blockSize.y,
 		(voxelResolution.z + blockSize.z - 1) / blockSize.z
 	);
 
-	backprojectConfocalVoxelMIS<<<gridSize, blockSize>>>(spatialSum, activationGPU, noise, aliasTableGpu, probTableGpu, sliceSize, numSamples, numVoxels);
+	CudaHelper::checkError(cudaMemcpyToSymbol(spatialSum, &spatialSumGpu, sizeof(float*)));
+	CudaHelper::checkError(cudaMemcpyToSymbol(aliasTable, &aliasTableGpu, sizeof(glm::uint*)));
+	CudaHelper::checkError(cudaMemcpyToSymbol(probTable, &probTableGpu, sizeof(float*)));
+	CudaHelper::checkError(cudaMemcpyToSymbol(noiseBuffer, &noiseGpu, sizeof(float*)));
+
+	backprojectConfocalVoxelMIS<<<gridSize, blockSize>>>(spatialSumGpu, activationGPU, noiseGpu, aliasTableGpu, probTableGpu, sliceSize, numSamples, numVoxels);
 	normalizeMatrix(activationGPU, numVoxels);
 	CudaHelper::synchronize("backprojectConfocalVoxelMIS");
 
@@ -639,15 +599,14 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// Prepare buckets and info for storing data in the local system
-	const std::string outputFolder = "output/";
 	std::vector<float> voxels(numVoxels);
 	CudaHelper::downloadBufferGPU(activationGPU, voxels.data(), numVoxels);
-	FileUtilities::write<float>(outputFolder + "aabb.cube", voxels);
+	FileUtilities::write<float>(transientParams._outputFolder + "aabb.cube", voxels);
 
 	CudaHelper::free(activationGPU);
 	CudaHelper::free(spatioTemporalSum);
-	CudaHelper::free(spatialSum);
-	CudaHelper::free(noise);
+	CudaHelper::free(spatialSumGpu);
+	CudaHelper::free(noiseGpu);
 	CudaHelper::free(aliasTableGpu);
 	CudaHelper::free(probTableGpu);
 }

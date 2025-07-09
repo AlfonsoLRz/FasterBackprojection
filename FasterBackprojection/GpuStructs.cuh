@@ -46,6 +46,15 @@ struct ReconstructionBuffers
 
 __constant__ extern __device__ ReconstructionInfo rtRecInfo;
 
+// NLOS things
 extern __device__ glm::vec3* laserTargets;
 extern __device__ glm::vec3* sensorTargets;
 extern __device__ float* intensityCube;
+
+// Noise
+extern __device__ float* noiseBuffer;
+
+// MIS
+extern __device__ float* spatialSum;
+extern __device__ glm::uint* aliasTable;
+extern __device__ float* probTable;

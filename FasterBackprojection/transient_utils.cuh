@@ -31,7 +31,7 @@ inline __device__ int getMISIndex(glm::uint& idx, const float* __restrict__ sum,
 	// Binary search over the CDF
 	int left = 0, right = static_cast<int>(size) - 1;
 	for (int i = static_cast<int>(std::log2(static_cast<float>(size))); i >= 0; --i) {
-		int mid = left + right >> 1;
+		int mid = (left + right) >> 1;
 
 		// Avoid branching using a mask
 		bool moveRight = r >= sum[mid];

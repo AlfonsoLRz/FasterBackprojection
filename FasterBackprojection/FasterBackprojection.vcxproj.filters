@@ -183,8 +183,17 @@
     <ClInclude Include="GpuStructs.cuh">
       <Filter>header</Filter>
     </ClInclude>
-    <ClInclude Include="transient_processing.cuh">
+    <ClInclude Include="transient_postprocessing.cuh">
       <Filter>header\cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="LCT.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="lct.cuh">
+      <Filter>header\cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="PostprocessingFilters.h">
+      <Filter>header</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -296,12 +305,18 @@
     <ClCompile Include="NLosData.cpp">
       <Filter>source</Filter>
     </ClCompile>
+    <ClCompile Include="LCT.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="GpuStructs.cu">
       <Filter>source</Filter>
     </CudaCompile>
     <CudaCompile Include="Laser.cu">
+      <Filter>source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="PostprocessingFilters.cu">
       <Filter>source</Filter>
     </CudaCompile>
   </ItemGroup>

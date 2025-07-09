@@ -127,6 +127,9 @@
     <ClInclude Include="InputManager.h" />
     <ClInclude Include="InterfaceAdapter.h" />
     <ClInclude Include="Laser.cuh" />
+    <ClInclude Include="lct.cuh" />
+    <ClInclude Include="LCT.h" />
+    <ClInclude Include="PostprocessingFilters.h" />
     <ClInclude Include="math.cuh" />
     <ClInclude Include="Model3D.h" />
     <ClInclude Include="NLosDataVisualizer.h" />
@@ -148,7 +151,7 @@
     <ClInclude Include="TransientImage.h" />
     <ClInclude Include="TransientParameters.h" />
     <ClInclude Include="NLosData.h" />
-    <ClInclude Include="transient_processing.cuh" />
+    <ClInclude Include="transient_postprocessing.cuh" />
     <ClInclude Include="transient_reconstruction.cuh" />
     <ClInclude Include="transient_utils.cuh" />
     <ClInclude Include="TriangleMesh.h" />
@@ -221,6 +224,10 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="LCT.cpp" />
+    <CudaCompile Include="PostprocessingFilters.cu">
+      <FileType>Document</FileType>
+    </CudaCompile>
     <ClCompile Include="main.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>

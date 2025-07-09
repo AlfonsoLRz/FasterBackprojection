@@ -40,9 +40,10 @@ x86/
 FasterBackprojection/assets/brdfs/
 FasterBackprojection/assets/hdr/
 FasterBackprojection/output/
+python/
 
 # Assets
 *.hdf5
 *.nlos
 *.png
-*:blend
+*.blend

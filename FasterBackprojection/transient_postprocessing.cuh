@@ -2,9 +2,10 @@
 
 #include "stdafx.h"
 
-#include "GpuStructs.cuh"
+#include <cufft.h>
 #include "math.cuh"
-#include "transient_utils.cuh"
+
+//
 
 inline __global__ void normalizeReconstruction(float* __restrict__ v, glm::uint size, const float* maxValue, const float* minValue)
 {
@@ -15,10 +16,9 @@ inline __global__ void normalizeReconstruction(float* __restrict__ v, glm::uint 
 	v[idx] = (v[idx] - *minValue) * safeRCP(*maxValue - *minValue);
 }
 
-// Laplacian filter for 3D volume
+// 
 
-inline __global__ void laplace(
-		const float* __restrict__ volume, float* __restrict__ processed, glm::uvec3 resolution, float filterSize)
+inline __global__ void laplacianFilter(const float* __restrict__ volume, float* __restrict__ processed, glm::uvec3 resolution, float filterSize)
 {
 	const int tx = blockIdx.x * blockDim.x + threadIdx.x;
 	const int ty = blockIdx.y * blockDim.y + threadIdx.y;
@@ -36,9 +36,7 @@ inline __global__ void laplace(
 		{
 			for (int z = -halfFilterSize; z <= halfFilterSize; ++z)
 			{
-				int nx = tx + x;
-				int ny = ty + y;
-				int nz = tz + z;
+				int nx = tx + x, ny = ty + y, nz = tz + z;
 				if (nx < 0 || nx >= resolution.x || ny < 0 || ny >= resolution.y || nz < 0 || nz >= resolution.z)
 					continue;
 
@@ -51,9 +49,42 @@ inline __global__ void laplace(
 		filterSize * filterSize * filterSize * volume[tz * resolution.y * resolution.x + ty * resolution.x + tx] - laplacian;
 }
 
+inline __global__ void LoGFilter(
+	const float* __restrict__ volume, float* __restrict__ processed, glm::uvec3 resolution, 
+	const float* __restrict__ kernel, int kernelSize, int kernelHalf) {
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+	int z = blockIdx.z * blockDim.z + threadIdx.z;
+	
+	if (x < resolution.x && y < resolution.y && z < resolution.z) {
+		float sum = 0.0f; 
+
+		for (int kz = -kernelHalf; kz <= kernelHalf; ++kz) {
+			for (int ky = -kernelHalf; ky <= kernelHalf; ++ky) {
+				for (int kx = -kernelHalf; kx <= kernelHalf; ++kx) {
+					int ix = x + kx, iy = y + ky, iz = z + kz;
+
+					ix = static_cast<int>(fmaxf(0.0f, fminf(static_cast<float>(resolution.x - 1), static_cast<float>(ix))));
+					iy = static_cast<int>(fmaxf(0.0f, fminf(static_cast<float>(resolution.y - 1), static_cast<float>(iy))));
+					iz = static_cast<int>(fmaxf(0.0f, fminf(static_cast<float>(resolution.z - 1), static_cast<float>(iz))));
+
+					float kernelWeight = kernel[
+						(kz + kernelHalf) * kernelSize * kernelSize +
+						(ky + kernelHalf) * kernelSize +
+						(kx + kernelHalf)];
+
+					sum += volume[iz * resolution.y * resolution.x + iy * resolution.x + ix] * kernelWeight;
+				}
+			}
+		}
+
+		processed[z * resolution.y * resolution.x + y * resolution.x + x] = sum;
+	}
+}
+
 // LoG
 
-inline __global__ void initializeFourierVolume(float* __restrict__ input, cufftComplex* __restrict__ output, glm::uint size)
+inline __global__ void initializeFourierVolume(const float* __restrict__ input, cufftComplex* __restrict__ output, glm::uint size)
 {
 	glm::uint tid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (tid < size)

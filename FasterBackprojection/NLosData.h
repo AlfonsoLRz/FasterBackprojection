@@ -13,7 +13,7 @@ class NLosData
 	friend class DrawEllipsoids;
 	friend class Laser;
 
-protected:
+public:
 	std::vector<float>		_data;
 	std::vector<size_t>		_dims;
 
@@ -41,14 +41,17 @@ protected:
 	static void setUp(glm::vec2& data, const std::vector<double>& rawData);
 	static void setUp(glm::vec3& data, const std::vector<double>& rawData);
 	static void setUp(std::vector<glm::vec3>& data, const std::vector<std::vector<std::vector<double>>>& rawData);
+
+	// Confocal
 	void setUp(std::vector<float>& data, const std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>& rawData);
+	void setUp(std::vector<float>& data, const std::vector<std::vector<std::vector<std::vector<double>>>>& rawData);
+	// Exhaustive
 	void setUp(std::vector<float>& data, const std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>>& rawData);
 
 	bool loadBinaryFile(const std::string& filename);
 	bool saveBinaryFile(const std::string& filename) const;
 
 public:
-	NLosData(const TransientParameters& transientParams);
 	NLosData(const std::string& filename, bool saveBinary = true, bool useBinary = true);
 	virtual ~NLosData();
 
