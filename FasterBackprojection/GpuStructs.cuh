@@ -33,7 +33,7 @@ struct ReconstructionInfo
 
 	__host__ float getFocusDepth() const
 	{
-		return glm::abs(_relayWallMinPosition[1] - _hiddenVolumeMin[1]);
+		return glm::abs((_hiddenVolumeMin[1] + _hiddenVolumeMax[1]) * 0.5f);
 	}
 };
 
@@ -47,14 +47,14 @@ struct ReconstructionBuffers
 __constant__ extern __device__ ReconstructionInfo rtRecInfo;
 
 // NLOS things
-extern __device__ glm::vec3* laserTargets;
-extern __device__ glm::vec3* sensorTargets;
-extern __device__ float* intensityCube;
+__constant__ extern __device__ glm::vec3* laserTargets;
+__constant__ extern __device__ glm::vec3* sensorTargets;
+__constant__ extern __device__ float* intensityCube;
 
 // Noise
-extern __device__ float* noiseBuffer;
+__constant__ extern __device__ float* noiseBuffer;
 
 // MIS
-extern __device__ float* spatialSum;
-extern __device__ glm::uint* aliasTable;
-extern __device__ float* probTable;
+__constant__ extern __device__ float* spatialSum;
+__constant__ extern __device__ glm::uint* aliasTable;
+__constant__ extern __device__ float* probTable;

@@ -26,19 +26,19 @@ private:
 
 	static void buildAliasTables(const std::vector<float>& cdf, std::vector<glm::uint>& aliasTable, std::vector<float>& probTable);
 
-	void reconstructShapeAABB(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers, const TransientParameters& transientParams);
+	static void reconstructShapeAABB(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers, const TransientParameters& transientParams);
 	static void reconstructShapeDepths(const ReconstructionInfo& recInfo, const TransientParameters& transientParams);
 
 	static void reconstructDepthConfocal(const ReconstructionInfo& recInfo, std::vector<double>& reconstructionDepths);
 	static void reconstructDepthExhaustive(const ReconstructionInfo& recInfo, std::vector<double>& reconstructionDepths);
 
-	static void reconstructAABBConfocal(const ReconstructionInfo& recInfo, const TransientParameters& transientParams);
-	static void reconstructAABBExhaustive(const ReconstructionInfo& recInfo, const TransientParameters& transientParams);
+	static void reconstructAABBConfocal(float* volume, const ReconstructionInfo& recInfo);
+	static void reconstructAABBExhaustive(float* volume, const ReconstructionInfo& recInfo);
 
 	static bool saveReconstructedAABB(const std::string& filename, float* voxels, glm::uint numVoxels);
 
 public:
-	void reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers, const TransientParameters& transientParams) const;
+	void reconstructAABBConfocalMIS(float* volume, const ReconstructionInfo& recInfo) const;
 
 public:
 	Laser(NLosData* nlosData);

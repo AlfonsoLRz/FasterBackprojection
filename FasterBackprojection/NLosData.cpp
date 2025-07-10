@@ -2,6 +2,7 @@
 #include "NLosData.h"
 
 #include <highfive/highfive.hpp>
+#include <matio.h>
 #include <print>
 
 #include "CudaHelper.h"
@@ -18,100 +19,107 @@ NLosData::NLosData(const std::string& filename, bool saveBinary, bool useBinary)
 		if (loadBinaryFile(binaryFile))
 			return; // Successfully loaded binary data
 
-	// Open the file
-	auto file = HighFive::File(filename, HighFive::File::ReadOnly);
-	if (!file.exist("cameraGridPositions") ||
-		!file.exist("cameraGridNormals") ||
-		!file.exist("cameraPosition") ||
-		!file.exist("laserGridNormals") ||
-		!file.exist("laserGridPositions") ||
-		!file.exist("laserPosition") ||
-		!file.exist("t") ||
-		!file.exist("t0") ||
-		!file.exist("deltaT") ||
-		!file.exist("isConfocal") ||
-		!file.exist("data"))
-		throw std::runtime_error("NLosData: Missing required datasets in the file.");
-
-	std::vector<float> data;
-
-	auto dataset = file.getDataSet("cameraGridNormals");
-	setUp(_cameraGridNormals, dataset.read<std::vector<std::vector<std::vector<double>>>>());
-
-	dataset = file.getDataSet("cameraGridPositions");
-	setUp(_cameraGridPositions, dataset.read<std::vector<std::vector<std::vector<double>>>>());
-
-	dataset = file.getDataSet("cameraPosition");
-	setUp(_cameraPosition, dataset.read<std::vector<double>>());
-
-	dataset = file.getDataSet("cameraGridSize");
-	setUp(_cameraGridSize, dataset.read<std::vector<double>>());
-
-	dataset = file.getDataSet("t");
-	_temporalResolution = dataset.read<glm::uint>();
-
-	dataset = file.getDataSet("t0");
-	_t0 = static_cast<float>(dataset.read<int>());
-
-	dataset = file.getDataSet("deltaT");
-	_deltaT = static_cast<float>(dataset.read<double>());
-
-	dataset = file.getDataSet("laserGridNormals");
-	setUp(_laserGridNormals, dataset.read<std::vector<std::vector<std::vector<double>>>>());
-
-	dataset = file.getDataSet("laserGridPositions");
-	setUp(_laserGridPositions, dataset.read<std::vector<std::vector<std::vector<double>>>>());
-
-	dataset = file.getDataSet("laserPosition");
-	setUp(_laserPosition, dataset.read<std::vector<double>>());
-
-	dataset = file.getDataSet("laserGridSize");
-	setUp(_laserGridSize, dataset.read<std::vector<double>>());
-
-	// Hidden geometry
+	if (filename.find(".mat") != std::string::npos)
 	{
-		dataset = file.getDataSet("hiddenVolumePosition");
-		std::vector<double> volumePosition = dataset.read<std::vector<double>>();
-
-		std::vector<double> volumeSize;
-		dataset = file.getDataSet("hiddenVolumeSize");
-		if (dataset.getDimensions().empty())
-			volumeSize = { dataset.read<double>(), 0.1, dataset.read<double>() };
-		else
-			volumeSize = dataset.read<std::vector<double>>();
-
-		glm::vec3 hiddenGeometryMin = glm::vec3(
-			static_cast<float>(volumePosition[0]) - static_cast<float>(volumeSize[0]) / 2.0f,
-			static_cast<float>(volumePosition[1]) - static_cast<float>(volumeSize[1]) / 2.0f,
-			static_cast<float>(volumePosition[2]) - static_cast<float>(volumeSize[2]) / 2.0f
-		);
-		glm::vec3 hiddenGeometryMax = glm::vec3(
-			static_cast<float>(volumePosition[0]) + static_cast<float>(volumeSize[0]) / 2.0f,
-			static_cast<float>(volumePosition[1]) + static_cast<float>(volumeSize[1]) / 2.0f,
-			static_cast<float>(volumePosition[2]) + static_cast<float>(volumeSize[2]) / 2.0f
-		);
-		_hiddenGeometry = AABB(hiddenGeometryMin, hiddenGeometryMax);
-	}
-
-	dataset = file.getDataSet("isConfocal");
-	_isConfocal = static_cast<bool>(dataset.read<glm::uint>());
-
-	if (_isConfocal)
-	{
-		dataset = file.getDataSet("data");
-		auto dims = dataset.getDimensions();
-
-		if (dims.size() == 5)
-			setUp(_data, dataset.read<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>());
-		else if (dims.size() == 4)
-			setUp(_data, dataset.read<std::vector<std::vector<std::vector<std::vector<double>>>>>());
-		else
-			throw std::runtime_error("NLosData: Invalid dimensions for confocal data.");
+		loadMat(filename);
 	}
 	else
 	{
-		dataset = file.getDataSet("data");
-		setUp(_data, dataset.read<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>>>());
+		// Open the file
+		auto file = HighFive::File(filename, HighFive::File::ReadOnly);
+		if (!file.exist("cameraGridPositions") ||
+			!file.exist("cameraGridNormals") ||
+			!file.exist("cameraPosition") ||
+			!file.exist("laserGridNormals") ||
+			!file.exist("laserGridPositions") ||
+			!file.exist("laserPosition") ||
+			!file.exist("t") ||
+			!file.exist("t0") ||
+			!file.exist("deltaT") ||
+			!file.exist("isConfocal") ||
+			!file.exist("data"))
+			throw std::runtime_error("NLosData: Missing required datasets in the file.");
+
+		std::vector<float> data;
+
+		auto dataset = file.getDataSet("cameraGridNormals");
+		setUp(_cameraGridNormals, dataset.read<std::vector<std::vector<std::vector<double>>>>());
+
+		dataset = file.getDataSet("cameraGridPositions");
+		setUp(_cameraGridPositions, dataset.read<std::vector<std::vector<std::vector<double>>>>());
+
+		dataset = file.getDataSet("cameraPosition");
+		setUp(_cameraPosition, dataset.read<std::vector<double>>());
+
+		dataset = file.getDataSet("cameraGridSize");
+		setUp(_cameraGridSize, dataset.read<std::vector<double>>());
+
+		dataset = file.getDataSet("t");
+		_temporalResolution = dataset.read<glm::uint>();
+
+		dataset = file.getDataSet("t0");
+		_t0 = static_cast<float>(dataset.read<int>());
+
+		dataset = file.getDataSet("deltaT");
+		_deltaT = static_cast<float>(dataset.read<double>());
+
+		dataset = file.getDataSet("laserGridNormals");
+		setUp(_laserGridNormals, dataset.read<std::vector<std::vector<std::vector<double>>>>());
+
+		dataset = file.getDataSet("laserGridPositions");
+		setUp(_laserGridPositions, dataset.read<std::vector<std::vector<std::vector<double>>>>());
+
+		dataset = file.getDataSet("laserPosition");
+		setUp(_laserPosition, dataset.read<std::vector<double>>());
+
+		dataset = file.getDataSet("laserGridSize");
+		setUp(_laserGridSize, dataset.read<std::vector<double>>());
+
+		// Hidden geometry
+		{
+			dataset = file.getDataSet("hiddenVolumePosition");
+			std::vector<double> volumePosition = dataset.read<std::vector<double>>();
+
+			std::vector<double> volumeSize;
+			dataset = file.getDataSet("hiddenVolumeSize");
+			if (dataset.getDimensions().empty())
+				volumeSize = { dataset.read<double>(), 0.1, dataset.read<double>() };
+			else
+				volumeSize = dataset.read<std::vector<double>>();
+
+			glm::vec3 hiddenGeometryMin = glm::vec3(
+				static_cast<float>(volumePosition[0]) - static_cast<float>(volumeSize[0]) / 2.0f,
+				static_cast<float>(volumePosition[1]) - static_cast<float>(volumeSize[1]) / 2.0f,
+				static_cast<float>(volumePosition[2]) - static_cast<float>(volumeSize[2]) / 2.0f
+			);
+			glm::vec3 hiddenGeometryMax = glm::vec3(
+				static_cast<float>(volumePosition[0]) + static_cast<float>(volumeSize[0]) / 2.0f,
+				static_cast<float>(volumePosition[1]) + static_cast<float>(volumeSize[1]) / 2.0f,
+				static_cast<float>(volumePosition[2]) + static_cast<float>(volumeSize[2]) / 2.0f
+			);
+			_hiddenGeometry = AABB(hiddenGeometryMin, hiddenGeometryMax);
+		}
+
+		dataset = file.getDataSet("isConfocal");
+		_isConfocal = static_cast<bool>(dataset.read<glm::uint>());
+
+		if (_isConfocal)
+		{
+			dataset = file.getDataSet("data");
+			auto dims = dataset.getDimensions();
+
+			if (dims.size() == 5)
+				setUp(_data, dataset.read<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>());
+			else if (dims.size() == 4)
+				setUp(_data, dataset.read<std::vector<std::vector<std::vector<std::vector<double>>>>>());
+			else
+				throw std::runtime_error("NLosData: Invalid dimensions for confocal data.");
+		}
+		else
+		{
+			dataset = file.getDataSet("data");
+			setUp(_data, dataset.read<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>>>());
+		}
 	}
 
 	if (saveBinary && !saveBinaryFile(binaryFile))
@@ -120,7 +128,7 @@ NLosData::NLosData(const std::string& filename, bool saveBinary, bool useBinary)
 
 NLosData::~NLosData() = default;
 
-void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers)
+void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, const TransientParameters& transientParameters)
 {
 	CudaHelper::initializeBufferGPU(recBuffers._intensity, _data.size(), _data.data());
 	CudaHelper::initializeBufferGPU(recBuffers._sensorTargets, _cameraGridPositions.size(), _cameraGridPositions.data());
@@ -146,7 +154,7 @@ void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuff
 	recInfo._hiddenVolumeMax = _hiddenGeometry.maxPoint();
 	recInfo._hiddenVolumeSize = _hiddenGeometry.size();
 
-	recInfo._voxelResolution = glm::uvec3(256u);
+	recInfo._voxelResolution = transientParameters._voxelResolution;
 	recInfo._hiddenVolumeVoxelSize = _hiddenGeometry.size() / glm::vec3(recInfo._voxelResolution);
 }
 
@@ -297,6 +305,16 @@ void NLosData::setUp(std::vector<float>& data,
 	}
 
 	_dims = { numRowsLaser, numColsLaser, numRowsCamera, numColsCamera, numTimeBins };
+}
+
+void NLosData::loadMat(const std::string& filename)
+{
+	mat_t* matFile = Mat_Open(filename.c_str(), MAT_ACC_RDONLY);
+	if (matFile == nullptr)
+	{
+		std::cerr << "NLosData: Failed to open MAT file: " << filename << "\n";
+		return;
+	}
 }
 
 bool NLosData::loadBinaryFile(const std::string& filename)

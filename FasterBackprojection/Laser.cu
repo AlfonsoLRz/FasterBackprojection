@@ -47,7 +47,7 @@ void Laser::reconstructShape(const TransientParameters& transientParams)
 		filter_H_cuda(_nlosData->_deltaT * 10.0f, 0.0f);		// Sigma zero equals to non-valid, thus it is being calculated from wl_mean
 
 	// Transfer data to GPU
-	_nlosData->toGpu(recInfo, recBuffers);
+	_nlosData->toGpu(recInfo, recBuffers, transientParams);
 
 	CudaHelper::checkError(cudaMemcpyToSymbol(rtRecInfo, &recInfo, sizeof(ReconstructionInfo)));
 	CudaHelper::checkError(cudaMemcpyToSymbol(laserTargets, &recBuffers._laserTargets, sizeof(glm::vec3*)));
@@ -340,19 +340,33 @@ void Laser::normalizeMatrix(float* v, glm::uint size)
 
 void Laser::reconstructShapeAABB(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers, const TransientParameters& transientParams)
 {
+	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
+	const glm::uint numVoxels = voxelResolution.x * voxelResolution.y * voxelResolution.z;
+	float* volumeGpu = nullptr;
+	CudaHelper::initializeZeroBufferGPU(volumeGpu, numVoxels);
+
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
-	{
-		reconstructAABBConfocal(recInfo, transientParams);
-		//reconstructAABBConfocalMIS(recInfo, recBuffers, transientParams);
-	}
+		reconstructAABBConfocal(volumeGpu, recInfo);
+		//reconstructAABBConfocalMIS(volumeGpu, recInfo);
 	else if (recInfo._captureSystem == CaptureSystem::Exhaustive)
-		reconstructAABBExhaustive(recInfo, transientParams);
+		reconstructAABBExhaustive(volumeGpu, recInfo);
+
+	// Post-process the activation matrix
+	_postprocessingFilters[transientParams._postprocessingFilterType]->compute(volumeGpu, voxelResolution, transientParams);
+	normalizeMatrix(volumeGpu, numVoxels);
+
+	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+
+	// Save volume & free resources
+	saveReconstructedAABB("output/aabb.cube", volumeGpu, numVoxels);
+	CudaHelper::free(volumeGpu);
 }
 
 void Laser::reconstructShapeDepths(const ReconstructionInfo& recInfo, const TransientParameters& transientParams)
 {
+	std::cout << recInfo.getFocusDepth() << std::endl;
 	std::vector<double> reconstructionDepths = linearSpace(
-		recInfo.getFocusDepth() - 0.1f, recInfo.getFocusDepth() + 0.1f, transientParams._numReconstructionDepths
+		recInfo.getFocusDepth() - 0.1f, recInfo.getFocusDepth() + 0.1f, static_cast<glm::uint>(transientParams._numReconstructionDepths)
 	);
 	assert(!reconstructionDepths.empty());
 
@@ -465,39 +479,40 @@ void Laser::reconstructDepthExhaustive(const ReconstructionInfo& recInfo, std::v
 	CudaHelper::free(depthsGPU);
 }
 
-void Laser::reconstructAABBConfocal(const ReconstructionInfo& recInfo, const TransientParameters& transientParams)
+void Laser::reconstructAABBConfocal(float* volume, const ReconstructionInfo& recInfo)
 {
-	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
-	const glm::uint numVoxels = voxelResolution.x * voxelResolution.y * voxelResolution.z;
-	const glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
-	float* activationGPU = nullptr;
-	CudaHelper::initializeZeroBufferGPU(activationGPU, numVoxels);
-
 	ChronoUtilities::startTimer();
 
-	dim3 blockSize(16, 16); 
+	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
+	const glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
+
+	dim3 blockSize(BLOCK_X_CONFOCAL, BLOCK_Y_CONFOCAL); 
 	dim3 gridSize(
 		(sliceSize + blockSize.x - 1) / blockSize.x,    
 		(recInfo._numLaserTargets + blockSize.y - 1) / blockSize.y, 
 		(voxelResolution.z + blockSize.z - 1) / blockSize.z  
 	);
 
-	backprojectConfocalVoxel<<<gridSize, blockSize>>>(activationGPU, sliceSize);
+	backprojectConfocalVoxel<<<gridSize, blockSize>>>(volume, sliceSize);
 	CudaHelper::synchronize("backprojectConfocalVoxel");
-
-	_postprocessingFilters[transientParams._postprocessingFilterType]->compute(activationGPU, voxelResolution, transientParams);
-	normalizeMatrix(activationGPU, numVoxels);
-
-	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
-
-	// Prepare buckets and info for storing data in the local system
-	saveReconstructedAABB("output/aabb.cube", activationGPU, numVoxels);
-
-	CudaHelper::free(activationGPU);
 }
 
-void Laser::reconstructAABBExhaustive(const ReconstructionInfo& recInfo, const TransientParameters& transientParams)
+void Laser::reconstructAABBExhaustive(float* volume, const ReconstructionInfo& recInfo)
 {
+	ChronoUtilities::startTimer();
+
+	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
+	const glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
+
+	dim3 blockSize(BLOCK_X_CONFOCAL, BLOCK_Y_CONFOCAL);
+	dim3 gridSize(
+		(recInfo._numLaserTargets * recInfo._numSensorTargets + blockSize.x - 1) / blockSize.x,
+		(sliceSize + blockSize.y - 1) / blockSize.y,
+		(voxelResolution.z + blockSize.z - 1) / blockSize.z
+	);
+
+	backprojectExhaustiveVoxel<<<gridSize, blockSize>>>(volume, sliceSize);
+	CudaHelper::synchronize("backprojectConfocalVoxel");
 }
 
 bool Laser::saveReconstructedAABB(const std::string& filename, float* voxels, glm::uint numVoxels)
@@ -508,10 +523,8 @@ bool Laser::saveReconstructedAABB(const std::string& filename, float* voxels, gl
 	return FileUtilities::write<float>(filename, voxelsCpu);
 }
 
-void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers, const TransientParameters& transientParams) const
+void Laser::reconstructAABBConfocalMIS(float* volume, const ReconstructionInfo& recInfo) const
 {
-	ChronoUtilities::startTimer();
-
 	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
 	const glm::uint numVoxels = voxelResolution.x * voxelResolution.y * voxelResolution.z;
 	const glm::uint numTimeBins = recInfo._numTimeBins;
@@ -520,9 +533,6 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 	glm::uint totalElements = 1;
 	for (const auto& dim : _nlosData->_dims)
 		totalElements *= static_cast<glm::uint>(dim);
-
-	float* activationGPU = nullptr;
-	CudaHelper::initializeZeroBufferGPU(activationGPU, numVoxels);
 
 	float* spatioTemporalSum = nullptr, * spatialSumGpu = nullptr;
 	CudaHelper::initializeBufferGPU(spatioTemporalSum, totalElements);
@@ -537,13 +547,13 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 	// CUB's inclusive sum
 	{
 		size_t storageBytes = 0;
-		cub::DeviceScan::InclusiveSum(nullptr, storageBytes, recBuffers._intensity, spatioTemporalSum, static_cast<int>(totalElements));
+		cub::DeviceScan::InclusiveSum(nullptr, storageBytes, volume, spatioTemporalSum, static_cast<int>(totalElements));
 
 		void* tempStorage = nullptr;
 		cudaMalloc(&tempStorage, storageBytes);
 
 		// Perform the inclusive scan
-		cub::DeviceScan::InclusiveSum(tempStorage, storageBytes, recBuffers._intensity, spatioTemporalSum, static_cast<int>(totalElements));
+		cub::DeviceScan::InclusiveSum(tempStorage, storageBytes, volume, spatioTemporalSum, static_cast<int>(totalElements));
 
 		CudaHelper::free(tempStorage);
 	}
@@ -577,7 +587,7 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 		CudaHelper::initializeBufferGPU(probTableGpu, probTable.size(), probTable.data());
 	}
 
-	glm::uint numSamples = recInfo._numLaserTargets / 8;
+	glm::uint numSamples = recInfo._numLaserTargets / 4;
 	dim3 blockSize(BLOCK_X_CONFOCAL, BLOCK_Y_CONFOCAL);
 	dim3 gridSize(
 		(sliceSize + blockSize.x - 1) / blockSize.x,
@@ -590,20 +600,9 @@ void Laser::reconstructAABBConfocalMIS(const ReconstructionInfo& recInfo, const 
 	CudaHelper::checkError(cudaMemcpyToSymbol(probTable, &probTableGpu, sizeof(float*)));
 	CudaHelper::checkError(cudaMemcpyToSymbol(noiseBuffer, &noiseGpu, sizeof(float*)));
 
-	backprojectConfocalVoxelMIS<<<gridSize, blockSize>>>(spatialSumGpu, activationGPU, noiseGpu, aliasTableGpu, probTableGpu, sliceSize, numSamples, numVoxels);
-	normalizeMatrix(activationGPU, numVoxels);
+	backprojectConfocalVoxelMIS<<<gridSize, blockSize>>>(spatialSumGpu, volume, noiseGpu, aliasTableGpu, probTableGpu, sliceSize, numSamples, numVoxels);
 	CudaHelper::synchronize("backprojectConfocalVoxelMIS");
 
-	//laplacianFilter(activationGPU, voxelResolution, 5);
-
-	std::cout << "Reconstruction finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
-
-	// Prepare buckets and info for storing data in the local system
-	std::vector<float> voxels(numVoxels);
-	CudaHelper::downloadBufferGPU(activationGPU, voxels.data(), numVoxels);
-	FileUtilities::write<float>(transientParams._outputFolder + "aabb.cube", voxels);
-
-	CudaHelper::free(activationGPU);
 	CudaHelper::free(spatioTemporalSum);
 	CudaHelper::free(spatialSumGpu);
 	CudaHelper::free(noiseGpu);

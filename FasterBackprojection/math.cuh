@@ -35,3 +35,9 @@ __forceinline__ __device__ glm::vec3 safeRCP(const glm::vec3& x)
 		safeRCP(x.y),
 		safeRCP(x.z));
 }
+
+__forceinline__ __device__ float fastDistance(const glm::vec3& a, const glm::vec3& b)
+{
+	glm::vec3 d = a - b;
+	return sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);  
+}

@@ -5,15 +5,12 @@
 
 __forceinline__ __device__ glm::uint getConfocalTransientIndex(glm::uint laserTargetIdx, glm::uint timeBin)
 {
-	return laserTargetIdx * rtRecInfo._numTimeBins + timeBin;
+	return timeBin * rtRecInfo._numLaserTargets + laserTargetIdx;
 }
 
 __forceinline__ __device__ glm::uint getExhaustiveTransientIndex(glm::uint laserTargetIdx, glm::uint sensorTargetIdx, glm::uint timeBin)
 {
-	return
-		timeBin * rtRecInfo._numLaserTargets * rtRecInfo._numSensorTargets +
-		laserTargetIdx * rtRecInfo._numSensorTargets +
-		sensorTargetIdx;
+	return laserTargetIdx * rtRecInfo._numSensorTargets * rtRecInfo._numTimeBins + sensorTargetIdx * rtRecInfo._numTimeBins + timeBin;
 }
 
 // Random number generation 

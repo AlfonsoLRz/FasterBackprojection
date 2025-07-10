@@ -48,6 +48,7 @@ protected:
 	// Exhaustive
 	void setUp(std::vector<float>& data, const std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>>& rawData);
 
+	void loadMat(const std::string& filename);
 	bool loadBinaryFile(const std::string& filename);
 	bool saveBinaryFile(const std::string& filename) const;
 
@@ -55,7 +56,7 @@ public:
 	NLosData(const std::string& filename, bool saveBinary = true, bool useBinary = true);
 	virtual ~NLosData();
 
-	void toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers);
+	void toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, const TransientParameters& transientParameters);
 
 	void saveImages(const std::string& outPath);
 };

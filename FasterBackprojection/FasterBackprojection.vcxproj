@@ -65,6 +65,7 @@
       <ExtensibleWholeProgramCompilation>false</ExtensibleWholeProgramCompilation>
       <FastMath>true</FastMath>
       <AdditionalOptions>--extended-lambda %(AdditionalOptions)</AdditionalOptions>
+      <GenerateLineInfo>true</GenerateLineInfo>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -94,6 +95,7 @@
       <ExtensibleWholeProgramCompilation>false</ExtensibleWholeProgramCompilation>
       <FastMath>true</FastMath>
       <AdditionalOptions>--extended-lambda %(AdditionalOptions)</AdditionalOptions>
+      <GenerateLineInfo>true</GenerateLineInfo>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
