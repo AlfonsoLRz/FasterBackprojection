@@ -14,6 +14,50 @@
         } \
     } while (0)
 
+enum class PadMode: uint8_t
+{
+	Zero = 0,
+    Edge = 1
+};
+
+inline __global__ void padBuffer(
+    glm::uint sliceSize, glm::uint timeDim, glm::uint padding, glm::uint paddedTimeDim,
+    const float* __restrict__ H_orig, cufftComplex* __restrict__ H, PadMode padMode)
+{
+	const glm::uint xy = blockIdx.x * blockDim.x + threadIdx.x;
+	const glm::uint t = blockIdx.y * blockDim.y + threadIdx.y;
+    if (xy >= sliceSize || t >= paddedTimeDim)
+		return;
+
+    if (t < padding)
+    {
+        if (padMode == PadMode::Edge)
+        {
+            H[xy * paddedTimeDim + t] = cufftComplex{ H_orig[xy * timeDim + 0], .0f };
+		}
+    }
+    else if (t > timeDim + padding)
+    {
+        if (padMode == PadMode::Edge)
+        {
+            H[xy * paddedTimeDim + t] = cufftComplex{ H_orig[xy * timeDim + timeDim - 1], .0f };
+        }
+    }
+}
+
+inline __global__ void readBackFromIFFT(
+    const cufftComplex* __restrict__ H, float* __restrict__ H_orig, 
+	glm::uint sliceSize, glm::uint timeBins, glm::uint paddedTimeBins, glm::uint padding)
+{
+	const glm::uint xy = blockIdx.x * blockDim.x + threadIdx.x;
+	const glm::uint t = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (xy >= sliceSize || t >= timeBins)
+		return;
+
+	H_orig[xy * timeBins + t] = H[xy * paddedTimeBins + t + padding].x;
+}
+
 inline __global__ void multiplyHK(cufftComplex *d_H, const cufftComplex *d_K, size_t batch, size_t numTimeBins)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;

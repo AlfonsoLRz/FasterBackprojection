@@ -20,7 +20,7 @@ private:
 
 private:
 	static std::vector<double> linearSpace(double minValue, double maxValue, int n);
-	void padIntensity(std::vector<cufftComplex>& paddedIntensity, size_t padding, const std::string& mode) const;
+	float* padIntensity(cufftComplex*& paddedIntensity, size_t padding, const std::string& mode) const;
 	void filter_H_cuda(float wl_mean, float wl_sigma = .0f, const std::string& border = "zero") const;
 	static void normalizeMatrix(float* v, glm::uint size);
 

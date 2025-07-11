@@ -72,15 +72,15 @@ def cnlos_reconstruction(scene=7):
     range_ = M * c * bin_resolution  # Maximum range for histogram
 
     # Downsample data to 16 picoseconds
-    for k in range(K):
-        M = M // 2
-        bin_resolution *= 2
-        rect_data = rect_data[:, :, ::2] + rect_data[:, :, 1::2]
-        z_trim = round(z_trim / 2)
-        z_offset = round(z_offset / 2)
+    # for k in range(K):
+    #     M = M // 2
+    #     bin_resolution *= 2
+    #     rect_data = rect_data[:, :, ::2] + rect_data[:, :, 1::2]
+    #     z_trim = round(z_trim / 2)
+    #     z_offset = round(z_offset / 2)
 
     # Set first group of histogram bins to zero (to remove direct component)
-    rect_data[:, :, :z_trim] = 0
+    # rect_data[:, :, :z_trim] = 0
 
     # Define NLOS blur kernel
     psf = define_psf(N, M, width / range_)

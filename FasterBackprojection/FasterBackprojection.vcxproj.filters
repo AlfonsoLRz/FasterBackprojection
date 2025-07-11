@@ -195,6 +195,8 @@
     <ClInclude Include="PostprocessingFilters.h">
       <Filter>header</Filter>
     </ClInclude>
+    <ClInclude Include="Backprojection.h" />
+    <ClInclude Include="Reconstruction.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Window.cpp">
@@ -317,6 +319,9 @@
       <Filter>source</Filter>
     </CudaCompile>
     <CudaCompile Include="PostprocessingFilters.cu">
+      <Filter>source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="Backprojection.cu">
       <Filter>source</Filter>
     </CudaCompile>
   </ItemGroup>

@@ -101,10 +101,12 @@
   <ItemGroup>
     <ClInclude Include="AABB.h" />
     <ClInclude Include="ApplicationState.h" />
+    <CudaCompile Include="Backprojection.cu" />
     <CudaCompile Include="GpuStructs.cu" />
     <CudaCompile Include="Laser.cu">
       <FileType>Document</FileType>
     </CudaCompile>
+    <ClInclude Include="Backprojection.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="CameraGuiAdapter.h" />
     <ClInclude Include="CameraProjection.h" />
@@ -141,6 +143,7 @@
     </ClInclude>
     <ClInclude Include="RandomUtilities.h" />
     <ClInclude Include="random_kernels.cuh" />
+    <ClInclude Include="Reconstruction.h" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="RenderingShader.h" />
     <ClInclude Include="SceneContent.h" />

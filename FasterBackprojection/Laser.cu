@@ -43,8 +43,12 @@ void Laser::reconstructShape(const TransientParameters& transientParams)
 	ReconstructionBuffers recBuffers;
 
 	// Fourier?
-	if (transientParams._useFourierFilter)
-		filter_H_cuda(_nlosData->_deltaT * 10.0f, 0.0f);		// Sigma zero equals to non-valid, thus it is being calculated from wl_mean
+	//if (transientParams._useFourierFilter)
+	//{
+	//	ChronoUtilities::startTimer();
+	//	filter_H_cuda(_nlosData->_deltaT * 10.0f, 0.0f);		// Sigma zero equals to non-valid, thus it is being calculated from wl_mean
+	//	std::cout << "Filter H finished in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+	//}
 
 	// Transfer data to GPU
 	_nlosData->toGpu(recInfo, recBuffers, transientParams);
@@ -77,7 +81,7 @@ std::vector<double> Laser::linearSpace(double minValue, double maxValue, int n)
 	return v;
 }
 
-void Laser::padIntensity(std::vector<cufftComplex>& paddedIntensity, size_t padding, const std::string& mode) const
+float* Laser::padIntensity(cufftComplex*& paddedIntensity, size_t padding, const std::string& mode) const
 {
 	size_t timeDim = _nlosData->_dims.size() - 1;
 	size_t nt = _nlosData->_dims[timeDim];
@@ -90,21 +94,36 @@ void Laser::padIntensity(std::vector<cufftComplex>& paddedIntensity, size_t padd
 	for (size_t i = 0; i < _nlosData->_dims.size() - 1; ++i)
 		sliceSize *= _nlosData->_dims[i];
 
-	paddedIntensity.resize(sliceSize * nt_pad);
+	float* d_H_orig = nullptr;
+	CudaHelper::initializeBufferGPU(d_H_orig, _nlosData->_data.size(), _nlosData->_data.data());
+
+	//paddedIntensity = nullptr;
+	//CudaHelper::initializeBufferGPU(paddedIntensity, sliceSize * nt_pad);
+
+	//dim3 blockSize(32, 16);
+	//dim3 gridSize(
+	//	(sliceSize + blockSize.x - 1) / blockSize.x,
+	//	(nt_pad + blockSize.y - 1) / blockSize.y);
+
+	//padBuffer<<<gridSize, blockSize>>>(
+	//	sliceSize, nt, padding, nt_pad, d_H_orig, paddedIntensity, 
+	//	mode == "zero" ? PadMode::Zero : PadMode::Edge);
+
+	std::vector<cufftComplex> paddedIntensityBuf(sliceSize * nt_pad);
 
 	#pragma omp parallel for
 	for (size_t i = 0; i < sliceSize; ++i)
 	{
 		for (size_t t = 0; t < nt; ++t)
-			paddedIntensity[i * nt_pad + (t + padding)] = cufftComplex{ _nlosData->_data[i * nt + t], 0.0f };
+			paddedIntensityBuf[i * nt_pad + (t + padding)] = cufftComplex{ _nlosData->_data[i * nt + t], 0.0f };
 
 		if (mode == "constant" || mode == "zero")
 		{
 			for (size_t t = 0; t < padding; ++t) {
-				paddedIntensity[i * nt_pad + t] = { 0.0f, 0.0f };
+				paddedIntensityBuf[i * nt_pad + t] = { 0.0f, 0.0f };
 			}
 			for (size_t t = nt + padding; t < nt_pad; ++t) {
-				paddedIntensity[i * nt_pad + t] = { 0.0f, 0.0f };
+				paddedIntensityBuf[i * nt_pad + t] = { 0.0f, 0.0f };
 			}
 		}
 		else if (mode == "edge")
@@ -113,16 +132,15 @@ void Laser::padIntensity(std::vector<cufftComplex>& paddedIntensity, size_t padd
 			float last = _nlosData->_data[i * nt + nt - 1];
 
 			for (size_t t = 0; t < padding; ++t)
-				paddedIntensity[i * nt_pad + t] = cufftComplex{ first, .0f };
+				paddedIntensityBuf[i * nt_pad + t] = cufftComplex{ first, .0f };
 			for (size_t t = nt + padding; t < nt_pad; ++t)
-				paddedIntensity[i * nt_pad + t] = cufftComplex{ last, .0f };
-		}
-		else
-		{
-			std::cerr << "Unsupported padding mode: " << mode << '\n';
-			return;
+				paddedIntensityBuf[i * nt_pad + t] = cufftComplex{ last, .0f };
 		}
 	}
+
+	CudaHelper::initializeBufferGPU(paddedIntensity, paddedIntensityBuf.size(), paddedIntensityBuf.data());
+
+	return d_H_orig;
 }
 
 void Laser::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& border) const
@@ -150,6 +168,7 @@ void Laser::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& bord
 	float sumGaussianEnvelope = 0.0f;
 	std::vector<float> gaussianEnvelope(nt_pad);
 
+	//#pragma omp parallel for (reduction(+:sumGaussianEnvelope))
 	for (size_t i = 0; i < nt_pad; ++i)
 	{
 		float val = (t_vals[i] - t_max * 0.5f) / wl_sigma;
@@ -157,6 +176,7 @@ void Laser::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& bord
 		sumGaussianEnvelope += gaussianEnvelope[i];
 	}
 
+	//#pragma omp parallel for
 	for (size_t i = 0; i < nt_pad; ++i)
 	{
 		float phase = TWO_PI * t_vals[i] / wl_mean;
@@ -167,18 +187,19 @@ void Laser::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& bord
 	// This prepares K for FFT since cuFFT computes the unshifted FFT
 	std::vector<cufftComplex> K_ifftShifted(nt_pad);
 	size_t shift = nt_pad / 2;
+
+	//#pragma omp parallel for
 	for (size_t i = 0; i < nt_pad; ++i)
 		K_ifftShifted[i] = K[(i + shift) % nt_pad];
 	K = K_ifftShifted;
 
 	// Pad H in host
 	size_t padding = (nt_pad - nt) / 2;
-	std::vector<cufftComplex> H_pad_host;
-	padIntensity(H_pad_host, padding, border);
+	cufftComplex* d_H = nullptr;
+	float* d_H_orig = padIntensity(d_H, padding, border);
 
 	// Transfer H_pad_host and K to device
-	cufftComplex* d_H = nullptr, * d_K = nullptr;
-	CudaHelper::initializeBufferGPU(d_H, H_pad_host.size(), H_pad_host.data());
+	cufftComplex* d_K = nullptr;
 	CudaHelper::initializeBufferGPU(d_K, K.size(), K.data());
 
 	//
@@ -208,7 +229,7 @@ void Laser::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& bord
 	dim3 block(256);
 	dim3 grid((batch * nt_pad + block.x - 1) / block.x);
 
-	multiplyHK << <grid, block >> > (d_H, d_K, batch, nt_pad);
+	multiplyHK<<<grid, block>>>(d_H, d_K, batch, nt_pad);
 	cudaDeviceSynchronize();
 
 	CUFFT_CHECK(cufftExecC2C(planH, d_H, d_H, CUFFT_INVERSE));
@@ -217,11 +238,13 @@ void Laser::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& bord
 	//normalizeH<<<grid, block>>>(d_H, batch, nt_pad);		// I read the IFFT results, and they were too small; I think this is not needed
 
 	// Copy result back to host
+	std::vector<cufftComplex> H_pad_host(dimProduct);
 	CudaHelper::downloadBufferGPU(d_H, H_pad_host.data(), dimProduct, 0);
 
 	//
 	size_t inner = nt, outer = dimProduct / nt_pad;
 
+	#pragma omp parallel for
 	for (size_t i = 0; i < outer; ++i) {
 		size_t paddedOffset = i * nt_pad + padding;
 		size_t unpaddedOffset = i * nt;
@@ -232,6 +255,14 @@ void Laser::filter_H_cuda(float wl_mean, float wl_sigma, const std::string& bord
 			_nlosData->_data[unpaddedOffset + j] = val.x;
 		}
 	}
+
+	//dim3 blockSize(32, 16);
+	//dim3 gridSize(
+	//	(dimProduct / nt_pad + blockSize.x - 1) / blockSize.x,
+	//	(nt + blockSize.y - 1) / blockSize.y);
+	//readBackFromIFFT<<<gridSize, blockSize>>>(d_H, d_H_orig, dimProduct / nt_pad, nt, nt_pad, padding);
+
+	//CudaHelper::downloadBufferGPU(d_H_orig, _nlosData->_data.data(), _nlosData->_data.size(), 0);
 
 	// 
 	CUFFT_CHECK(cufftDestroy(planH));
