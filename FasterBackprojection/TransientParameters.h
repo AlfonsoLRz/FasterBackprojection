@@ -1,8 +1,6 @@
 #pragma once
 
-#include "NLosData.h"
-
-enum PostprocessingFilterType 
+enum PostprocessingFilterType
 {
 	NONE,
 	LAPLACIAN,
@@ -11,11 +9,21 @@ enum PostprocessingFilterType
 	NUM_POSTPROCESSING_FILTERS
 };
 
+enum ReconstructionType
+{
+	BACKPROJECTION,
+	LCT,
+	FK,
+	PHASOR_FIELD,
+	NUM_RECONSTRUCTION_TYPES
+};
 
 class TransientParameters
 {
 public:
+	ReconstructionType			_reconstructionType;
 	bool						_useFourierFilter;
+	bool						_compensateLaserCosDistance;
 	bool						_reconstructAABB;
 	glm::uint					_numReconstructionDepths;
 	glm::uvec3					_voxelResolution;
@@ -28,7 +36,9 @@ public:
 	bool						_saveReconstructedBoundingBox;
 
 	TransientParameters() :
+		_reconstructionType(ReconstructionType::BACKPROJECTION),
 		_useFourierFilter(true),
+		_compensateLaserCosDistance(true),
 		_reconstructAABB(true),
 		_numReconstructionDepths(200),
 		_voxelResolution(256),

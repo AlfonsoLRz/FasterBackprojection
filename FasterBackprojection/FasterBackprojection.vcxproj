@@ -137,6 +137,7 @@
     <ClInclude Include="math.cuh" />
     <ClInclude Include="Model3D.h" />
     <ClInclude Include="NLosDataVisualizer.h" />
+    <CudaCompile Include="preprocessing.cuh" />
     <ClInclude Include="progressbar\include\progressbar.hpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
@@ -245,6 +246,9 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
+    <CudaCompile Include="Reconstruction.cu">
+      <FileType>Document</FileType>
+    </CudaCompile>
     <ClCompile Include="Renderer.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>

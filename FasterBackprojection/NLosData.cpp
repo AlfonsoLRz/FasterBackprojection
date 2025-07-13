@@ -1,8 +1,8 @@
 #include "stdafx.h"
 #include "NLosData.h"
 
+#include <matio.h> 
 #include <highfive/highfive.hpp>
-#include <matio.h>
 #include <print>
 
 #include "CudaHelper.h"
@@ -133,6 +133,7 @@ void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuff
 	CudaHelper::initializeBufferGPU(recBuffers._intensity, _data.size(), _data.data());
 	CudaHelper::initializeBufferGPU(recBuffers._sensorTargets, _cameraGridPositions.size(), _cameraGridPositions.data());
 	CudaHelper::initializeBufferGPU(recBuffers._laserTargets, _laserGridPositions.size(), _laserGridPositions.data());
+	CudaHelper::initializeBufferGPU(recBuffers._laserTargetsNormals, _laserGridNormals.size(), _laserGridNormals.data());
 
 	recInfo._sensorPosition = _cameraPosition;
 	recInfo._numSensorTargets = static_cast<glm::uint>(_cameraGridPositions.size());
@@ -309,12 +310,48 @@ void NLosData::setUp(std::vector<float>& data,
 
 void NLosData::loadMat(const std::string& filename)
 {
+	// Open the .mat file
 	mat_t* matFile = Mat_Open(filename.c_str(), MAT_ACC_RDONLY);
-	if (matFile == nullptr)
-	{
-		std::cerr << "NLosData: Failed to open MAT file: " << filename << "\n";
-		return;
+	if (!matFile) {
+		std::cerr << "Error opening .mat file!" << '\n';
 	}
+
+	//matvar_t* matvar;
+	//while ((matvar = Mat_VarReadNextInfo(matFile)) != NULL) {
+	//	std::cout << "Found variable: " << matvar->name << std::endl;
+	//	Mat_VarFree(matvar);
+	//}
+
+	matvar_t* rectDataVar = Mat_VarRead(matFile, "rect_data");
+	if (!rectDataVar) 
+	{
+		std::cerr << "Variable 'rect_data' not found!" << '\n';
+		Mat_Close(matFile);
+	}
+
+	double* rectData = static_cast<double*>(rectDataVar->data);
+
+	size_t globalSize = 1;
+	_dims.resize(rectDataVar->rank);
+	for (int i = 0; i < rectDataVar->rank; ++i)
+	{
+		_dims[i] = rectDataVar->dims[i];
+		globalSize *= rectDataVar->dims[i];
+	}
+
+	_data.resize(globalSize);
+	for (size_t i = 0; i < globalSize; ++i)
+		_data[i] = static_cast<float>(rectData[i]);
+
+	matvar_t* widthVar = Mat_VarRead(matFile, "width");
+	if (!widthVar)
+	{
+		std::cerr << "Variable 'width' not found!" << '\n';
+		Mat_VarFree(rectDataVar);
+		Mat_Close(matFile);
+	}
+
+	std::cout << "width: " << static_cast<double*>(widthVar->data)[0] << '\n';
 }
 
 bool NLosData::loadBinaryFile(const std::string& filename)

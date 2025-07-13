@@ -41,6 +41,9 @@ struct ReconstructionBuffers
 {
 	glm::vec3* _laserTargets;
 	glm::vec3* _sensorTargets;
+
+	glm::vec3* _laserTargetsNormals;
+
 	float* _intensity;
 };
 
@@ -49,6 +52,9 @@ __constant__ extern __device__ ReconstructionInfo rtRecInfo;
 // NLOS things
 __constant__ extern __device__ glm::vec3* laserTargets;
 __constant__ extern __device__ glm::vec3* sensorTargets;
+
+__constant__ extern __device__ glm::vec3* laserTargetsNormals;
+
 __constant__ extern __device__ float* intensityCube;
 
 // Noise

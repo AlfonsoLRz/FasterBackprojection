@@ -38,7 +38,7 @@ __global__ void backproject(float* __restrict__ activation, const double* __rest
 		atomicAdd(&activation[checkPosIdx * numDepths + d], intensity);
 }
 
-__global__ void backprojectConfocal(float* __restrict__ activation, const double* __restrict__ depths, glm::uint numDepths)
+__global__ void backprojectConfocal(float* __restrict__ activation, const float* __restrict__ depths, glm::uint numDepths)
 {
 	glm::uint c = blockIdx.x * blockDim.x + threadIdx.x;
 	glm::uint l = blockIdx.y * blockDim.y + threadIdx.y;
@@ -48,7 +48,7 @@ __global__ void backprojectConfocal(float* __restrict__ activation, const double
 		return;
 
 	const glm::vec3 lPos = laserTargets[l];
-	const glm::vec3 checkPos = laserTargets[c] + rtRecInfo._relayWallNormal * static_cast<float>(depths[d]);
+	const glm::vec3 checkPos = laserTargets[c] + rtRecInfo._relayWallNormal * depths[d];
 
 	float traversalTime = glm::distance(lPos, checkPos) * 2.0f - rtRecInfo._timeOffset;
 	if (rtRecInfo._discardFirstLastBounces == 0)
@@ -63,7 +63,7 @@ __global__ void backprojectConfocal(float* __restrict__ activation, const double
 		atomicAdd(&activation[c * numDepths + d], intensity);
 }
 
-__global__ void backprojectExhaustive(float* __restrict__ activation, const double* __restrict__ depths, glm::uint numDepths)
+__global__ void backprojectExhaustive(float* __restrict__ activation, const float* __restrict__ depths, glm::uint numDepths)
 {
 	glm::uint ls = blockIdx.x * blockDim.x + threadIdx.x;
 	glm::uint c = blockIdx.y * blockDim.y + threadIdx.y;
@@ -75,7 +75,7 @@ __global__ void backprojectExhaustive(float* __restrict__ activation, const doub
 	const glm::uint l = ls % rtRecInfo._numLaserTargets;
 	const glm::uint s = ls / rtRecInfo._numLaserTargets;
 	const glm::vec3 lPos = laserTargets[l], sPos = sensorTargets[s];
-	const glm::vec3 checkPos = laserTargets[c] + rtRecInfo._relayWallNormal * static_cast<float>(depths[d]);
+	const glm::vec3 checkPos = laserTargets[c] + rtRecInfo._relayWallNormal * depths[d];
 
 	float traversedDistance = glm::distance(lPos, checkPos) + glm::distance(checkPos, sPos) - rtRecInfo._timeOffset;
 	if (rtRecInfo._discardFirstLastBounces == 0)
@@ -121,7 +121,7 @@ __global__ void backprojectConfocalVoxel(float* __restrict__ activation, glm::ui
 			return;
 		const float backscatteredLight = intensityCube[getConfocalTransientIndex(l, timeBin)];
 		if (backscatteredLight > EPS)
-			atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight * safeRCP(dist * dist));
+			atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight);
 		d += rtRecInfo._timeStep + EPS;
 	}
 #else
@@ -131,7 +131,7 @@ __global__ void backprojectConfocalVoxel(float* __restrict__ activation, glm::ui
 
 	const float backscatteredLight = intensityCube[getConfocalTransientIndex(l, timeBin)];
 	if (backscatteredLight > EPS)
-		atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight * safeRCP(dist * dist));
+		atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight);
 #endif
 }
 
@@ -162,7 +162,7 @@ __global__ void backprojectExhaustiveVoxel(float* __restrict__ activation, glm::
 
 	const float backscatteredLight = intensityCube[getExhaustiveTransientIndex(l, s, timeBin)];
 	if (backscatteredLight > EPS)
-		atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight * safeRCP(dist * dist));
+		atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight);
 }
 
 // MIS

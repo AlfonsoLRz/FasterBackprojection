@@ -5,6 +5,9 @@ __constant__ __device__ ReconstructionInfo rtRecInfo;
 
 __constant__ __device__ glm::vec3*	laserTargets;
 __constant__ __device__ glm::vec3*	sensorTargets;
+
+__constant__ __device__ glm::vec3*	laserTargetsNormals;
+
 __constant__ __device__ float*		intensityCube;
 
 // Noise

@@ -43,35 +43,35 @@ inline __global__ void padBuffer(
             H[xy * paddedTimeDim + t] = cufftComplex{ H_orig[xy * timeDim + timeDim - 1], .0f };
         }
     }
+    else
+    {
+		H[xy * paddedTimeDim + t] = cufftComplex{ H_orig[xy * timeDim + t - padding], .0f };
+    }
 }
 
 inline __global__ void readBackFromIFFT(
     const cufftComplex* __restrict__ H, float* __restrict__ H_orig, 
-	glm::uint sliceSize, glm::uint timeBins, glm::uint paddedTimeBins, glm::uint padding)
+	glm::uint sliceSize, glm::uint timeBins, glm::uint paddedTimeBins, glm::uint padding, glm::uint size)
 {
-	const glm::uint xy = blockIdx.x * blockDim.x + threadIdx.x;
-	const glm::uint t = blockIdx.y * blockDim.y + threadIdx.y;
+    const glm::uint idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size)
+        return;
 
-    if (xy >= sliceSize || t >= timeBins)
-		return;
-
+    const glm::uint xy = idx / timeBins, t = idx % timeBins;
 	H_orig[xy * timeBins + t] = H[xy * paddedTimeBins + t + padding].x;
 }
 
-inline __global__ void multiplyHK(cufftComplex *d_H, const cufftComplex *d_K, size_t batch, size_t numTimeBins)
+inline __global__ void multiplyHK(cufftComplex *d_H, const cufftComplex *d_K, glm::uint batch, glm::uint numTimeBins, glm::uint size)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= batch * numTimeBins) 
+    const glm::uint idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size)
         return;
 
-    int t = idx % numTimeBins;
+    const glm::uint t = idx % numTimeBins;
     cufftComplex h = d_H[idx];
     cufftComplex k = d_K[t];
 
-    float real = (h.x * k.x - h.y * k.y);
-    float imag = (h.x * k.y + h.y * k.x);
-
-    d_H[idx] = { real, imag };
+    d_H[idx] = { h.x * k.x - h.y * k.y, h.x * k.y + h.y * k.x };
 }
 
 inline __global__ void normalizeH(cufftComplex* d_H, size_t batch, size_t timeSize)

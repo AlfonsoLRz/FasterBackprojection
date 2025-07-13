@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Model3D.h"
+#include "NLosData.h"
 
 class DrawEllipsoids : public Model3D
 {

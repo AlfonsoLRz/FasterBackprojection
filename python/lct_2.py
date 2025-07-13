@@ -64,7 +64,7 @@ def cnlos_reconstruction(scene=7):
         isdiffuse = 1
         snr = snr * 1e-1
 
-    rect_data = data['rect_data']
+    rect_data = data['rect_data']  # Load rectangular data
     width = float(data['width'])
 
     N = rect_data.shape[0]  # Spatial resolution of data
@@ -79,8 +79,12 @@ def cnlos_reconstruction(scene=7):
     #     z_trim = round(z_trim / 2)
     #     z_offset = round(z_offset / 2)
 
+    print(rect_data[0, 0, :100])  # Print first 10 bins of the first pixel
+    print(rect_data.dtype)
+    print(data['width'].dtype)
+
     # Set first group of histogram bins to zero (to remove direct component)
-    # rect_data[:, :, :z_trim] = 0
+    rect_data[:, :, :z_trim] = 0
 
     # Define NLOS blur kernel
     psf = define_psf(N, M, width / range_)
