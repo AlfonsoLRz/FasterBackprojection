@@ -71,6 +71,8 @@ def cnlos_reconstruction(scene=7):
     M = rect_data.shape[2]  # Temporal resolution of data
     range_ = M * c * bin_resolution  # Maximum range for histogram
 
+    print(range_)
+
     # Downsample data to 16 picoseconds
     # for k in range(K):
     #     M = M // 2

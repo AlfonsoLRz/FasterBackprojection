@@ -47,7 +47,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;WIN64;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
       <OpenMPSupport>true</OpenMPSupport>
       <AdditionalIncludeDirectories>brdf-loader;progressbar/include;vox-writer;C:/ProgramData/NVIDIA Corporation/OptiX SDK 9.0.0/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>-openmp:llvm %(AdditionalOptions)</AdditionalOptions>
@@ -76,7 +76,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;WIN64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <OpenMPSupport>true</OpenMPSupport>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>progressbar/include;C:/ProgramData/NVIDIA Corporation/OptiX SDK 9.0.0/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>-openmp:llvm %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -106,6 +106,7 @@
     <CudaCompile Include="Laser.cu">
       <FileType>Document</FileType>
     </CudaCompile>
+    <ClInclude Include="backprojection.cuh" />
     <ClInclude Include="Backprojection.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="CameraGuiAdapter.h" />
@@ -230,7 +231,9 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="LCT.cpp" />
+    <CudaCompile Include="LCT.cu">
+      <FileType>Document</FileType>
+    </CudaCompile>
     <CudaCompile Include="PostprocessingFilters.cu">
       <FileType>Document</FileType>
     </CudaCompile>

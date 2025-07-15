@@ -1,5 +1,6 @@
 #pragma once
 
+#include <matio.h>
 #include <highfive/H5DataSet.hpp>
 
 #include "AABB.h"
@@ -29,10 +30,11 @@ public:
 
 	AABB					_hiddenGeometry;
 
-	glm::uint				_temporalResolution;
-	float					_deltaT, _t0;
+	glm::uint				_temporalResolution = 0;
+	float					_deltaT = .0f, _t0 = .0f, _temporalWidth = .0f;
 
-	bool					_isConfocal;
+	bool					_isConfocal = true;
+	bool					_discardFirstLastBounces = true;
 
 protected:
 	template<typename T>
@@ -49,6 +51,8 @@ protected:
 	void setUp(std::vector<float>& data, const std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>>& rawData);
 
 	void loadMat(const std::string& filename);
+	bool loadLCTMat(mat_t* matFile);
+
 	bool loadBinaryFile(const std::string& filename);
 	bool saveBinaryFile(const std::string& filename) const;
 

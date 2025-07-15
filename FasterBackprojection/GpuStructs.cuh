@@ -19,7 +19,7 @@ struct ReconstructionInfo
 	float			_timeStep;
 
 	glm::vec3		_hiddenVolumeMin;
-	glm::uint		_discardFirstLastBounces;
+	bool			_discardFirstLastBounces;
 
 	glm::vec3		_hiddenVolumeMax;
 	glm::vec3		_hiddenVolumeSize;

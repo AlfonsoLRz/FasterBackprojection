@@ -59,7 +59,7 @@ void Reconstruction::padIntensity(float* volumeGpu, cufftComplex*& paddedIntensi
 		mode == "zero" ? PadMode::Zero : PadMode::Edge);
 }
 
-void Reconstruction::filter_H_cuda(float* volumeGpu, float wl_mean, float wl_sigma, const std::string& border) const
+void Reconstruction::filter_H_cuda(float* intensityGpu, float wl_mean, float wl_sigma, const std::string& border) const
 {
 	size_t nt = _nlosData->_temporalResolution;
 	if (glm::epsilonEqual(wl_sigma, .0f, glm::epsilon<float>()))
@@ -112,7 +112,7 @@ void Reconstruction::filter_H_cuda(float* volumeGpu, float wl_mean, float wl_sig
 	// Pad H in host
 	size_t padding = (nt_pad - nt) / 2;
 	cufftComplex* d_H = nullptr;
-	padIntensity(volumeGpu, d_H, padding, border);
+	padIntensity(intensityGpu, d_H, padding, border);
 
 	// Transfer H_pad_host and K to device
 	cufftComplex* d_K = nullptr;
@@ -151,8 +151,8 @@ void Reconstruction::filter_H_cuda(float* volumeGpu, float wl_mean, float wl_sig
 	//
 	//normalizeH<<<grid, block>>>(d_H, batch, nt_pad);		// I read the IFFT results, and they were too small; I think this is not needed
 
-	readBackFromIFFT<<<grid, block>>>(d_H, volumeGpu, sliceSize, nt, nt_pad, padding, sliceSize * nt);
-	CudaHelper::downloadBufferGPU(volumeGpu, _nlosData->_data.data(), _nlosData->_data.size(), 0);
+	readBackFromIFFT<<<grid, block>>>(d_H, intensityGpu, sliceSize, nt, nt_pad, padding, sliceSize * nt);
+	CudaHelper::downloadBufferGPU(intensityGpu, _nlosData->_data.data(), _nlosData->_data.size(), 0);
 
 	// 
 	CUFFT_CHECK(cufftDestroy(planH));

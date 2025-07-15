@@ -12,7 +12,7 @@ enum PostprocessingFilterType
 enum ReconstructionType
 {
 	BACKPROJECTION,
-	LCT,
+	LCT_REC,
 	FK,
 	PHASOR_FIELD,
 	NUM_RECONSTRUCTION_TYPES
@@ -36,7 +36,7 @@ public:
 	bool						_saveReconstructedBoundingBox;
 
 	TransientParameters() :
-		_reconstructionType(ReconstructionType::BACKPROJECTION),
+		_reconstructionType(ReconstructionType::LCT_REC),
 		_useFourierFilter(true),
 		_compensateLaserCosDistance(true),
 		_reconstructAABB(true),
