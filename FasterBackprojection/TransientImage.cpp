@@ -24,7 +24,7 @@ void TransientImage::save(const std::string& filename, const glm::uvec4* slice)
 	SOIL_save_image(filename.c_str(), SOIL_SAVE_TYPE_PNG, _width, _height, _depth, _image.data());
 }
 
-void TransientImage::save(const std::string& filename, float* slice, const glm::uvec2& size, glm::uint stride, glm::uint offset, bool normalize)
+void TransientImage::save(const std::string& filename, float* slice, const glm::uvec2& size, glm::uint stride, glm::uint offset, bool normalize, bool flip)
 {
 	if (normalize)
 		normalizeImage(slice);
@@ -37,7 +37,8 @@ void TransientImage::save(const std::string& filename, float* slice, const glm::
 		_image[idx * 4 + 3] = 255;
 	}
 
-	flipImageVertically(_image, _width, _height, _depth);
+	if (flip)
+		flipImageVertically(_image, _width, _height, _depth);
 
 	if (size != glm::uvec2(_width, _height))
 		resize(size.x, size.y, Interpolation::BILINEAR);

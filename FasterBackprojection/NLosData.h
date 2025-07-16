@@ -50,8 +50,10 @@ protected:
 	// Exhaustive
 	void setUp(std::vector<float>& data, const std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>>& rawData);
 
+	static glm::uint getZOffset(const std::string& filename);
+
 	void loadMat(const std::string& filename);
-	bool loadLCTMat(mat_t* matFile);
+	bool loadLCTMat(mat_t* matFile, glm::uint zOffset = 0);
 
 	bool loadBinaryFile(const std::string& filename);
 	bool saveBinaryFile(const std::string& filename) const;

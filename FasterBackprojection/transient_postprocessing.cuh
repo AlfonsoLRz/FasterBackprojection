@@ -106,11 +106,14 @@ inline __global__ void multiplyKernel(cufftComplex* __restrict__ volume, const c
 	}
 }
 
-inline __global__ void normalizeIFFT(float* __restrict__ data, glm::uint size)
+inline __global__ void normalizeIFFT(cufftComplex* __restrict__ data, glm::uint size, float scale)
 {
 	glm::uint tid = blockIdx.x * blockDim.x + threadIdx.x;
-	if (tid < size) 
-		data[tid] /= static_cast<float>(size);
+	if (tid < size)
+	{
+		data[tid].x *= scale;
+		data[tid].y *= scale;
+	}
 }
 
 inline __global__ void buildLoGKernel3D(cufftComplex* kernel, int nx, int ny, int nz, float sigma)

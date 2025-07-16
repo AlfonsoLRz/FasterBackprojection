@@ -10,10 +10,15 @@ protected:
 	static void reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo);
 
 	static cufftComplex* definePSFKernel(const glm::uvec3& dataResolution, float slope);
-	static void defineTransformOperator(glm::uint numTimeBins, float*& d_mtx, float*& d_inverseMtx);
+	static void defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseMtx);
+
 	static cufftComplex* prepareIntensity(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
-	void multiplyKernel(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
-	cufftComplex* transformData(float* volumeGpu, const glm::uvec3& dataResolution, float*& mtx, float*& inverseMtx);
+	void multiplyKernel(float* volumeGpu, cufftComplex* inversePSF, const glm::uvec3& dataResolution);
+
+	static float* transformData(float* volumeGpu, const glm::uvec3& dataResolution, float*& mtx);
+	static void inverseTransformData(float* volumeGpu, float* multResult, const glm::uvec3& dataResolution, float*& inverseMtx);
+
+	static float* getMaximumZ(float* volumeGpu, const glm::uvec3& dataResolution);
 
 public:
 	void reconstructDepths(

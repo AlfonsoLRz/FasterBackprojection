@@ -78,14 +78,34 @@ inline __global__ void rollPSF(const float* __restrict__ psf, cufftComplex* __re
     rolledPsf[getKernelIdx(new_x, new_y, t, dataResolution)].x = psf[getKernelIdx(x, y, t, dataResolution)];
 }
 
-inline __global__ void padIntensityFFT(
-    const float* __restrict__ H, cufftComplex* __restrict__ H_pad, glm::uint sliceSize, glm::uint nt, glm::uint nt_pad)
+inline __global__ void multiplyPSF(cufftComplex* d_H, const cufftComplex* d_K, glm::uint size)
 {
-	const glm::uint xy = blockIdx.x * blockDim.x + threadIdx.x, t = blockIdx.y * blockDim.y + threadIdx.y;
-	if (xy >= sliceSize || t >= nt) 
+    const glm::uint idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size)
         return;
 
-	H_pad[xy * nt_pad + t].x = H[xy * nt + t];
+    cufftComplex h = d_H[idx];
+    cufftComplex k = d_K[idx];
+
+    d_H[idx] = { h.x * k.x - h.y * k.y, h.x * k.y + h.y * k.x };
+}
+
+inline __global__ void padIntensityFFT(const float* __restrict__ H, cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)
+{
+    const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
+        return;
+
+    H_pad[x * newResolution.y * newResolution.z + y * newResolution.z + t].x = H[x * currentResolution.y * currentResolution.z + y * currentResolution.z + t];
+}
+
+inline __global__ void unpadIntensityFFT(float* __restrict__ H, const cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)
+{
+    const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
+        return;
+
+    H[x * currentResolution.y * currentResolution.z + y * currentResolution.z + t] = H_pad[x * newResolution.y * newResolution.z + y * newResolution.z + t].x;
 }
 
 inline __global__ void wienerFilterPsf(cufftComplex* __restrict__ psf, glm::uvec3 dataResolution, float snr)
@@ -100,9 +120,9 @@ inline __global__ void wienerFilterPsf(cufftComplex* __restrict__ psf, glm::uvec
 
     if (norm > 0.0f)
     {
-        float wienerFactor = safeRCP(norm + snr);
-        psf[kernelIdx].x = wienerFactor * value.x;
-        psf[kernelIdx].y = wienerFactor * value.y;
+        float wienerFactor = safeRCP(norm + 1.0f / snr);
+        psf[kernelIdx].x = wienerFactor * conjugate.x;
+        psf[kernelIdx].y = wienerFactor * conjugate.y;
     }
     else
     {
@@ -125,15 +145,22 @@ inline __global__ void scaleIntensity(float* __restrict__ intensity, const glm::
     intensity[getKernelIdx(x, y, t, dataResolution)] *= tempWeight;
 }
 
-inline __global__ void multiplyTransformTranspose(float* __restrict__ volumeGpu, float* __restrict__ mtx, float* __restrict__ mult, glm::uint XY, glm::uint M)
+inline __global__ void multiplyTransformTranspose(float* __restrict__ volumeGpu, float* __restrict__ mtx, float* __restrict__ mult, glm::uvec3 dataResolution)
 {
-	const glm::uint idx = blockIdx.x * blockDim.x + threadIdx.x, idy = blockIdx.y * blockDim.y + threadIdx.y;
-    if (idx < XY && idy < M) {
+    int x_idx = blockIdx.x * blockDim.x + threadIdx.x;  // 0..N-1
+    int y_idx = blockIdx.y * blockDim.y + threadIdx.y;  // 0..N-1
+    int t_idx = blockIdx.z * blockDim.z + threadIdx.z;  // 0..M-1
+
+    if (x_idx < dataResolution.x && y_idx < dataResolution.y && t_idx < dataResolution.z) 
+    {
+        int linear_idx = y_idx * dataResolution.y + x_idx;  // XY index (row-major)
         float sum = 0.0f;
-        for (int k = 0; k < M; ++k) 
-            sum += mtx[idy * M + k] * volumeGpu[idx * M + k];
-        
-        mult[idx * M + idy] = sum;
+
+        for (int k = 0; k < dataResolution.z; ++k) 
+            sum += mtx[t_idx * dataResolution.z + k] * volumeGpu[linear_idx * dataResolution.z + k];
+
+        // Store in x, y, t order
+        mult[(y_idx * dataResolution.y + x_idx) * dataResolution.z + t_idx] = sum;
     }
 }
 
@@ -187,4 +214,22 @@ inline __global__ void downsampleOperator(float* mtx, float* inverseMtx, glm::ui
         }
         __syncthreads();
     }
+}
+
+// Results
+
+inline __global__ void formImage(float* __restrict__ volume, float* __restrict__ image, glm::uvec3 dataResolution)
+{
+	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= dataResolution.x || y >= dataResolution.y)
+		return;
+
+	float maxValue = -FLT_MAX;
+    for (glm::uint t = 0; t < dataResolution.z; ++t)
+    {
+		const glm::uint idx = x * dataResolution.y * dataResolution.z + y * dataResolution.z + t;
+		maxValue = glm::max(maxValue, volume[idx]);
+	}
+
+	image[y * dataResolution.x + x] = maxValue;
 }

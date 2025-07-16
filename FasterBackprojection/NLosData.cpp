@@ -312,6 +312,30 @@ void NLosData::setUp(std::vector<float>& data,
 	_dims = { numRowsLaser, numColsLaser, numRowsCamera, numColsCamera, numTimeBins };
 }
 
+glm::uint NLosData::getZOffset(const std::string& filename)
+{
+	if (filename.find("data_resolution_chart_40cm") != std::string::npos)
+		return 350;
+	if (filename.find("data_resolution_chart_65cm") != std::string::npos)
+		return 700;
+	if (filename.find("data_dot_chart_40cm") != std::string::npos)
+		return 350;
+	if (filename.find("data_dot_chart_65cm") != std::string::npos)
+		return 700;
+	if (filename.find("data_mannequin") != std::string::npos)
+		return 300;
+	if (filename.find("data_exit_sign") != std::string::npos)
+		return 600;
+	if (filename.find("data_s_u") != std::string::npos)
+		return 800;
+	if (filename.find("data_outdoor_s") != std::string::npos)
+		return 700;
+	if (filename.find("data_diffuse_s") != std::string::npos)
+		return 100;
+
+	return 0;
+}
+
 void NLosData::loadMat(const std::string& filename)
 {
 	// Open the .mat file
@@ -326,13 +350,13 @@ void NLosData::loadMat(const std::string& filename)
 		Mat_VarFree(matvar);
 	}
 
-	if (loadLCTMat(matFile))
+	if (loadLCTMat(matFile, getZOffset(filename)))
 		return;
 
 	throw std::runtime_error("NLosData: Failed to load LCT data from .mat file.");
 }
 
-bool NLosData::loadLCTMat(mat_t* matFile)
+bool NLosData::loadLCTMat(mat_t* matFile, glm::uint zOffset)
 {
 	matvar_t* rectDataVar = Mat_VarRead(matFile, "rect_data");
 	if (!rectDataVar)
@@ -360,7 +384,7 @@ bool NLosData::loadLCTMat(mat_t* matFile)
 			for (size_t t = 0; t < _dims[2]; ++t)
 			{
 				size_t idx = y * _dims[1] * _dims[2] + x * _dims[2] + t;
-				_data[idx] = static_cast<float>(rectData[t * _dims[0] * _dims[1] + x * _dims[0] + y]);
+				_data[idx] = static_cast<float>(rectData[t * _dims[0] * _dims[1] + x * _dims[0] + y]) * static_cast<float>(t >= zOffset);
 			}
 		}
 	}

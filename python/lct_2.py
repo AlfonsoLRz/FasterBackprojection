@@ -71,8 +71,6 @@ def cnlos_reconstruction(scene=7):
     M = rect_data.shape[2]  # Temporal resolution of data
     range_ = M * c * bin_resolution  # Maximum range for histogram
 
-    print(range_)
-
     # Downsample data to 16 picoseconds
     # for k in range(K):
     #     M = M // 2
@@ -80,10 +78,6 @@ def cnlos_reconstruction(scene=7):
     #     rect_data = rect_data[:, :, ::2] + rect_data[:, :, 1::2]
     #     z_trim = round(z_trim / 2)
     #     z_offset = round(z_offset / 2)
-
-    print(rect_data[0, 0, :100])  # Print first 10 bins of the first pixel
-    print(rect_data.dtype)
-    print(data['width'].dtype)
 
     # Set first group of histogram bins to zero (to remove direct component)
     rect_data[:, :, :z_trim] = 0
@@ -137,9 +131,10 @@ def cnlos_reconstruction(scene=7):
     tvol = tvol[:M, :N, :N]  # Truncate back to M x N x N
 
     # Step 4: Resample depth axis and clamp results
-    tvol_reshaped = tvol.reshape(M, N * N)
-    transformed_tvol = mtxi @ tvol_reshaped
-    vol = transformed_tvol.reshape(M, N, N)
+    # tvol_reshaped = tvol.reshape(M, N * N)
+    # transformed_tvol = mtxi @ tvol_reshaped
+    # vol = transformed_tvol.reshape(M, N, N)
+    vol = tvol
 
     print('... done.')
     time_elapsed = time.time() - start_time
@@ -233,4 +228,4 @@ def resampling_operator(M):
     return mtx, mtxi
 
 # Example usage:
-cnlos_reconstruction(scene=6)
+cnlos_reconstruction(scene=5)
