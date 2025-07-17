@@ -131,10 +131,9 @@ def cnlos_reconstruction(scene=7):
     tvol = tvol[:M, :N, :N]  # Truncate back to M x N x N
 
     # Step 4: Resample depth axis and clamp results
-    # tvol_reshaped = tvol.reshape(M, N * N)
-    # transformed_tvol = mtxi @ tvol_reshaped
-    # vol = transformed_tvol.reshape(M, N, N)
-    vol = tvol
+    tvol_reshaped = tvol.reshape(M, N * N)
+    transformed_tvol = mtxi @ tvol_reshaped
+    vol = transformed_tvol.reshape(M, N, N)
 
     print('... done.')
     time_elapsed = time.time() - start_time

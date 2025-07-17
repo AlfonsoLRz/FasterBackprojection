@@ -340,23 +340,20 @@ void NLosData::loadMat(const std::string& filename)
 {
 	// Open the .mat file
 	mat_t* matFile = Mat_Open(filename.c_str(), MAT_ACC_RDONLY);
-	if (!matFile) {
-		std::cerr << "Error opening .mat file!" << '\n';
-	}
+	if (!matFile) 
+		throw std::runtime_error("NLosData: Failed to load LCT data from .mat file.");
 
-	matvar_t* matvar;
-	while ((matvar = Mat_VarReadNextInfo(matFile)) != NULL) {
-		std::cout << "Found variable: " << matvar->name << std::endl;
-		Mat_VarFree(matvar);
-	}
+	//matvar_t* matvar;
+	//while ((matvar = Mat_VarReadNextInfo(matFile)) != nullptr) {
+	//	std::cout << "Found variable: " << matvar->name << std::endl;
+	//	Mat_VarFree(matvar);
+	//}
 
-	if (loadLCTMat(matFile, getZOffset(filename)))
+	if (loadLCTMat(matFile, 600, getZOffset(filename)))
 		return;
-
-	throw std::runtime_error("NLosData: Failed to load LCT data from .mat file.");
 }
 
-bool NLosData::loadLCTMat(mat_t* matFile, glm::uint zOffset)
+bool NLosData::loadLCTMat(mat_t* matFile, glm::uint zTrim, glm::uint zOffset)
 {
 	matvar_t* rectDataVar = Mat_VarRead(matFile, "rect_data");
 	if (!rectDataVar)
@@ -384,7 +381,7 @@ bool NLosData::loadLCTMat(mat_t* matFile, glm::uint zOffset)
 			for (size_t t = 0; t < _dims[2]; ++t)
 			{
 				size_t idx = y * _dims[1] * _dims[2] + x * _dims[2] + t;
-				_data[idx] = static_cast<float>(rectData[t * _dims[0] * _dims[1] + x * _dims[0] + y]) * static_cast<float>(t >= zOffset);
+				_data[idx] = static_cast<float>(rectData[t * _dims[0] * _dims[1] + x * _dims[0] + y]) * static_cast<float>(t >= zTrim);
 			}
 		}
 	}
@@ -412,9 +409,10 @@ bool NLosData::loadLCTMat(mat_t* matFile, glm::uint zOffset)
 	_laserGridSize = glm::vec2(_dims[1], _dims[0]);
 	_discardFirstLastBounces = true;
 	_isConfocal = true;
-	_temporalResolution = _dims.back();
-	_deltaT = 4e-12;
+	_temporalResolution = static_cast<glm::uint>(_dims.back());
+	_deltaT = static_cast<float>(4e-12);
 	_t0 = .0f;
+	_zOffset = zOffset;
 
 	for (size_t i = 0; i < _cameraGridPositions.size(); ++i)
 	{
@@ -444,6 +442,7 @@ bool NLosData::loadBinaryFile(const std::string& filename)
 	file.read(reinterpret_cast<char*>(&_temporalWidth), sizeof(float));
 	file.read(reinterpret_cast<char*>(&_isConfocal), sizeof(bool));
 	file.read(reinterpret_cast<char*>(&_hiddenGeometry), sizeof(AABB));
+	file.read(reinterpret_cast<char*>(&_zOffset), sizeof(glm::uint));
 
 	size_t numDims;
 	file.read(reinterpret_cast<char*>(&numDims), sizeof(size_t));
@@ -494,6 +493,7 @@ bool NLosData::saveBinaryFile(const std::string& filename) const
 	file.write(reinterpret_cast<const char*>(&_temporalWidth), sizeof(float));
 	file.write(reinterpret_cast<const char*>(&_isConfocal), sizeof(bool));
 	file.write(reinterpret_cast<const char*>(&_hiddenGeometry), sizeof(AABB));
+	file.write(reinterpret_cast<const char*>(&_zOffset), sizeof(glm::uint));
 
 	size_t numDims = _dims.size();
 	file.write(reinterpret_cast<const char*>(&numDims), sizeof(size_t));
