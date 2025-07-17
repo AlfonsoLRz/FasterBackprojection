@@ -61,9 +61,6 @@ void LCT::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& rec
 	CudaHelper::free(psfKernel);
 	CudaHelper::free(mtx);
 	CudaHelper::free(mtxi);
-
-	//backprojectConfocalVoxel << <gridSize, blockSize >> > (volume, sliceSize);
-	//CudaHelper::synchronize("backprojectConfocalVoxel");
 }
 
 void LCT::reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo)
@@ -294,6 +291,7 @@ void LCT::defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseM
 	std::vector<float> mtxHost(M2);
 
 	// Iterate over the sparse matrix and copy to dense
+	#pragma omp parallel for
 	for (int k = 0; k < mtx.outerSize(); ++k)
 		for (SparseMatrixF_RowMajor::InnerIterator it(mtx, k); it; ++it) 
 			mtxHost[it.row() * M + it.col()] = it.value();
@@ -301,6 +299,7 @@ void LCT::defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseM
 	CudaHelper::initializeBufferGPU(d_mtx, mtxHost.size(), mtxHost.data());
 
 	// Prepare inverse matrix(transpose of mtx)
+	#pragma omp parallel for
 	for (int k = 0; k < mtxi.outerSize(); ++k)
 		for (SparseMatrixF_ColMajor::InnerIterator it(mtxi, k); it; ++it) 
 			mtxHost[it.row() * M + it.col()] = it.value();
@@ -308,12 +307,7 @@ void LCT::defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseM
 	CudaHelper::initializeBufferGPU(d_inverseMtx, mtxHost.size(), mtxHost.data());
 }
 
-cufftComplex* LCT::prepareIntensity(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
-{
-	return nullptr;
-}
-
-void LCT::multiplyKernel(float* volumeGpu, cufftComplex* inversePSF, const glm::uvec3& dataResolution)
+void LCT::multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const glm::uvec3& dataResolution)
 {
 	glm::uint nt = dataResolution.z, nt_pad = nt * 2;
 
@@ -355,6 +349,7 @@ void LCT::multiplyKernel(float* volumeGpu, cufftComplex* inversePSF, const glm::
 	CUFFT_CHECK(cufftExecC2C(planH, d_H, d_H, CUFFT_INVERSE));
 	CUFFT_CHECK(cufftDestroy(planH));
 
+	// IFFT requires normalization, but it also produces very small values, so we avoid this and produce valid results by normalizing later
 	//normalizeIFFT<<<CudaHelper::getNumBlocks(newDimProduct, 512), 512>>>(d_H, newDimProduct, 1.0f / newDimProduct);
 
 	//
@@ -362,7 +357,7 @@ void LCT::multiplyKernel(float* volumeGpu, cufftComplex* inversePSF, const glm::
 	CudaHelper::synchronize("unpadIntensityFFT");
 }
 
-float* LCT::transformData(float* volumeGpu, const glm::uvec3& dataResolution, float*& mtx)
+float* LCT::transformData(float* volumeGpu, const glm::uvec3& dataResolution, float* mtx)
 {
 	dim3 blockSize3D(8, 8, 8);
 	dim3 gridSize3D(
@@ -409,7 +404,7 @@ float* LCT::getMaximumZ(float* volumeGpu, const glm::uvec3& dataResolution)
 		(dataResolution.x + blockSize.x - 1) / blockSize.x,
 		(dataResolution.y + blockSize.y - 1) / blockSize.y
 	);
-	formImage<<<gridSize, blockSize>>>(volumeGpu, maxZ, dataResolution);
+	composeImage<<<gridSize, blockSize>>>(volumeGpu, maxZ, dataResolution);
 	CudaHelper::synchronize("formImage");
 
 	std::vector<float> maxZHost(dataResolution.x * dataResolution.y);

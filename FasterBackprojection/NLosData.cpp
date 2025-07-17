@@ -414,12 +414,13 @@ bool NLosData::loadLCTMat(mat_t* matFile, glm::uint zTrim, glm::uint zOffset)
 	_t0 = .0f;
 	_zOffset = zOffset;
 
+	#pragma omp parallel for
 	for (size_t i = 0; i < _cameraGridPositions.size(); ++i)
 	{
-		_cameraGridPositions[i] = glm::vec3(static_cast<float>(i / _dims[0]), 0.0f, static_cast<float>(i % _dims[0]));
+		_cameraGridPositions[i] = glm::vec3(static_cast<float>(i) / static_cast<float>(_dims[0]), 0.0f, static_cast<float>(i % _dims[0]));
 		_cameraGridNormals[i] = glm::vec3(0.0f, -1.0f, 0.0f);
 
-		_laserGridPositions[i] = glm::vec3(static_cast<float>(i / _dims[0]), 0.0f, static_cast<float>(i % _dims[0]));
+		_laserGridPositions[i] = glm::vec3(static_cast<float>(i) / static_cast<float>(_dims[0]), 0.0f, static_cast<float>(i % _dims[0]));
 		_laserGridNormals[i] = glm::vec3(0.0f, -1.0f, 0.0f);
 	}
 

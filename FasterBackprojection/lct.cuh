@@ -3,15 +3,6 @@
 #include "stdafx.h"
 #include "math.cuh"
 
-#define CHECK_CUSPARSE(call) \
-    do { \
-        cusparseStatus_t status = call; \
-        if (status != CUSPARSE_STATUS_SUCCESS) { \
-            fprintf(stderr, "cuSPARSE error at %s:%d - %s\n", __FILE__, __LINE__, cusparseGetErrorString(status)); \
-            exit(EXIT_FAILURE); \
-        } \
-    } while (0)
-
 inline __forceinline__ __device__ glm::uint getKernelIdx(glm::uint x, glm::uint y, glm::uint t, const glm::uvec3& dataResolution)
 {
 	return x * dataResolution.y * dataResolution.z + y * dataResolution.z + t;
@@ -43,7 +34,7 @@ inline __global__ void findMinimumBinarize(float* __restrict__ psf, glm::uvec3 d
 
     // Binarize
     for (glm::uint t = 0; t < dataResolution.z; t++)
-        psf[getKernelIdx(x, y, t, dataResolution)] = psf[getKernelIdx(x, y, t, dataResolution)] == minZ ? 1.0f : 0.0f;
+        psf[getKernelIdx(x, y, t, dataResolution)] = static_cast<float>(glm::epsilonEqual(psf[getKernelIdx(x, y, t, dataResolution)], minZ, glm::epsilon<float>()));
 }
 
 inline __global__ void normalizePSF(float* __restrict__ psf, const float* __restrict__ centerSum, glm::uvec3 dataResolution)
@@ -162,74 +153,4 @@ inline __global__ void multiplyTransformTranspose(float* __restrict__ volumeGpu,
         // Store in x, y, t order
         mult[(y_idx * dataResolution.y + x_idx) * dataResolution.z + t_idx] = sum;
     }
-}
-
-// Resampling
-
-inline __global__ void buildResamplingOperator(float* mtx, float* inverseMtx, glm::uint M)
-{
-    glm::uint idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= M * M) return;
-
-    // Build forward operator
-    glm::uint col = static_cast<glm::uint>(ceilf(sqrtf(static_cast<float>(idx) + 1))) - 1;
-    float val = 1.0f / sqrtf(static_cast<float>(idx) + 1);
-    mtx[idx * M + col] = val;
-
-    // Build inverse operator (transposed)
-    if (idx < M) 
-        for (glm::uint i = idx * idx; i < (idx + 1) * (idx + 1); ++i)
-            if (i < M * M) 
-                inverseMtx[idx * M * M + i] = val;
-}
-
-inline __global__ void downsampleOperator(float* mtx, float* inverseMtx, glm::uint M, glm::uint K)
-{
-    glm::uint idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    for (glm::uint k = 0; k < K; k++)
-    {
-        glm::uint new_M = M >> (k + 1);
-        if (idx < new_M) 
-        {
-            // forward operator
-            for (glm::uint j = 0; j < M; j++)
-            {
-                float sum = 0.0f;
-                for (glm::uint i = 2 * idx; i < 2 * (idx + 1); i++)
-                    sum += mtx[i * M + j];
-
-                mtx[idx * new_M + j] = 0.5f * sum;
-            }
-
-            // inverse operator
-            for (glm::uint j = 0; j < new_M; j++)
-            {
-                float sum = 0.0f;
-                for (glm::uint i = 2 * j; i < 2 * (j + 1); i++)
-                    sum += inverseMtx[idx * M + i];
-
-                inverseMtx[idx * new_M + j] = 0.5f * sum;
-            }
-        }
-        __syncthreads();
-    }
-}
-
-// Results
-
-inline __global__ void formImage(float* __restrict__ volume, float* __restrict__ image, glm::uvec3 dataResolution)
-{
-	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= dataResolution.x || y >= dataResolution.y)
-		return;
-
-	float maxValue = -FLT_MAX;
-    for (glm::uint t = 0; t < dataResolution.z; ++t)
-    {
-		const glm::uint idx = x * dataResolution.y * dataResolution.z + y * dataResolution.z + t;
-		maxValue = glm::max(maxValue, volume[idx]);
-	}
-
-	image[y * dataResolution.x + x] = maxValue;
 }

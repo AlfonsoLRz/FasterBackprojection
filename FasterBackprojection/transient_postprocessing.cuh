@@ -20,10 +20,7 @@ inline __global__ void normalizeReconstruction(float* __restrict__ v, glm::uint 
 
 inline __global__ void laplacianFilter(const float* __restrict__ volume, float* __restrict__ processed, glm::uvec3 resolution, float filterSize)
 {
-	const int tx = blockIdx.x * blockDim.x + threadIdx.x;
-	const int ty = blockIdx.y * blockDim.y + threadIdx.y;
-	const int tz = blockIdx.z * blockDim.z + threadIdx.z;
-
+	const glm::uint tx = blockIdx.x * blockDim.x + threadIdx.x, ty = blockIdx.y * blockDim.y + threadIdx.y, tz = blockIdx.z * blockDim.z + threadIdx.z;
 	if (tx >= resolution.x || ty >= resolution.y || tz >= resolution.z)
 		return;
 
@@ -148,4 +145,22 @@ inline __global__ void buildLoGKernel3D(cufftComplex* kernel, int nx, int ny, in
 
 	kernel[idx].x = val;
 	kernel[idx].y = 0.0f;  // No imaginary part for real, symmetric kernel
+}
+
+//
+
+inline __global__ void composeImage(float* __restrict__ volume, float* __restrict__ image, glm::uvec3 dataResolution)
+{
+	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
+	if (x >= dataResolution.x || y >= dataResolution.y)
+		return;
+
+	float maxValue = -FLT_MAX;
+	for (glm::uint t = 0; t < dataResolution.z; ++t)
+	{
+		const glm::uint idx = x * dataResolution.y * dataResolution.z + y * dataResolution.z + t;
+		maxValue = glm::max(maxValue, volume[idx]);
+	}
+
+	image[y * dataResolution.x + x] = maxValue;
 }

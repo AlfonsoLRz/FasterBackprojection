@@ -12,10 +12,9 @@ protected:
 	static cufftComplex* definePSFKernel(const glm::uvec3& dataResolution, float slope);
 	static void defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseMtx);
 
-	static cufftComplex* prepareIntensity(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
-	void multiplyKernel(float* volumeGpu, cufftComplex* inversePSF, const glm::uvec3& dataResolution);
+	static void multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const glm::uvec3& dataResolution);
 
-	static float* transformData(float* volumeGpu, const glm::uvec3& dataResolution, float*& mtx);
+	static float* transformData(float* volumeGpu, const glm::uvec3& dataResolution, float* mtx);
 	static void inverseTransformData(float* volumeGpu, float* multResult, const glm::uvec3& dataResolution, float*& inverseMtx);
 
 	static float* getMaximumZ(float* volumeGpu, const glm::uvec3& dataResolution);
