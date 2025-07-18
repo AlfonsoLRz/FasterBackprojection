@@ -28,8 +28,7 @@ protected:
 	void filter_H_cuda(float* intensityGpu, float wl_mean, float wl_sigma = .0f, const std::string& border = "zero") const;
 
 	// Pre-processing functions
-	void compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers) const;
-
+	static void compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
 	static void normalizeMatrix(float* v, glm::uint size);
 
 	static bool saveReconstructedAABB(const std::string& filename, float* voxels, glm::uint numVoxels);

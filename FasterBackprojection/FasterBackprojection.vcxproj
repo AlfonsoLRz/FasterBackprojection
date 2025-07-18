@@ -102,6 +102,7 @@
     <ClInclude Include="AABB.h" />
     <ClInclude Include="ApplicationState.h" />
     <CudaCompile Include="Backprojection.cu" />
+    <CudaCompile Include="FK.cu" />
     <CudaCompile Include="GpuStructs.cu" />
     <CudaCompile Include="Laser.cu">
       <FileType>Document</FileType>
@@ -119,6 +120,8 @@
     <ClInclude Include="DrawEllipsoids.h" />
     <ClInclude Include="DrawPointCloud.h" />
     <ClInclude Include="FileUtilities.h" />
+    <ClInclude Include="fk.cuh" />
+    <ClInclude Include="FK.h" />
     <ClInclude Include="FloatImage.h" />
     <ClInclude Include="fonts\font_awesome.hpp" />
     <ClInclude Include="fonts\IconsFontAwesome5.h" />

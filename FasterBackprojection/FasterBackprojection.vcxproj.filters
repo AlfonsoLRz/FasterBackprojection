@@ -195,8 +195,21 @@
     <ClInclude Include="PostprocessingFilters.h">
       <Filter>header</Filter>
     </ClInclude>
-    <ClInclude Include="Backprojection.h" />
-    <ClInclude Include="Reconstruction.h" />
+    <ClInclude Include="backprojection.cuh">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="Backprojection.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="Reconstruction.h">
+      <Filter>source</Filter>
+    </ClInclude>
+    <ClInclude Include="FK.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="fk.cuh">
+      <Filter>header\cuda</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Window.cpp">
@@ -307,9 +320,6 @@
     <ClCompile Include="NLosData.cpp">
       <Filter>source</Filter>
     </ClCompile>
-    <ClCompile Include="LCT.cpp">
-      <Filter>source</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="GpuStructs.cu">
@@ -322,6 +332,18 @@
       <Filter>source</Filter>
     </CudaCompile>
     <CudaCompile Include="Backprojection.cu">
+      <Filter>source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="preprocessing.cuh">
+      <Filter>header\cuda</Filter>
+    </CudaCompile>
+    <CudaCompile Include="LCT.cu">
+      <Filter>source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="Reconstruction.cu">
+      <Filter>source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="FK.cu">
       <Filter>source</Filter>
     </CudaCompile>
   </ItemGroup>

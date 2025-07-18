@@ -23,25 +23,34 @@
 
 void LCT::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
 {
-	ChronoUtilities::startTimer();
-
 	const glm::uvec3 volumeResolution = glm::uvec3(_nlosData->_dims[0], _nlosData->_dims[1], _nlosData->_dims[2]);
-	float tDistance = static_cast<float>(recInfo._numTimeBins) * recInfo._timeStep * LIGHT_SPEED;
+	float tDistance = static_cast<float>(recInfo._numTimeBins) * recInfo._timeStep;
 	float* intensityGpu = recBuffers._intensity;
 
 	// Define the point spread function (PSF) kernel
-	cufftComplex* psfKernel = definePSFKernel(volumeResolution, _nlosData->_temporalWidth / tDistance);
+	ChronoUtilities::startTimer();
+	cufftComplex* psfKernel = definePSFKernel(volumeResolution, glm::abs(_nlosData->_temporalWidth / tDistance));
+	std::cout << "PSF kernel defined in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// Forward and backward transform operators
 	float* mtx, *mtxi;
+	ChronoUtilities::startTimer();
 	defineTransformOperator(recInfo._numTimeBins, mtx, mtxi);
+	std::cout << "Transform operator defined in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+
+	ChronoUtilities::startTimer();
 	float* transformedData = transformData(intensityGpu, volumeResolution, mtx);
+	std::cout << "Data transformed in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// FFT + PSF + IFFT
+	ChronoUtilities::startTimer();
 	multiplyKernel(transformedData, psfKernel, volumeResolution);
+	std::cout << "Kernel multiplied in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// Inverse transform the data
+	ChronoUtilities::startTimer();
 	inverseTransformData(transformedData, intensityGpu, volumeResolution, mtxi);
+	std::cout << "Data inverse transformed in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// Get maximum value along the temporal dimension
 	float* maxZ = getMaximumZ(transformedData, volumeResolution);
@@ -81,9 +90,9 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 	
     dim3 blockSize(8, 8, 8);
     dim3 gridSize(
-		(totalRes.x + blockSize.x - 1) / blockSize.x,
+		(totalRes.z + blockSize.x - 1) / blockSize.x,
         (totalRes.y + blockSize.y - 1) / blockSize.y,
-        (totalRes.z + blockSize.z - 1) / blockSize.z
+        (totalRes.x + blockSize.z - 1) / blockSize.z
 	);
 
 	// RSD
@@ -164,6 +173,8 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 		CUFFT_CHECK(cufftExecC2C(planPSF, rolledPsf, rolledPsf, CUFFT_FORWARD));
 		CUFFT_CHECK(cufftDestroy(planPSF));
 	}
+
+	ChronoUtilities::startTimer();
 
 	// Wiener filter
 	{
@@ -309,8 +320,6 @@ void LCT::defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseM
 
 void LCT::multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const glm::uvec3& dataResolution)
 {
-	glm::uint nt = dataResolution.z, nt_pad = nt * 2;
-
 	//
 	glm::uvec3 newDims = dataResolution * glm::uvec3(2);
 	size_t newDimProduct = static_cast<size_t>(newDims.x) * newDims.y * newDims.z;
@@ -367,7 +376,11 @@ float* LCT::transformData(float* volumeGpu, const glm::uvec3& dataResolution, fl
 	);
 
 	// Scale the intensity values according to the material type (diffuse or not)
-	scaleIntensity<<<gridSize3D, blockSize3D>>>(volumeGpu, dataResolution, false);
+	float weight = 1.0f / (static_cast<float>(dataResolution.z) - 1.0f);
+	//weight = weight * weight * weight * weight;		// Diffuse
+	weight = weight * weight;
+
+	scaleIntensity<<<gridSize3D, blockSize3D>>>(volumeGpu, dataResolution, weight);
 	CudaHelper::synchronize("scaleIntensity");
 
 	// ---- Multiply by the transform matrix (time dimension * time dimension)
@@ -425,22 +438,12 @@ void LCT::reconstructVolume(
 {
 	_nlosData = nlosData;
 
-	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
-	const glm::uint numVoxels = voxelResolution.x * voxelResolution.y * voxelResolution.z;
-	float* volumeGpu = nullptr;
-	CudaHelper::initializeZeroBufferGPU(volumeGpu, numVoxels);
-
-	//if (transientParams._useFourierFilter)
-	//	filter_H_cuda(recBuffers._intensity, recInfo._timeStep * 10.0f, .0f);
+	ChronoUtilities::startTimer();
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
-		reconstructVolumeConfocal(volumeGpu, recInfo, recBuffers);
-	//else if (recInfo._captureSystem == CaptureSystem::Exhaustive)
-	//	reconstructVolumeExhaustive(volumeGpu, recInfo);
+		reconstructVolumeConfocal(nullptr, recInfo, recBuffers);
+	else
+		throw std::runtime_error("Unsupported capture system for LCT reconstruction.");
 
 	std::cout << "Reconstruction finished in " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
-
-	// Save volume & free resources
-	saveReconstructedAABB(transientParams._outputFolder + "aabb.cube", volumeGpu, numVoxels);
-	CudaHelper::free(volumeGpu);
 }

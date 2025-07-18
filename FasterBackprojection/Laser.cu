@@ -7,6 +7,7 @@
 #include "ChronoUtilities.h"
 #include "GpuStructs.cuh"
 #include "CudaHelper.h"
+#include "FK.h"
 #include "LCT.h"
 #include "NLosData.h"
 
@@ -16,7 +17,7 @@
 Reconstruction* Laser::_reconstruction[ReconstructionType::NUM_RECONSTRUCTION_TYPES] = {
 	new Backprojection(),
 	new LCT(),
-	new Backprojection(),
+	new FK(),
 	new Backprojection()
 };
 
@@ -26,6 +27,7 @@ void Laser::reconstruct(NLosData* nlosData, const TransientParameters& transient
 	ReconstructionBuffers recBuffers;
 
 	// Transfer data to GPU
+	//nlosData->downsampleTime(4);
 	nlosData->toGpu(recInfo, recBuffers, transientParams);
 
 	CudaHelper::checkError(cudaMemcpyToSymbol(rtRecInfo, &recInfo, sizeof(ReconstructionInfo)));

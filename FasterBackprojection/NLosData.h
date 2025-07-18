@@ -64,6 +64,7 @@ public:
 	NLosData(const std::string& filename, bool saveBinary = true, bool useBinary = true);
 	virtual ~NLosData();
 
+	void downsampleTime(glm::uint times);
 	void toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, const TransientParameters& transientParameters);
 
 	void saveImages(const std::string& outPath);

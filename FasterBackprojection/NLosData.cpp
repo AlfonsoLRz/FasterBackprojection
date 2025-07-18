@@ -5,7 +5,9 @@
 #include <highfive/highfive.hpp>
 #include <print>
 
+#include "ChronoUtilities.h"
 #include "CudaHelper.h"
+#include "math.cuh"
 #include "progressbar.hpp"
 #include "TransientImage.h"
 #include "TransientParameters.h"
@@ -103,6 +105,7 @@ NLosData::NLosData(const std::string& filename, bool saveBinary, bool useBinary)
 		dataset = file.getDataSet("isConfocal");
 		_isConfocal = static_cast<bool>(dataset.read<glm::uint>());
 		_discardFirstLastBounces = false;
+		_temporalWidth = _cameraGridPositions.back().x;
 
 		if (_isConfocal)
 		{
@@ -128,6 +131,41 @@ NLosData::NLosData(const std::string& filename, bool saveBinary, bool useBinary)
 }
 
 NLosData::~NLosData() = default;
+
+void NLosData::downsampleTime(glm::uint times)
+{
+	ChronoUtilities::startTimer();
+
+	size_t numSlices = _data.size() / _dims.back(), numTimeBins = _dims.back();
+	size_t newTimeDimension = numTimeBins / times;
+	std::vector<float> downsampledData(_data.size() / times);
+
+	#pragma omp parallel for
+	for (size_t slice = 0; slice < numSlices; ++slice)
+	{
+		for (size_t t = 0; t < _dims.back(); t += times)
+		{
+			size_t downsampledIndex = slice * newTimeDimension + t / times;
+			float sum = 0.0f;
+			for (size_t i = 0; i < times; ++i)
+			{
+				if (t + i < _dims.back())
+					sum += _data[slice * _dims.back() + t + i];
+			}
+
+			downsampledData[downsampledIndex] = sum / static_cast<float>(times);
+		}
+	}
+
+	_data = std::move(downsampledData);
+	_dims.back() = newTimeDimension;
+	_deltaT *= static_cast<float>(times);
+	_temporalResolution /= times;
+
+	std::cout << "NLosData: Downsampled time dimension by a factor of " << times << ". New temporal resolution: " 
+				<< _temporalResolution << ", new deltaT: " << _deltaT << '\n';
+	std::cout << "Time taken to downsample: " << ChronoUtilities::getElapsedTime() << " milliseconds.\n";
+}
 
 void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, const TransientParameters& transientParameters)
 {
@@ -410,7 +448,7 @@ bool NLosData::loadLCTMat(mat_t* matFile, glm::uint zTrim, glm::uint zOffset)
 	_discardFirstLastBounces = true;
 	_isConfocal = true;
 	_temporalResolution = static_cast<glm::uint>(_dims.back());
-	_deltaT = static_cast<float>(4e-12);
+	_deltaT = static_cast<float>(4e-12) * LIGHT_SPEED;
 	_t0 = .0f;
 	_zOffset = zOffset;
 

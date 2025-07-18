@@ -17,12 +17,12 @@ void SceneContent::buildScenario()
 
 	// Use real data and reconstruct the shape
 	//NLosData* transientVoxels = new NLosData("assets/transient/z/Z_l[0.00,-1.00,0.00]_r[1.57,0.00,3.14]_v[0.81,0.01,0.81]_s[16]_l[16]_gs[1.00].hdf5");
-	//NLosData* transientVoxels = new NLosData("assets/transient/z/Z_l[0.00,-0.50,0.00]_r[1.57,0.00,3.14]_v[0.81,0.01,0.81]_s[256]_l[256]_gs[1.00]_conf.hdf5");
+	NLosData* transientVoxels = new NLosData("assets/transient/z/Z_l[0.00,-0.50,0.00]_r[1.57,0.00,3.14]_v[0.81,0.01,0.81]_s[256]_l[256]_gs[1.00]_conf.hdf5");
 	//NLosData* transientVoxels = new NLosData("assets/transient/t/T_l[0.00,-0.40,0.00]_r[1.57,0.00,3.14]_v[0.40]_s[256]_l[256]_gs[1.50]_conf.hdf5");
 	//NLosData* transientVoxels = new NLosData("assets/transient/usaf/usaf_l[0.00,-0.50,0.00]_r[1.57,0.00,3.14]_v[0.57,0.01,0.60]_s[256]_l[256]_gs[1.00]_conf.hdf5");
 	//NLosData* transientVoxels = new NLosData("assets/transient/usaf/usaf_l[0.00,-0.50,0.00]_r[1.57,0.00,3.14]_v[0.57,0.01,0.60]_s[16]_l[16]_gs[1.00].hdf5");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/fk/bike/fk_10min.mat");
-	NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_mannequin.mat");
+	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_mannequin.mat");
 
 	//transientVoxels.saveImages("output/");
 	//NLosDataVisualizer* nlosVisualizer = new NLosDataVisualizer(transientVoxels);

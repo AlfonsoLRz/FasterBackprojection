@@ -10,7 +10,7 @@ inline __forceinline__ __device__ glm::uint getKernelIdx(glm::uint x, glm::uint 
 
 inline __global__ void computePSFKernel(float* __restrict__ psf, glm::uvec3 dataResolution, float slope)
 {
-    glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
 	if (x >= dataResolution.x || y >= dataResolution.y || t >= dataResolution.z) return;
 
     glm::vec3 grid = glm::vec3(
@@ -39,7 +39,7 @@ inline __global__ void findMinimumBinarize(float* __restrict__ psf, glm::uvec3 d
 
 inline __global__ void normalizePSF(float* __restrict__ psf, const float* __restrict__ centerSum, glm::uvec3 dataResolution)
 {
-    glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= dataResolution.x || y >= dataResolution.y || t >= dataResolution.z) return;
 
 	const glm::uint kernelIdx = getKernelIdx(x, y, t, dataResolution);
@@ -49,7 +49,7 @@ inline __global__ void normalizePSF(float* __restrict__ psf, const float* __rest
 
 inline __global__ void l2NormPSF(float* __restrict__ psf, float sqrtNorm, glm::uvec3 dataResolution)
 {
-    glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= dataResolution.x || y >= dataResolution.y || t >= dataResolution.z) return;
 
     const glm::uint kernelIdx = getKernelIdx(x, y, t, dataResolution);
@@ -59,7 +59,7 @@ inline __global__ void l2NormPSF(float* __restrict__ psf, float sqrtNorm, glm::u
 
 inline __global__ void rollPSF(const float* __restrict__ psf, cufftComplex* __restrict__ rolledPsf, glm::uvec3 originalDataResolution, glm::uvec3 dataResolution)
 {
-    glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= dataResolution.x || y >= dataResolution.y || t >= dataResolution.z) return;
 
     // Roll operation (only in x and y dimensions)
@@ -101,56 +101,38 @@ inline __global__ void unpadIntensityFFT(float* __restrict__ H, const cufftCompl
 
 inline __global__ void wienerFilterPsf(cufftComplex* __restrict__ psf, glm::uvec3 dataResolution, float snr)
 {
-    const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= dataResolution.x || y >= dataResolution.y || t >= dataResolution.z) 
         return;
 
 	const glm::uint kernelIdx = getKernelIdx(x, y, t, dataResolution);
 	cufftComplex value = psf[kernelIdx], conjugate = { value.x, -value.y };
-    float norm = value.x * value.x + value.y * value.y;
-
-    if (norm > 0.0f)
-    {
-        float wienerFactor = safeRCP(norm + 1.0f / snr);
-        psf[kernelIdx].x = wienerFactor * conjugate.x;
-        psf[kernelIdx].y = wienerFactor * conjugate.y;
-    }
-    else
-    {
-        psf[kernelIdx] = { 0.0f, 0.0f }; // Avoid division by zero
-	}
+    float wienerFactor = safeRCP(value.x * value.x + value.y * value.y + 1.0f / snr);
+    psf[kernelIdx].x = wienerFactor * conjugate.x;
+    psf[kernelIdx].y = wienerFactor * conjugate.y;
 }
 
-inline __global__ void scaleIntensity(float* __restrict__ intensity, const glm::uvec3 dataResolution, bool diffuse)
+inline __global__ void scaleIntensity(float* __restrict__ intensity, const glm::uvec3 dataResolution, float weight)
 {
 	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= dataResolution.x || y >= dataResolution.y || t >= dataResolution.z) 
 		return;
 
-	float tempWeight = static_cast<float>(t) / (static_cast<float>(dataResolution.z) - 1.0f);
-    if (diffuse)
-		tempWeight = tempWeight * tempWeight * tempWeight * tempWeight;
-    else
-		tempWeight = tempWeight * tempWeight;
-
-    intensity[getKernelIdx(x, y, t, dataResolution)] *= tempWeight;
+    intensity[getKernelIdx(x, y, t, dataResolution)] *= static_cast<float>(t) * weight;
 }
 
-inline __global__ void multiplyTransformTranspose(float* __restrict__ volumeGpu, float* __restrict__ mtx, float* __restrict__ mult, glm::uvec3 dataResolution)
+inline __global__ void multiplyTransformTranspose(
+    const float* __restrict__ volumeGpu, const float* __restrict__ mtx, float* __restrict__ mult, glm::uvec3 dataResolution)
 {
-    int x_idx = blockIdx.x * blockDim.x + threadIdx.x;  // 0..N-1
-    int y_idx = blockIdx.y * blockDim.y + threadIdx.y;  // 0..N-1
-    int t_idx = blockIdx.z * blockDim.z + threadIdx.z;  // 0..M-1
-
-    if (x_idx < dataResolution.x && y_idx < dataResolution.y && t_idx < dataResolution.z) 
+	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    if (x < dataResolution.x && y < dataResolution.y && t < dataResolution.z) 
     {
-        int linear_idx = y_idx * dataResolution.y + x_idx;  // XY index (row-major)
+        const glm::uint spatialIndex = y * dataResolution.y + x;  
+
         float sum = 0.0f;
+        for (glm::uint k = 0; k < dataResolution.z; ++k)
+            sum += mtx[t * dataResolution.z + k] * volumeGpu[spatialIndex * dataResolution.z + k];
 
-        for (int k = 0; k < dataResolution.z; ++k) 
-            sum += mtx[t_idx * dataResolution.z + k] * volumeGpu[linear_idx * dataResolution.z + k];
-
-        // Store in x, y, t order
-        mult[(y_idx * dataResolution.y + x_idx) * dataResolution.z + t_idx] = sum;
+        mult[(y * dataResolution.y + x) * dataResolution.z + t] = sum;
     }
 }

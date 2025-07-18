@@ -160,7 +160,7 @@ void Reconstruction::filter_H_cuda(float* intensityGpu, float wl_mean, float wl_
 	CudaHelper::free(d_K);
 }
 
-void Reconstruction::compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers) const
+void Reconstruction::compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
 {
 	ChronoUtilities::startTimer();
 
