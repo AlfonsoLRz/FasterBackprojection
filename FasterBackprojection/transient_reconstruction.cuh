@@ -112,18 +112,19 @@ __global__ void backprojectConfocalVoxel(float* __restrict__ activation, glm::ui
 #ifdef ACCUMULATE_VOXEL_SCATTERING
 	float voxelExtent = glm::length(rtRecInfo._hiddenVolumeVoxelSize) / 2.0f;
 	float minDist = glm::max(.0f, dist - voxelExtent), maxDist = dist + voxelExtent;
-	float d = minDist;
+	float d = minDist, sum = .0f;
 
 	while (d < maxDist)
 	{
 		const int timeBin = static_cast<int>(d / rtRecInfo._timeStep);
 		if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
 			return;
-		const float backscatteredLight = intensityCube[getConfocalTransientIndex(l, timeBin)];
-		if (backscatteredLight > EPS)
-			atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight);
+		sum += intensityCube[getConfocalTransientIndex(l, timeBin)];
 		d += rtRecInfo._timeStep + EPS;
 	}
+
+	if (sum > EPS)
+		atomicAdd(&activation[sliceSize * voxelZ + v], sum);
 #else
 	const int timeBin = static_cast<int>(dist / rtRecInfo._timeStep);
 	if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)

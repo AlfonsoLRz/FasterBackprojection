@@ -210,6 +210,12 @@
     <ClInclude Include="fk.cuh">
       <Filter>header\cuda</Filter>
     </ClInclude>
+    <ClInclude Include="TalHDF5Reader.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="TransientFileReader.h">
+      <Filter>header</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Window.cpp">

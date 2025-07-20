@@ -9,6 +9,7 @@
 #include "math.cuh"
 #include "preprocessing.cuh"
 #include "PostprocessingFilters.h"
+#include "TransientImage.h"
 #include "transient_postprocessing.cuh"
 
 //
@@ -61,7 +62,7 @@ void Reconstruction::padIntensity(float* volumeGpu, cufftComplex*& paddedIntensi
 
 void Reconstruction::filter_H_cuda(float* intensityGpu, float wl_mean, float wl_sigma, const std::string& border) const
 {
-	size_t nt = _nlosData->_temporalResolution;
+	size_t nt = _nlosData->_dims.back();
 	if (glm::epsilonEqual(wl_sigma, .0f, glm::epsilon<float>()))
 	{
 		std::cout << "tal.reconstruct.filter_H: wl_sigma not specified, using wl_mean / sqrt(2)\n";
@@ -179,7 +180,9 @@ void Reconstruction::compensateLaserCosDistance(const ReconstructionInfo& recInf
 
 	compensateLaserPosition<<<gridSize, blockSize>>>(
 		recBuffers._intensity, 
-		recInfo._numLaserTargets, recInfo._captureSystem == CaptureSystem::Confocal ? 1 : recInfo._numSensorTargets, spatialSize, recInfo._numTimeBins);
+		recInfo._numLaserTargets, 
+		recInfo._captureSystem == CaptureSystem::Confocal ? 1 : recInfo._numSensorTargets, 
+		spatialSize, recInfo._numTimeBins);
 	CudaHelper::synchronize("compensateLaserCosDistance");
 }
 
@@ -205,6 +208,38 @@ void Reconstruction::normalizeMatrix(float* v, glm::uint size)
 	CudaHelper::free(tempStorage);
 	CudaHelper::free(maxValue);
 	CudaHelper::free(minValue);
+}
+
+void Reconstruction::saveMaxImage(const std::string& filename, float* volumeGpu, const glm::uvec3& volumeResolution)
+{
+	glm::uint sliceSize = volumeResolution.x * volumeResolution.y;
+
+	float* maxZ = nullptr;
+	CudaHelper::initializeBufferGPU(maxZ, sliceSize);
+
+	// Retrieve the maximum Z value for each pixel
+	dim3 blockSize(16, 16);
+	dim3 gridSize(
+		(volumeResolution.x + blockSize.x - 1) / blockSize.x,
+		(volumeResolution.y + blockSize.y - 1) / blockSize.y
+	);
+	composeImage<<<gridSize, blockSize >>>(volumeGpu, maxZ, volumeResolution);
+	CudaHelper::synchronize("formImage");
+
+	// Normalize the maximum Z values
+	normalizeMatrix(maxZ, sliceSize);
+
+	// Download to the host and save the image
+	std::vector<float> maxZHost(sliceSize);
+	CudaHelper::downloadBufferGPU(maxZ, maxZHost.data(), sliceSize, 0);
+	CudaHelper::free(maxZ);
+
+	TransientImage transientImage(static_cast<uint16_t>(volumeResolution.x), static_cast<uint16_t>(volumeResolution.y));
+	transientImage.save(
+		filename, maxZHost.data(),
+		glm::uvec2(volumeResolution.x, volumeResolution.y),
+		1, 0, false, false			// Do not flip, nor normalize
+	);
 }
 
 bool Reconstruction::saveReconstructedAABB(const std::string& filename, float* voxels, glm::uint numVoxels)

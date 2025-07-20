@@ -21,34 +21,21 @@ enum ReconstructionType
 class TransientParameters
 {
 public:
-	ReconstructionType			_reconstructionType;
-	bool						_useFourierFilter;
-	bool						_compensateLaserCosDistance;
-	bool						_reconstructAABB;
-	glm::uint					_numReconstructionDepths;
-	glm::uvec3					_voxelResolution;
+	ReconstructionType			_reconstructionType = ReconstructionType::LCT_REC;
+	bool						_useFourierFilter = true;
+	bool						_compensateLaserCosDistance = true;
+	bool						_reconstructAABB = true;
+	glm::uint					_numReconstructionDepths = 200;
+	glm::uvec3					_voxelResolution = glm::uvec3(256u);
 
-	PostprocessingFilterType	_postprocessingFilterType;
-	int							_kernelSize;
-	float						_sigma;
+	PostprocessingFilterType	_postprocessingFilterType = PostprocessingFilterType::NONE;
+	int							_kernelSize = 5;	
+	float						_sigma = 1.0f;
 
-	std::string					_outputFolder;
-	bool						_saveReconstructedBoundingBox;
+	std::string					_outputFolder = "output/";
+	std::string					_outputMaxImageName = "max_activation.png";
+	std::string					_outputAABBName = "reconstruction.aabb";
 
-	TransientParameters() :
-		_reconstructionType(ReconstructionType::LCT_REC),
-		_useFourierFilter(true),
-		_compensateLaserCosDistance(true),
-		_reconstructAABB(true),
-		_numReconstructionDepths(200),
-		_voxelResolution(256),
-
-		_postprocessingFilterType(PostprocessingFilterType::NONE),
-		_kernelSize(5),
-		_sigma(1.0f),
-
-		_outputFolder("output/"),
-		_saveReconstructedBoundingBox(false)
-	{
-	}
+	bool						_saveReconstructedBoundingBox = true;
+	bool						_saveMaxImage = true;
 };

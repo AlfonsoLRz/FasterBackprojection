@@ -157,7 +157,9 @@
     <ClInclude Include="Singleton.h" />
     <ClInclude Include="Sphere.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="TalHDF5Reader.h" />
     <ClInclude Include="Texture.h" />
+    <ClInclude Include="TransientFileReader.h" />
     <ClInclude Include="TransientImage.h" />
     <ClInclude Include="TransientParameters.h" />
     <ClInclude Include="NLosData.h" />

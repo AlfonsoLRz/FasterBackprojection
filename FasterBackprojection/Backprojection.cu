@@ -55,7 +55,16 @@ void Backprojection::reconstructVolume(
 	std::cout << "Reconstruction finished in " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// Save volume & free resources
-	saveReconstructedAABB(transientParams._outputFolder + "aabb.cube", volumeGpu, numVoxels);
+	if (transientParams._saveReconstructedBoundingBox)
+		saveReconstructedAABB(transientParams._outputFolder + transientParams._outputAABBName, volumeGpu, numVoxels);
+
+	// Save image if requested
+	if (transientParams._saveMaxImage)
+		Backprojection::saveMaxImage(
+			transientParams._outputFolder + transientParams._outputMaxImageName,
+			volumeGpu,
+			voxelResolution);
+
 	CudaHelper::free(volumeGpu);
 }
 

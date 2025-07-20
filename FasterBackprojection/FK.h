@@ -5,6 +5,7 @@
 class FK : public Reconstruction
 {
 protected:
+	void bindInterpolationTexture(cufftComplex* data, const glm::uvec3& dataResolution) const;
 	void reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
 	static void reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo);
 

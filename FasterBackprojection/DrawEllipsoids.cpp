@@ -35,7 +35,7 @@ DrawEllipsoids::DrawEllipsoids(NLosData* nlosData) : _numInstances(0), _nlosData
 		{
 			for (int t = 0; t < 700; ++t)
 			{
-				float* timeSlice = data + pixelIdx * _nlosData->_temporalResolution;
+				float* timeSlice = data + pixelIdx * _nlosData->_dims.back();
 
 				if (timeSlice[t] > glm::epsilon<float>())
 				{

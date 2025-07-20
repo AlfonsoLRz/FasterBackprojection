@@ -19,5 +19,5 @@ inline __global__ void compensateLaserPosition(
 	const glm::vec3 w_i = rtRecInfo._laserPosition - laserTargets[laserTargetIdx];
 	const float d = glm::length(w_i);
 	const float cosTerm = glm::dot(w_i * safeRCP(d), laserTargetsNormals[laserTargetIdx]);
-	intensity[laserTargetIdx * numTimeBins + timeBin] /= (cosTerm / safeRCP(d * d));
+	intensity[laserTargetIdx * numTimeBins + timeBin] /= (cosTerm * safeRCP(d * d));
 }

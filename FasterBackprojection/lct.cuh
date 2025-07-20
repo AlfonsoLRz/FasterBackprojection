@@ -47,14 +47,14 @@ inline __global__ void normalizePSF(float* __restrict__ psf, const float* __rest
 	//psf[kernelIdx] *= psf[kernelIdx];       // Prepare for L2 normalization
 }
 
-inline __global__ void l2NormPSF(float* __restrict__ psf, float sqrtNorm, glm::uvec3 dataResolution)
+inline __global__ void l2NormPSF(float* __restrict__ psf, const float* __restrict__ sqrtNorm, glm::uvec3 dataResolution)
 {
     glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= dataResolution.x || y >= dataResolution.y || t >= dataResolution.z) return;
 
     const glm::uint kernelIdx = getKernelIdx(x, y, t, dataResolution);
     //psf[kernelIdx] *= safeRCP(psf[kernelIdx]);
-    psf[kernelIdx] *= safeRCP(sqrtNorm);
+    psf[kernelIdx] *= safeRCP(sqrtf(*sqrtNorm));
 }
 
 inline __global__ void rollPSF(const float* __restrict__ psf, cufftComplex* __restrict__ rolledPsf, glm::uvec3 originalDataResolution, glm::uvec3 dataResolution)
@@ -69,15 +69,13 @@ inline __global__ void rollPSF(const float* __restrict__ psf, cufftComplex* __re
     rolledPsf[getKernelIdx(new_x, new_y, t, dataResolution)].x = psf[getKernelIdx(x, y, t, dataResolution)];
 }
 
-inline __global__ void multiplyPSF(cufftComplex* d_H, const cufftComplex* d_K, glm::uint size)
+inline __global__ void multiplyPSF(cufftComplex* __restrict__ d_H, const cufftComplex* __restrict__ d_K, glm::uint size)
 {
     const glm::uint idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size)
         return;
 
-    cufftComplex h = d_H[idx];
-    cufftComplex k = d_K[idx];
-
+    cufftComplex h = d_H[idx], k = d_K[idx];
     d_H[idx] = { h.x * k.x - h.y * k.y, h.x * k.y + h.y * k.x };
 }
 
@@ -112,11 +110,17 @@ inline __global__ void wienerFilterPsf(cufftComplex* __restrict__ psf, glm::uvec
     psf[kernelIdx].y = wienerFactor * conjugate.y;
 }
 
-inline __global__ void scaleIntensity(float* __restrict__ intensity, const glm::uvec3 dataResolution, float weight)
+inline __global__ void scaleIntensity(float* __restrict__ intensity, const glm::uvec3 dataResolution, bool diffuse)
 {
 	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= dataResolution.x || y >= dataResolution.y || t >= dataResolution.z) 
 		return;
+
+    float weight = static_cast<float>(t) / (static_cast<float>(dataResolution.z) - 1.0f);
+    if (diffuse)
+        weight = weight * weight * weight * weight;
+    else
+        weight = weight * weight;
 
     intensity[getKernelIdx(x, y, t, dataResolution)] *= static_cast<float>(t) * weight;
 }

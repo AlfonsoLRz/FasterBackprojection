@@ -1,6 +1,7 @@
 #pragma once
 
 #include <matio.h>
+#include <highfive/highfive.hpp>
 #include <highfive/H5DataSet.hpp>
 
 #include "AABB.h"
@@ -30,7 +31,6 @@ public:
 
 	AABB					_hiddenGeometry;
 
-	glm::uint				_temporalResolution = 0;
 	float					_deltaT = .0f, _t0 = .0f, _temporalWidth = .0f;
 
 	bool					_isConfocal = true;
@@ -39,9 +39,6 @@ public:
 	glm::uint				_zOffset = 0;
 
 protected:
-	template<typename T>
-	static void cast(const std::vector<float>& suppData, size_t elementCount, T& buffer);
-	static void expandData(const HighFive::DataSet& dataset, std::vector<float>& suppData);
 	static void setUp(glm::vec2& data, const std::vector<double>& rawData);
 	static void setUp(glm::vec3& data, const std::vector<double>& rawData);
 	static void setUp(std::vector<glm::vec3>& data, const std::vector<std::vector<std::vector<double>>>& rawData);
@@ -56,6 +53,7 @@ protected:
 
 	void loadMat(const std::string& filename);
 	bool loadLCTMat(mat_t* matFile, glm::uint zTrim = 600, glm::uint zOffset = 0);
+	bool loadNLOSFile(const HighFive::File& file);
 
 	bool loadBinaryFile(const std::string& filename);
 	bool saveBinaryFile(const std::string& filename) const;
@@ -64,16 +62,9 @@ public:
 	NLosData(const std::string& filename, bool saveBinary = true, bool useBinary = true);
 	virtual ~NLosData();
 
+	void downsampleSpace(glm::uint times);
 	void downsampleTime(glm::uint times);
 	void toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, const TransientParameters& transientParameters);
 
 	void saveImages(const std::string& outPath);
 };
-
-template <typename T>
-void NLosData::cast(const std::vector<float>& suppData, size_t elementCount, T& buffer)
-{
-	for (int idx = 0; idx < static_cast<int>(elementCount); ++idx)
-		buffer[idx] = suppData[idx];
-}
-
