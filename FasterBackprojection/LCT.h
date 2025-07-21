@@ -7,19 +7,21 @@ class LCT : public Reconstruction
 {
 protected:
 	std::vector<float*>			_deleteFloatQueue;
-	std::vector<cufftComplex*>	_deleteComplexQueue;
+	std::vector<void*>			_deleteVoidQueue;
 	std::vector<cufftHandle>	_deleteCufftHandles;
 
+	void emptyQueue();
+
 protected:
-	void reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers) const;
+	void reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
 	static void reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo);
 
-	static cufftComplex* definePSFKernel(const glm::uvec3& dataResolution, float slope, cudaStream_t stream);
+	cufftComplex* definePSFKernel(const glm::uvec3& dataResolution, float slope, cudaStream_t stream);
 	static void defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseMtx);
 
 	static void multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const glm::uvec3& dataResolution);
 
-	static float* transformData(float* volumeGpu, const glm::uvec3& dataResolution, float* mtx, cudaStream_t stream);
+	static float* transformData(float* volumeGpu, const glm::uvec3& dataResolution, const float* mtx, cudaStream_t stream);
 	static void inverseTransformData(float* volumeGpu, float* multResult, const glm::uvec3& dataResolution, float*& inverseMtx);
 
 public:

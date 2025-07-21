@@ -32,63 +32,6 @@ inline __global__ void unpadIntensityFFT_FK(float* H, const cufftComplex* H_pad,
     H[getKernelIdx(x, y, t, currentResolution)] = H_pad[getKernelIdx(x, y, t, newResolution)].x;
 }
 
-//__global__ void stoltKernel(
-//    const cufftComplex* __restrict__ H, cufftComplex* __restrict__ result, glm::uvec3 originalResolution, glm::uvec3 newResolution, float rangeWidth)
-//{
-//	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
-//    if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
-//		return;
-//
-//    glm::vec3 normCoordinates = (glm::vec3(x, y, t) - glm::vec3(originalResolution)) / glm::vec3(originalResolution);
-//
-//    // Stolt trick calculation
-//    const float sqrt_term = sqrtf(rangeWidth * (normCoordinates.x * normCoordinates.x + normCoordinates.y * normCoordinates.y) + normCoordinates.z * normCoordinates.z);
-//
-//    // Map to [0, originalResolution-1] for interpolation
-//    float fx = (normCoordinates.x + 1.0f) * 0.5f * static_cast<float>(originalResolution.x - 1);
-//    float fy = (normCoordinates.y + 1.0f) * 0.5f * static_cast<float>(originalResolution.y - 1);
-//    float fz = sqrt_term * static_cast<float>(originalResolution.z - 1); // sqrt_term ∈ [0, max_z], mapped to [0, M-1]
-//
-//    // Clamp coordinates to avoid out-of-bounds
-//    fx = fmaxf(0.0f, fminf(fx, static_cast<float>(originalResolution.x - 1)));
-//    fy = fmaxf(0.0f, fminf(fy, static_cast<float>(originalResolution.y - 1)));
-//    fz = fmaxf(0.0f, fminf(fz, static_cast<float>(originalResolution.z - 1)));
-//
-//    // Trilinear interpolation (from originalResolution grid)
-//    glm::uint x0 = static_cast<glm::uint>(floorf(fx)), x1 = x0 + 1;
-//    glm::uint y0 = static_cast<glm::uint>(floorf(fy)), y1 = y0 + 1;
-//    glm::uint z0 = static_cast<glm::uint>(floorf(fz)), z1 = z0 + 1;
-//
-//    // Clamp again (x1/y1/z1 might exceed bounds)
-//    x1 = glm::min(x1, originalResolution.x - 1);
-//    y1 = glm::min(y1, originalResolution.y - 1);
-//    z1 = glm::min(z1, originalResolution.z - 1);
-//
-//    float dx = fx - static_cast<float>(x0);
-//    float dy = fy - static_cast<float>(y0);
-//    float dz = fz - static_cast<float>(z0);
-//
-//    cufftComplex c000 = H[getKernelIdx(x0, y0, z0, newResolution)];
-//    cufftComplex c001 = H[getKernelIdx(x1, y0, z0, newResolution)];
-//    cufftComplex c010 = H[getKernelIdx(x0, y1, z0, newResolution)];
-//    cufftComplex c011 = H[getKernelIdx(x1, y1, z0, newResolution)];
-//    cufftComplex c100 = H[getKernelIdx(x0, y0, z1, newResolution)];
-//    cufftComplex c101 = H[getKernelIdx(x1, y0, z1, newResolution)];
-//    cufftComplex c110 = H[getKernelIdx(x0, y1, z1, newResolution)];
-//    cufftComplex c111 = H[getKernelIdx(x1, y1, z1, newResolution)];
-//
-//    cufftComplex c00 = complexLerp(c000, c001, dx);
-//    cufftComplex c01 = complexLerp(c010, c011, dx);
-//    cufftComplex c10 = complexLerp(c100, c101, dx);
-//    cufftComplex c11 = complexLerp(c110, c111, dx);
-//
-//    cufftComplex c0 = complexLerp(c00, c01, dy);
-//    cufftComplex c1 = complexLerp(c10, c11, dy);
-//
-//    // Write result
-//    result[getKernelIdx(x, y, t, newResolution)] = complexLerp(c0, c1, dz);
-//}
-
 __global__ void stoltKernel(
     const cufftComplex* __restrict__ H,
     cufftComplex* __restrict__ result,
