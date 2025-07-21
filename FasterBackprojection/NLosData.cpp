@@ -330,7 +330,7 @@ void NLosData::loadMat(const std::string& filename)
 	//	Mat_VarFree(matvar);
 	//}
 
-	if (loadLCTMat(matFile, 600, getZOffset(filename)))
+	if (loadLCTMat(matFile, 700, getZOffset(filename)))
 		return;
 }
 

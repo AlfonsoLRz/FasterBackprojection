@@ -16,7 +16,7 @@ inline __global__ void computePSFKernel(float* __restrict__ psf, glm::uvec3 data
     glm::vec3 grid = glm::vec3(
         -1.0f + (2.0f * static_cast<float>(x)) / (static_cast<float>(dataResolution.x) - 1),
         -1.0f + (2.0f * static_cast<float>(y)) / (static_cast<float>(dataResolution.y) - 1),
-        0.0f + (2.0f * static_cast<float>(t)) / (static_cast<float>(dataResolution.z) - 1)
+		(2.0f * static_cast<float>(t)) / (static_cast<float>(dataResolution.z) - 1)
 	);
 
     psf[getKernelIdx(x, y, t, dataResolution)] = fabsf(((4 * slope) * (4 * slope)) * (grid.x * grid.x + grid.y * grid.y) - grid.z);
@@ -81,7 +81,7 @@ inline __global__ void multiplyPSF(cufftComplex* __restrict__ d_H, const cufftCo
 
 inline __global__ void padIntensityFFT(const float* __restrict__ H, cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)
 {
-    const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
         return;
 
@@ -90,7 +90,7 @@ inline __global__ void padIntensityFFT(const float* __restrict__ H, cufftComplex
 
 inline __global__ void unpadIntensityFFT(float* __restrict__ H, const cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)
 {
-    const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
         return;
 
@@ -128,14 +128,14 @@ inline __global__ void scaleIntensity(float* __restrict__ intensity, const glm::
 inline __global__ void multiplyTransformTranspose(
     const float* __restrict__ volumeGpu, const float* __restrict__ mtx, float* __restrict__ mult, glm::uvec3 dataResolution)
 {
-	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+	const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x < dataResolution.x && y < dataResolution.y && t < dataResolution.z) 
     {
         const glm::uint spatialIndex = y * dataResolution.y + x;  
 
         float sum = 0.0f;
         for (glm::uint k = 0; k < dataResolution.z; ++k)
-            sum += mtx[t * dataResolution.z + k] * volumeGpu[spatialIndex * dataResolution.z + k];
+            sum += mtx[k * dataResolution.z + t] * volumeGpu[spatialIndex * dataResolution.z + k];
 
         mult[(y * dataResolution.y + x) * dataResolution.z + t] = sum;
     }

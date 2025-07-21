@@ -12,12 +12,30 @@
 class Camera;
 class SceneContent;
 
-using Complex = std::complex<float>;
-
 class Reconstruction
 {
 protected:
-	NLosData* _nlosData = nullptr;
+	template <typename T>
+	class DeleteQueue {
+	public:
+		void add(T* ptr)
+		{
+			queue.emplace_back(ptr);
+		}
+		void clear()
+		{
+			for (auto ptr : queue) delete ptr;
+			queue.clear();
+		}
+
+	private:
+		std::vector<T*> queue;
+	};
+
+protected:
+	NLosData*					_nlosData = nullptr;
+	DeleteQueue<float>			_deleteFloatPointers;
+	DeleteQueue<cufftComplex>	_deleteComplexPointers;
 
 	static const PostprocessingFilters* _postprocessingFilters[PostprocessingFilterType::NUM_POSTPROCESSING_FILTERS];
 

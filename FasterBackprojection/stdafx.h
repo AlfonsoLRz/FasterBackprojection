@@ -28,6 +28,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <variant>
 #include <vector>
 
 // IMPORTANTE: El include de GLEW debe estar siempre ANTES de el de GLFW

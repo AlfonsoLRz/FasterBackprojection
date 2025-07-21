@@ -1,6 +1,7 @@
 ﻿#include "stdafx.h"
 #include "LCT.h"
 
+#include <future>
 #include <cub/device/device_reduce.cuh>
 
 #include "cusparse.h"
@@ -25,22 +26,29 @@ void LCT::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& rec
 {
 	const glm::uvec3 volumeResolution = glm::uvec3(_nlosData->_dims[0], _nlosData->_dims[1], _nlosData->_dims[2]);
 	float tDistance = static_cast<float>(recInfo._numTimeBins) * recInfo._timeStep;
-	float* intensityGpu = recBuffers._intensity;
+	float* intensityGpu = recBuffers._intensity, *deletePsf = nullptr;
+	float* mtx, * mtxi;
 
 	// Define two cuda streams for asynchronous operations
 	cudaStream_t stream1, stream2;
 	CudaHelper::checkError(cudaStreamCreate(&stream1));
 	CudaHelper::checkError(cudaStreamCreate(&stream2));
 
+	// Get transformation matrices
+	std::future<void> future = std::async(std::launch::async,
+	                                      defineTransformOperator,
+											recInfo._numTimeBins,
+	                                      std::ref(mtx),
+	                                      std::ref(mtxi));
+
 	// Define the point spread function (PSF) kernel
-	ChronoUtilities::startTimer();
 	cufftComplex* psfKernel = definePSFKernel(volumeResolution, glm::abs(_nlosData->_temporalWidth / tDistance), stream1);
 	std::cout << "PSF kernel defined in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// Forward and backward transform operators
-	float* mtx, *mtxi;
+
 	ChronoUtilities::startTimer();
-	defineTransformOperator(recInfo._numTimeBins, mtx, mtxi);
+	future.get();
 	std::cout << "Transform operator defined in " << ChronoUtilities::getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	ChronoUtilities::startTimer();
@@ -76,13 +84,21 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
     glm::uint size = totalRes.x * totalRes.y * totalRes.z;
 
 	// Gpu-side memory allocation
-	float* psf = nullptr;
+	float* psf = nullptr, *singleFloat = nullptr;
 	cufftComplex* rolledPsf = nullptr;
+	void* tempStorage = nullptr;
+	size_t tempStorageBytes = 0;
 
 	CudaHelper::initializeBufferGPU(psf, size);
 	CudaHelper::initializeBufferGPU(rolledPsf, size);
+	CudaHelper::initializeBufferGPU(singleFloat, 1);
+
+	cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf, psf, size);
+	cudaMalloc(&tempStorage, tempStorageBytes);
+
+	ChronoUtilities::startTimer();
 	
-    dim3 blockSize(8, 8, 8);
+    dim3 blockSize(16, 8, 8);
     dim3 gridSize(
 		(totalRes.z + blockSize.x - 1) / blockSize.x,
         (totalRes.y + blockSize.y - 1) / blockSize.y,
@@ -90,15 +106,17 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 	);
 
 	// FFT
-	cufftHandle planPSF;
-	int rank = 3;  // 3D FFT
+	cufftHandle fftPlan;
+	int rank = 3; 
 	int n[3] = { static_cast<int>(totalRes.x),
 				 static_cast<int>(totalRes.y),
 				 static_cast<int>(totalRes.z) };
-	CUFFT_CHECK(cufftPlanMany(&planPSF, rank, n,
+	CUFFT_CHECK(cufftPlanMany(&fftPlan, rank, n,
 		NULL, 1, 0,			// idist and odist do not matter when the number of batches is 1
 		NULL, 1, 0,
 		CUFFT_C2C, 1));
+
+	ChronoUtilities::startTimer();
 
 	// RSD
 	{
@@ -121,38 +139,25 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 	// Normalization according to center 
 	{
 		const glm::uint sumBaseIndex = dataResolution.x * totalRes.y * totalRes.z + dataResolution.y * totalRes.z;
-		size_t tempStorageBytes = 0;
-		void* tempStorage = nullptr;
-		float* sumGpu = nullptr;
-		CudaHelper::initializeZeroBufferGPU(sumGpu, 1);
 
-		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf + sumBaseIndex, sumGpu, totalRes.z);
-		cudaMalloc(&tempStorage, tempStorageBytes);
-		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf + sumBaseIndex, sumGpu, totalRes.z);
+		CudaHelper::checkError(cudaMemset(singleFloat, 0, sizeof(float)));
 
-		normalizePSF<<<gridSize, blockSize, 0, stream>>>(psf, sumGpu, totalRes);
+		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z);
+		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z);
+
+		normalizePSF<<<gridSize, blockSize, 0, stream>>>(psf, singleFloat, totalRes);
 		//CudaHelper::synchronize("normalizePSF");
-
-		//CudaHelper::free(sumGpu);
-		//CudaHelper::free(tempStorage);
 	}
 
 	// L2 normalization
 	{
-		size_t tempStorageBytes = 0;
-		void* tempStorage = nullptr;
-		float* sqrtNormGpu = nullptr;
-		CudaHelper::initializeZeroBufferGPU(sqrtNormGpu, 1);
+		CudaHelper::checkError(cudaMemset(singleFloat, 0, sizeof(float)));
 
-		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf, sqrtNormGpu, size);
-		cudaMalloc(&tempStorage, tempStorageBytes);
-		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf, sqrtNormGpu, size);
+		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf, singleFloat, size);
+		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf, singleFloat, size);
 
-		l2NormPSF<<<gridSize, blockSize, 0, stream>>>(psf, sqrtNormGpu, totalRes);
+		l2NormPSF<<<gridSize, blockSize, 0, stream>>>(psf, singleFloat, totalRes);
 		//CudaHelper::synchronize("l2NormPSF");
-
-		CudaHelper::free(sqrtNormGpu);
-		CudaHelper::free(tempStorage);
 	}
 
     rollPSF<<<gridSize, blockSize, 0, stream>>>(psf, rolledPsf, dataResolution, totalRes);
@@ -160,9 +165,9 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 
 	// Fourier transform the PSF kernel
 	{
-		CUFFT_CHECK(cufftSetStream(planPSF, stream));
-		CUFFT_CHECK(cufftExecC2C(planPSF, rolledPsf, rolledPsf, CUFFT_FORWARD));
-		CUFFT_CHECK(cufftDestroy(planPSF));
+		CUFFT_CHECK(cufftSetStream(fftPlan, stream));
+		CUFFT_CHECK(cufftExecC2C(fftPlan, rolledPsf, rolledPsf, CUFFT_FORWARD));
+		//CUFFT_CHECK(cufftDestroy(planPSF));
 	}
 
 	// Wiener filter
@@ -170,6 +175,11 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 		wienerFilterPsf<<<gridSize, blockSize, 0, stream>>>(rolledPsf, totalRes, 8e-1);
 		//CudaHelper::synchronize("wienerFilterPsf");
 	}
+
+	CudaHelper::free(psf);
+	CudaHelper::free(tempStorage);
+	CudaHelper::free(singleFloat);
+	CUFFT_CHECK(cufftDestroy(fftPlan));
 
 	return rolledPsf;
 }
@@ -341,7 +351,7 @@ void LCT::defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseM
 	#pragma omp parallel for
 	for (int k = 0; k < mtx.outerSize(); ++k)
 		for (SparseMatrixF_RowMajor::InnerIterator it(mtx, k); it; ++it) 
-			mtxHost[it.row() * M + it.col()] = it.value();
+			mtxHost[it.col() * M + it.row()] = it.value();
 
 	CudaHelper::initializeBufferGPU(d_mtx, mtxHost.size(), mtxHost.data());
 
@@ -349,7 +359,7 @@ void LCT::defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseM
 	#pragma omp parallel for
 	for (int k = 0; k < mtxi.outerSize(); ++k)
 		for (SparseMatrixF_ColMajor::InnerIterator it(mtxi, k); it; ++it) 
-			mtxHost[it.row() * M + it.col()] = it.value();
+			mtxHost[it.col() * M + it.row()] = it.value();
 
 	CudaHelper::initializeBufferGPU(d_inverseMtx, mtxHost.size(), mtxHost.data());
 }
@@ -365,11 +375,11 @@ void LCT::multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const
 	CudaHelper::initializeZeroBufferGPU(d_H, newDimProduct);
 
 	ChronoUtilities::startTimer();
-	dim3 blockSize(8, 8, 8);
+	dim3 blockSize(16, 8, 8);
 	dim3 gridSize(
-		(dataResolution.x + blockSize.x - 1) / blockSize.x,
+		(dataResolution.z + blockSize.x - 1) / blockSize.x,
 		(dataResolution.y + blockSize.y - 1) / blockSize.y,
-		(dataResolution.z + blockSize.z - 1) / blockSize.z
+		(dataResolution.x + blockSize.z - 1) / blockSize.z
 	);
 	padIntensityFFT<<<gridSize, blockSize>>>(volumeGpu, d_H, dataResolution, newDims);
 	CudaHelper::synchronize("padIntensityFFT");
@@ -414,11 +424,11 @@ void LCT::multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const
 
 float* LCT::transformData(float* volumeGpu, const glm::uvec3& dataResolution, float* mtx, cudaStream_t stream)
 {
-	dim3 blockSize3D(8, 8, 8);
+	dim3 blockSize3D(16, 8, 8);
 	dim3 gridSize3D(
-		(dataResolution.x + blockSize3D.x - 1) / blockSize3D.x,
+		(dataResolution.z + blockSize3D.x - 1) / blockSize3D.x,
 		(dataResolution.y + blockSize3D.y - 1) / blockSize3D.y,
-		(dataResolution.z + blockSize3D.z - 1) / blockSize3D.z
+		(dataResolution.x + blockSize3D.z - 1) / blockSize3D.z
 	);
 
 	// Scale the intensity values according to the material type (diffuse or not)
@@ -438,11 +448,11 @@ float* LCT::transformData(float* volumeGpu, const glm::uvec3& dataResolution, fl
 
 void LCT::inverseTransformData(float* volumeGpu, float* multResult, const glm::uvec3& dataResolution, float*& inverseMtx)
 {
-	dim3 blockSize3D(8, 8, 8);
+	dim3 blockSize3D(16, 8, 8);
 	dim3 gridSize3D(
-		(dataResolution.x + blockSize3D.x - 1) / blockSize3D.x,
+		(dataResolution.z + blockSize3D.x - 1) / blockSize3D.x,
 		(dataResolution.y + blockSize3D.y - 1) / blockSize3D.y,
-		(dataResolution.z + blockSize3D.z - 1) / blockSize3D.z
+		(dataResolution.x + blockSize3D.z - 1) / blockSize3D.z
 	);
 
 	multiplyTransformTranspose<<<gridSize3D, blockSize3D>>>(volumeGpu, inverseMtx, multResult, dataResolution);
@@ -463,12 +473,8 @@ void LCT::reconstructVolume(
 
 	ChronoUtilities::startTimer();
 
-	if (transientParams._compensateLaserCosDistance)
-		compensateLaserCosDistance(recInfo, recBuffers);
-
-	float* intensityGpu = recBuffers._intensity;
-	std::vector<float> H(200);
-	CudaHelper::downloadBufferGPU(intensityGpu, H.data(), 100, 900);
+	//if (transientParams._compensateLaserCosDistance)
+	//	compensateLaserCosDistance(recInfo, recBuffers);
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
 		reconstructVolumeConfocal(nullptr, recInfo, recBuffers);
