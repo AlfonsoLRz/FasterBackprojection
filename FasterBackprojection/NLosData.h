@@ -52,7 +52,7 @@ protected:
 	static glm::uint getZOffset(const std::string& filename);
 
 	void loadMat(const std::string& filename);
-	bool loadLCTMat(mat_t* matFile, glm::uint zTrim = 600, glm::uint zOffset = 0);
+	bool loadLCTMat(mat_t* matFile, glm::uint zTrim = 700, glm::uint zOffset = 0);
 	bool loadNLOSFile(const HighFive::File& file);
 
 	bool loadBinaryFile(const std::string& filename);

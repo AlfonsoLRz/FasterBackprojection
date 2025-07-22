@@ -9,18 +9,18 @@
 // 3D texture for interpolation (x, y, z order)
 //texture<float, 3, cudaReadModeElementType> texInterpData;
 
-inline __device__ glm::uint getKernelIdx(glm::uint x, glm::uint y, glm::uint t, const glm::uvec3& dataResolution)
+inline __forceinline__ __device__ glm::uint getKernelIdx(glm::uint x, glm::uint y, glm::uint t, const glm::uvec3& dataResolution)
 {
     return t + dataResolution.z * (y + dataResolution.y * x);
 }
 
-inline __global__ void padIntensityFFT_FK(const float* H, cufftComplex* H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)
+inline __global__ void padIntensityFFT_FK(const float* __restrict__ H, cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution, float divisor)
 {
     const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= currentResolution.x || y >= currentResolution.y || t >= currentResolution.z)
         return;
 
-    H_pad[getKernelIdx(x, y, t, newResolution)].x = H[getKernelIdx(x, y, t, currentResolution)] * static_cast<float>(t) / static_cast<float>(currentResolution.z);
+    H_pad[getKernelIdx(x, y, t, newResolution)].x = H[getKernelIdx(x, y, t, currentResolution)] * static_cast<float>(t) * divisor;
 }
 
 inline __global__ void unpadIntensityFFT_FK(float* H, const cufftComplex* H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)
@@ -32,18 +32,27 @@ inline __global__ void unpadIntensityFFT_FK(float* H, const cufftComplex* H_pad,
     H[getKernelIdx(x, y, t, currentResolution)] = H_pad[getKernelIdx(x, y, t, newResolution)].x;
 }
 
+inline __device__ inline glm::uvec3 getCyclicShiftedIndices(glm::uvec3 originalIdx, glm::uvec3 shift, glm::uvec3 resolution)
+{
+    glm::uint shifted_x = (originalIdx.x + shift.x) % resolution.x;
+    glm::uint shifted_y = (originalIdx.y + shift.y) % resolution.y;
+    glm::uint shifted_z = (originalIdx.z + shift.z) % resolution.z;
+    return glm::uvec3(shifted_x, shifted_y, shifted_z);
+}
+
 __global__ void stoltKernel(
     const cufftComplex* __restrict__ H,
     cufftComplex* __restrict__ result,
     glm::uvec3 originalResolution,
     glm::uvec3 fftResolution,
+    glm::uvec3 shift,
     float stoltConst,
     float maxSqrtTerm
 )
 {
-    const glm::uint z = blockIdx.x * blockDim.x + threadIdx.x; 
-    const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;  
-    const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
+    glm::uint z = blockIdx.x * blockDim.x + threadIdx.x; 
+    glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;  
+    glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
 
     if (x >= fftResolution.x || y >= fftResolution.y || z >= fftResolution.z)
 		return;
@@ -67,12 +76,12 @@ __global__ void stoltKernel(
     float iy = (fy + 1.0f) * 0.5f * static_cast<float>(fftResolution.y);
     float iz = (sqrt_term + 1.0f) * 0.5f * static_cast<float>(fftResolution.z);
 
-    int x0 = floorf(ix), y0 = floorf(iy), z0 = floorf(iz);
+    int x0 = static_cast<int>(floorf(ix)), y0 = static_cast<int>(floorf(iy)), z0 = static_cast<int>(floorf(iz));
     int x1 = x0 + 1, y1 = y0 + 1, z1 = z0 + 1;
 
-    float dx = ix - x0;
-    float dy = iy - y0;
-    float dz = iz - z0;
+    float dx = ix - static_cast<float>(x0);
+    float dy = iy - static_cast<float>(y0);
+    float dz = iz - static_cast<float>(z0);
 
     // Clamp all indices
     x0 = glm::max(0, glm::min(x0, static_cast<int>(fftResolution.x) - 1));

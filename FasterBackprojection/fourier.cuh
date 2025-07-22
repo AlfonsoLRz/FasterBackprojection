@@ -94,26 +94,6 @@ inline __global__ void shiftFFT(
     if (x >= resolution.x || y >= resolution.y || z >= resolution.z)
         return;
 
-    const glm::uint shifted_x = (x + shift.x) % resolution.x;
-    const glm::uint shifted_y = (y + shift.y) % resolution.y;
-    const glm::uint shifted_z = (z + shift.z) % resolution.z;
-
-    H_aux[shifted_z + resolution.z * (shifted_y + resolution.y * shifted_x)] = H[z + resolution.z * (y + resolution.y * x)];
-}
-
-inline __global__ void unshiftFFT(
-    cufftComplex* __restrict__ H, const cufftComplex* __restrict__ H_aux, const glm::uvec3 resolution, const glm::uvec3 shift)
-{
-    const glm::uint z = blockIdx.x * blockDim.x + threadIdx.x;
-    const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
-    const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
-
-    if (x >= resolution.x || y >= resolution.y || z >= resolution.z)
-        return;
-
-    const glm::uint unshifted_x = (x + shift.x) % resolution.x;
-    const glm::uint unshifted_y = (y + shift.y) % resolution.y;
-    const glm::uint unshifted_z = (z + shift.z) % resolution.z;
-
-    H[unshifted_z + resolution.z * (unshifted_y + resolution.y * unshifted_x)] = H_aux[z + resolution.z * (y + resolution.y * x)];
+    const glm::uvec3 shiftedIndices = (glm::uvec3(x, y, z) + shift) % resolution;
+    H_aux[shiftedIndices.z + resolution.z * (shiftedIndices.y + resolution.y * shiftedIndices.x)] = H[z + resolution.z * (y + resolution.y * x)];
 }

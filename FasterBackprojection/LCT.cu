@@ -26,7 +26,7 @@ void LCT::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& rec
 {
 	const glm::uvec3 volumeResolution = glm::uvec3(_nlosData->_dims[0], _nlosData->_dims[1], _nlosData->_dims[2]);
 	float tDistance = static_cast<float>(recInfo._numTimeBins) * recInfo._timeStep;
-	float* intensityGpu = recBuffers._intensity, *deletePsf = nullptr;
+	float* intensityGpu = recBuffers._intensity;
 	float* mtx, * mtxi;
 
 	// Define two cuda streams for asynchronous operations
@@ -396,8 +396,8 @@ void LCT::multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const
 
 	// Multiply by inverse PSF
 	ChronoUtilities::startTimer();
-	const glm::uint blockSize1D  = 256;
-	const glm::uint numBlocks1D = (newDimProduct + blockSize1D - 1) / blockSize1D;
+	constexpr glm::uint blockSize1D  = 256;
+	const glm::uint numBlocks1D = (static_cast<glm::uint>(newDimProduct) + blockSize1D - 1) / blockSize1D;
 
 	multiplyPSF<<<numBlocks1D, blockSize1D>>>(d_H, inversePSF, newDimProduct);
 	CudaHelper::synchronize("multiplyHK");
@@ -465,8 +465,8 @@ void LCT::reconstructVolume(
 
 	ChronoUtilities::startTimer();
 
-	if (transientParams._compensateLaserCosDistance)
-		compensateLaserCosDistance(recInfo, recBuffers);
+	//if (transientParams._compensateLaserCosDistance)
+	//	compensateLaserCosDistance(recInfo, recBuffers);
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
 		reconstructVolumeConfocal(nullptr, recInfo, recBuffers);
@@ -474,12 +474,6 @@ void LCT::reconstructVolume(
 		throw std::runtime_error("Unsupported capture system for LCT reconstruction.");
 
 	std::cout << "Reconstruction finished in " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
-
-	if (transientParams._saveMaxImage)
-		LCT::saveMaxImage(
-			transientParams._outputFolder + transientParams._outputMaxImageName,
-			recBuffers._intensity,
-			glm::uvec3(nlosData->_dims[0], nlosData->_dims[1], nlosData->_dims[2]));
 }
 
 //

@@ -5,7 +5,7 @@
 class FK : public Reconstruction
 {
 protected:
-	void reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
+	void reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers) const;
 	static void reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo);
 
 public:

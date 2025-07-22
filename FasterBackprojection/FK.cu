@@ -40,7 +40,7 @@ void FK::reconstructVolume(
 
 //
 
-void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
+void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers) const
 {
 	const glm::uvec3 volumeResolution = glm::uvec3(_nlosData->_dims[0], _nlosData->_dims[1], _nlosData->_dims[2]);
 	const glm::uvec3 fftVolumeResolution = volumeResolution * 2u;
@@ -67,14 +67,15 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 	ChronoUtilities::startTimer();
 
 	// Perform forward FFT on the intensity data
-	padIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fft, volumeResolution, fftVolumeResolution);
+	const float divisor = 1.0f / static_cast<float>(volumeResolution.z);
+	padIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fft, volumeResolution, fftVolumeResolution, divisor);
 	CudaHelper::synchronize("padIntensityFFT");
 
 	std::cout << "FFT padding took " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// Calculate sqrt term
 	float width = _nlosData->_temporalWidth, range = recInfo._timeStep * static_cast<float>(recInfo._numTimeBins);
-	float divisor = (static_cast<float>(volumeResolution.x) * range) / (static_cast<float>(volumeResolution.z) * width * 4.0f);
+	float sqrtConst = (static_cast<float>(volumeResolution.x) * range) / (static_cast<float>(volumeResolution.z) * width * 4.0f);
 
 	//
 	cufftHandle planH;
@@ -95,25 +96,25 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 	std::cout << "FFT execution took " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// Shift FFT
-	ChronoUtilities::startTimer();
+	//ChronoUtilities::startTimer();
 
-	shiftFFT<<<gridSizeFFT, blockSizeFFT>>>(fft, fftAux, fftVolumeResolution, fftVolumeResolution / 2u);
-	CudaHelper::synchronize("shiftFFT");
+	//shiftFFT<<<gridSizeFFT, blockSizeFFT>>>(fft, fftAux, fftVolumeResolution, fftVolumeResolution / 2u);
+	//CudaHelper::synchronize("shiftFFT");
 
-	std::cout << "FFT shifting took " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+	//std::cout << "FFT shifting took " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	// Cleanup
 	ChronoUtilities::startTimer();
 
 	float maxValue = sqrtf(divisor * divisor * 2.0f + 1.0f);
-	stoltKernel<<<gridSizeFFT, blockSizeFFT>>>(fftAux, fft, volumeResolution, fftVolumeResolution, divisor * divisor, maxValue);
+	stoltKernel<<<gridSizeFFT, blockSizeFFT>>>(fft, fftAux, volumeResolution, fftVolumeResolution, fftVolumeResolution / 2u, sqrtConst * sqrtConst, maxValue);
 	CudaHelper::synchronize("stoltKernel");
 
 	std::cout << "Stolt kernel computation took " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
 
 	//
-	unshiftFFT<<<gridSizeFFT, blockSizeFFT>>>(fftAux, fft, fftVolumeResolution, fftVolumeResolution / 2u);
-	CudaHelper::synchronize("unshiftFFT");
+	//shiftFFT<<<gridSizeFFT, blockSizeFFT>>>(fftAux, fft, fftVolumeResolution, fftVolumeResolution / 2u);
+	//CudaHelper::synchronize("unshiftFFT");
 
 	// Inverse FFT
 	CUFFT_CHECK(cufftExecC2C(planH, fftAux, fftAux, CUFFT_INVERSE));
