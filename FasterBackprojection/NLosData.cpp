@@ -140,9 +140,9 @@ void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuff
 	recInfo._captureSystem = _isConfocal ? CaptureSystem::Confocal : CaptureSystem::Exhaustive;
 	recInfo._discardFirstLastBounces = _discardFirstLastBounces;
 
-	recInfo._relayWallNormal = _cameraGridNormals.empty() ? glm::vec3(.0, -1.0f, .0f) : _cameraGridNormals.front();
-	recInfo._relayWallMinPosition = glm::vec3(-_cameraGridSize.x / 2.0f, .0f, -_cameraGridSize.y / 2.0f);
-	recInfo._relayWallSize = glm::vec3(_cameraGridSize.x, .0f, _cameraGridSize.y);
+	//recInfo._relayWallNormal = _cameraGridNormals.empty() ? glm::vec3(.0, -1.0f, .0f) : _cameraGridNormals.front();
+	//recInfo._relayWallMinPosition = glm::vec3(-_cameraGridSize.x / 2.0f, .0f, -_cameraGridSize.y / 2.0f);
+	//recInfo._relayWallSize = glm::vec3(_cameraGridSize.x, .0f, _cameraGridSize.y);
 
 	recInfo._hiddenVolumeMin = _hiddenGeometry.minPoint();
 	recInfo._hiddenVolumeMax = _hiddenGeometry.maxPoint();

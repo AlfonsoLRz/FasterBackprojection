@@ -25,9 +25,9 @@ struct ReconstructionInfo
 	glm::vec3		_hiddenVolumeSize;
 	glm::vec3		_hiddenVolumeVoxelSize;
 
-	glm::vec3		_relayWallMinPosition;
-	glm::vec3		_relayWallSize;
-	glm::vec3		_relayWallNormal;
+	//glm::vec3		_relayWallMinPosition;
+	//glm::vec3		_relayWallSize;
+	//glm::vec3		_relayWallNormal;
 
 	glm::uvec3		_voxelResolution;
 

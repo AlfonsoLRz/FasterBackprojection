@@ -31,6 +31,9 @@ void Backprojection::reconstructVolume(
 {
 	_nlosData = nlosData;
 
+	_perf.setAlgorithmName("Backprojection");
+	_perf.tic();
+
 	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
 	const glm::uint numVoxels = voxelResolution.x * voxelResolution.y * voxelResolution.z;
 	float* volumeGpu = nullptr;
@@ -43,8 +46,8 @@ void Backprojection::reconstructVolume(
 		filter_H_cuda(recBuffers._intensity, recInfo._timeStep * 10.0f, .0f);
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
-		reconstructVolumeConfocal(volumeGpu, recInfo);
-		//reconstructAABBConfocalMIS(volumeGpu, recInfo);
+		//reconstructVolumeConfocal(volumeGpu, recInfo);
+		reconstructAABBConfocalMIS(volumeGpu, recInfo, recBuffers);
 	else if (recInfo._captureSystem == CaptureSystem::Exhaustive)
 		reconstructVolumeExhaustive(volumeGpu, recInfo);
 
@@ -52,7 +55,8 @@ void Backprojection::reconstructVolume(
 	_postprocessingFilters[transientParams._postprocessingFilterType]->compute(volumeGpu, voxelResolution, transientParams);
 	normalizeMatrix(volumeGpu, numVoxels);
 
-	std::cout << "Reconstruction finished in " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+	_perf.toc();
+	_perf.summarize();
 
 	// Save volume & free resources
 	if (transientParams._saveReconstructedBoundingBox)
@@ -251,7 +255,7 @@ void Backprojection::reconstructDepthExhaustive(const ReconstructionInfo& recInf
 
 void Backprojection::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo)
 {
-	ChronoUtilities::startTimer();
+	_perf.tic("Backprojection");
 
 	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
 	const glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
@@ -264,28 +268,30 @@ void Backprojection::reconstructVolumeConfocal(float* volume, const Reconstructi
 	);
 
 	backprojectConfocalVoxel<<<gridSize, blockSize>>>(volume, sliceSize);
-	CudaHelper::synchronize("backprojectConfocalVoxel");
+
+	_perf.toc();
 }
 
 void Backprojection::reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo)
 {
-	ChronoUtilities::startTimer();
+	_perf.tic("Backprojection");
 
-	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
-	const glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
+	const glm::uvec3 volumeResolution = glm::uvec3(_nlosData->_dims[0], _nlosData->_dims[1], _nlosData->_dims[2]);
+	const glm::uint sliceSize = volumeResolution.x * volumeResolution.y;
 
 	dim3 blockSize(BLOCK_X_CONFOCAL, BLOCK_Y_CONFOCAL);
 	dim3 gridSize(
 		(recInfo._numLaserTargets * recInfo._numSensorTargets + blockSize.x - 1) / blockSize.x,
 		(sliceSize + blockSize.y - 1) / blockSize.y,
-		(voxelResolution.z + blockSize.z - 1) / blockSize.z
+		(volumeResolution.z + blockSize.z - 1) / blockSize.z
 	);
 
 	backprojectExhaustiveVoxel<<<gridSize, blockSize>>>(volume, sliceSize);
-	CudaHelper::synchronize("backprojectConfocalVoxel");
+
+	_perf.toc();
 }
 
-void Backprojection::reconstructAABBConfocalMIS(float* volume, const ReconstructionInfo& recInfo)
+void Backprojection::reconstructAABBConfocalMIS(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
 {
 	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
 	const glm::uint numVoxels = voxelResolution.x * voxelResolution.y * voxelResolution.z;
@@ -301,7 +307,8 @@ void Backprojection::reconstructAABBConfocalMIS(float* volume, const Reconstruct
 	CudaHelper::initializeBufferGPU(spatialSumGpu, totalElements / numTimeBins);
 
 	float* noiseGpu = nullptr;
-	std::vector<float> noiseHost(numVoxels);
+	std::vector<float> noiseHost(numVoxels * 2);
+#pragma omp parallel for
 	for (glm::uint i = 0; i < numVoxels; ++i)
 		noiseHost[i] = RandomUtilities::getUniformRandom();
 	CudaHelper::initializeBufferGPU(noiseGpu, numVoxels, noiseHost.data());
@@ -309,13 +316,13 @@ void Backprojection::reconstructAABBConfocalMIS(float* volume, const Reconstruct
 	// CUB's inclusive sum
 	{
 		size_t storageBytes = 0;
-		cub::DeviceScan::InclusiveSum(nullptr, storageBytes, volume, spatioTemporalSum, static_cast<int>(totalElements));
+		cub::DeviceScan::InclusiveSum(nullptr, storageBytes, recBuffers._intensity, spatioTemporalSum, static_cast<int>(totalElements));
 
 		void* tempStorage = nullptr;
 		cudaMalloc(&tempStorage, storageBytes);
 
 		// Perform the inclusive scan
-		cub::DeviceScan::InclusiveSum(tempStorage, storageBytes, volume, spatioTemporalSum, static_cast<int>(totalElements));
+		cub::DeviceScan::InclusiveSum(tempStorage, storageBytes, recBuffers._intensity, spatioTemporalSum, static_cast<int>(totalElements));
 
 		CudaHelper::free(tempStorage);
 	}

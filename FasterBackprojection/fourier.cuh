@@ -58,7 +58,7 @@ inline __global__ void readBackFromIFFT(
         return;
 
     const glm::uint xy = idx / timeBins, t = idx % timeBins;
-	H_orig[xy * timeBins + t] = H[xy * paddedTimeBins + t + padding].x;
+	H_orig[xy * timeBins + t] = glm::abs(H[xy * paddedTimeBins + t + padding].x);
 }
 
 inline __global__ void multiplyHK(cufftComplex *d_H, const cufftComplex *d_K, glm::uint batch, glm::uint numTimeBins, glm::uint size)
@@ -85,6 +85,20 @@ inline __global__ void normalizeH(cufftComplex* d_H, size_t batch, size_t timeSi
 }
 
 inline __global__ void shiftFFT(
+    const cufftComplex* __restrict__ H, cufftComplex* __restrict__ H_aux, const glm::uvec3 resolution, const glm::uvec3 shift)
+{
+    const glm::uint z = blockIdx.x * blockDim.x + threadIdx.x;
+    const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
+    const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
+
+    if (x >= resolution.x || y >= resolution.y || z >= resolution.z)
+        return;
+
+    const glm::uvec3 shiftedIndices = (glm::uvec3(x, y, z) + shift) % resolution;
+    H_aux[shiftedIndices.z + resolution.z * (shiftedIndices.y + resolution.y * shiftedIndices.x)] = H[z + resolution.z * (y + resolution.y * x)];
+}
+
+inline __global__ void unshiftFFT(
     const cufftComplex* __restrict__ H, cufftComplex* __restrict__ H_aux, const glm::uvec3 resolution, const glm::uvec3 shift)
 {
     const glm::uint z = blockIdx.x * blockDim.x + threadIdx.x;

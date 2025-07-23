@@ -17,11 +17,11 @@ inline __forceinline__ __device__ glm::uint getKernelIdx(glm::uint x, glm::uint 
 inline __global__ void padIntensityFFT_FK(
     const float* __restrict__ H, cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution, float divisor)
 {
-    const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= currentResolution.x || y >= currentResolution.y || t >= currentResolution.z / 1)
         return;
 
-	H_pad[getKernelIdx(x, y, t, newResolution)] = make_cuComplex(H[getKernelIdx(x, y, t, currentResolution)] * static_cast<float>(t) * divisor, .0f);
+	H_pad[getKernelIdx(x, y, t, newResolution)] = make_cuComplex(H[getKernelIdx(x, y, t, currentResolution)] * static_cast<float>(t) / static_cast<float>(currentResolution.z), .0f);
 }
 
 inline __global__ void unpadIntensityFFT_FK(float* H, const cufftComplex* H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)
@@ -50,19 +50,12 @@ __global__ void stoltKernel(
     float maxSqrtTerm
 )
 {
-    glm::uint z = blockIdx.x * blockDim.x + threadIdx.x; 
+	glm::uint z = blockIdx.x * blockDim.x + threadIdx.x + shift.z; 
     glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;  
     glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
 
     if (x >= fftResolution.x || y >= fftResolution.y || z >= fftResolution.z)
 		return;
-
-    if (z <= originalResolution.z)
-    {
-        getCyclicShiftedIndices(x, y, z, shift, fftResolution);
-        result[getKernelIdx(x, y, z, fftResolution)] = make_cuComplex(0.0f, 0.0f);
-        return;
-	}
 
     // Normalize to [-1, 1]
     float fx = 2.0f * (static_cast<float>(x) / static_cast<float>(fftResolution.x)) - 1.0f;

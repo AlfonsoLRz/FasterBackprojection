@@ -45,7 +45,7 @@ inline __device__ glm::uint getMISIndexAlias(
 {
 	const float r1 = getUniformRandom(noise, noiseBufferSize, idx);
 	const float r2 = getUniformRandom(noise, noiseBufferSize, idx);
-	glm::uint k = static_cast<glm::uint>(r1 * size);
+	glm::uint k = static_cast<glm::uint>(r1 * static_cast<float>(size));
 
 	if (r2 < probTable[k])
 		return k;

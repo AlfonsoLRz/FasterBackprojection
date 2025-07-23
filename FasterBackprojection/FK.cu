@@ -21,6 +21,9 @@ void FK::reconstructVolume(
 {
 	_nlosData = nlosData;
 
+	_perf.setAlgorithmName("fk-migration");
+	_perf.tic();
+
 	if (transientParams._compensateLaserCosDistance)
 		compensateLaserCosDistance(recInfo, recBuffers);
 
@@ -29,7 +32,8 @@ void FK::reconstructVolume(
 	else
 		throw std::runtime_error("Unsupported capture system for LCT reconstruction.");
 
-	std::cout << "Reconstruction finished in " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+	_perf.toc();
+	_perf.summarize();
 
 	if (transientParams._saveMaxImage)
 		FK::saveMaxImage(
@@ -40,15 +44,20 @@ void FK::reconstructVolume(
 
 //
 
-void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers) const
+void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
 {
 	const glm::uvec3 volumeResolution = glm::uvec3(_nlosData->_dims[0], _nlosData->_dims[1], _nlosData->_dims[2]);
 	const glm::uvec3 fftVolumeResolution = volumeResolution * 2u;
-	float* intensityGpu = recBuffers._intensity;
 
+	_perf.tic("Resource allocation");
+
+	cufftHandle planH;
 	cufftComplex* fft = nullptr, *fftAux = nullptr;
 	CudaHelper::initializeZeroBufferGPU(fft, static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z);
-	CudaHelper::initializeBufferGPU(fftAux, static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z);
+	CudaHelper::initializeZeroBufferGPU(fftAux, static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z);
+	float* intensityGpu = recBuffers._intensity;
+
+	_perf.toc();
 
 	dim3 blockSize(16, 8, 8);
 	dim3 gridSize(
@@ -64,73 +73,73 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 		(fftVolumeResolution.x + blockSizeFFT.z - 1) / blockSizeFFT.z
 	);
 
-	ChronoUtilities::startTimer();
-
 	// Perform forward FFT on the intensity data
-	const float divisor = 1.0f / static_cast<float>(volumeResolution.z);
-	dim3 gridSize2(
-		(volumeResolution.x / 1 + blockSize.x - 1) / blockSize.x,
-		(volumeResolution.y + blockSize.y - 1) / blockSize.y,
-		(volumeResolution.z + blockSize.z - 1) / blockSize.z
-	);
-	padIntensityFFT_FK<<<gridSize2, dim3(8, 8, 8)>>>(intensityGpu, fft, volumeResolution, fftVolumeResolution, divisor);
-	CudaHelper::synchronize("padIntensityFFT");
+	{
+		_perf.tic("Pad Intensity FFT");
 
-	std::cout << "FFT padding took " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+		padIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fft, volumeResolution, fftVolumeResolution, 1.0f);
 
-	// Calculate sqrt term
-	float width = _nlosData->_temporalWidth, range = recInfo._timeStep * static_cast<float>(recInfo._numTimeBins);
-	float sqrtConst = (static_cast<float>(volumeResolution.x) * range) / (static_cast<float>(volumeResolution.z) * width * 4.0f);
+		_perf.toc();
+	}
 
-	//
-	cufftHandle planH;
-	int rank = 3; 
-	int n[3] = { static_cast<int>(fftVolumeResolution[0]),
-				 static_cast<int>(fftVolumeResolution[1]),
-				 static_cast<int>(fftVolumeResolution[2]) };
+	{
+		_perf.tic("FFT");
 
-	ChronoUtilities::startTimer();
+		int rank = 3;
+		int n[3] = { static_cast<int>(fftVolumeResolution[0]),
+					 static_cast<int>(fftVolumeResolution[1]),
+					 static_cast<int>(fftVolumeResolution[2]) };
 
-	CUFFT_CHECK(cufftPlanMany(&planH, rank, n,
-		NULL, 1, 0,
-		NULL, 1, 0,
-		CUFFT_C2C, 1));
-	CUFFT_CHECK(cufftExecC2C(planH, fft, fft, CUFFT_FORWARD));
-	CudaHelper::synchronize("cufftExecC2C");
+		CUFFT_CHECK(cufftPlanMany(&planH, rank, n,
+			NULL, 1, 0,
+			NULL, 1, 0,
+			CUFFT_C2C, 1));
+		CUFFT_CHECK(cufftExecC2C(planH, fft, fft, CUFFT_FORWARD));
 
-	std::cout << "FFT execution took " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+		_perf.toc();
+	}
 
-	// Shift FFT
-	//ChronoUtilities::startTimer();
+	// Stolt interpolation
+	{
+		_perf.tic("Stolt");
 
-	//shiftFFT<<<gridSizeFFT, blockSizeFFT>>>(fft, fftAux, fftVolumeResolution, fftVolumeResolution / 2u);
-	//CudaHelper::synchronize("shiftFFT");
+		float width = _nlosData->_temporalWidth, range = recInfo._timeStep * static_cast<float>(recInfo._numTimeBins);
+		float sqrtConst = static_cast<float>(volumeResolution.x) * range / (static_cast<float>(volumeResolution.z) * width * 4.0f);
+		float maxValue = 1.0f / sqrtf(sqrtConst * sqrtConst * 2.0f + 1.0f);
 
-	//std::cout << "FFT shifting took " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
+		dim3 paddedBlockSizeFFT(16, 8, 8);
+		dim3 paddedGridSizeFFT(
+			(fftVolumeResolution.z / 2 + paddedBlockSizeFFT.x - 1) / paddedBlockSizeFFT.x,
+			(fftVolumeResolution.y + paddedBlockSizeFFT.y - 1) / paddedBlockSizeFFT.y,
+			(fftVolumeResolution.x + paddedBlockSizeFFT.z - 1) / paddedBlockSizeFFT.z
+		);
 
-	// Cleanup
-	ChronoUtilities::startTimer();
+		stoltKernel<<<paddedGridSizeFFT, paddedBlockSizeFFT>>>(fft, fftAux, volumeResolution, fftVolumeResolution, fftVolumeResolution / 2u, sqrtConst * sqrtConst, maxValue);
 
-	float maxValue = 1.0f / sqrtf(divisor * divisor * 2.0f + 1.0f);
-	stoltKernel<<<gridSizeFFT, blockSizeFFT>>>(fft, fftAux, volumeResolution, fftVolumeResolution, fftVolumeResolution / 2u, sqrtConst * sqrtConst, maxValue);
-	CudaHelper::synchronize("stoltKernel");
-
-	std::cout << "Stolt kernel computation took " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
-
-	//
-	//shiftFFT<<<gridSizeFFT, blockSizeFFT>>>(fftAux, fft, fftVolumeResolution, fftVolumeResolution / 2u);
-	//CudaHelper::synchronize("unshiftFFT");
+		_perf.toc();
+	}
 
 	// Inverse FFT
-	CUFFT_CHECK(cufftExecC2C(planH, fftAux, fftAux, CUFFT_INVERSE));
+	{
+		_perf.tic("Inverse FFT");
+
+		CUFFT_CHECK(cufftExecC2C(planH, fftAux, fftAux, CUFFT_INVERSE));
+
+		_perf.toc();
+	}
 
 	// IFFT requires normalization, but it also produces very small values, so we avoid this and produce valid results by normalizing later
 	//size_t fftSize = static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z;
 	//normalizeIFFT<<<CudaHelper::getNumBlocks(fftSize, 512), 512>>>(fftAux, fftSize, 1.0f / static_cast<float>(fftSize));
 
 	// Inverse padding
-	unpadIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fftAux, volumeResolution, fftVolumeResolution);
-	CudaHelper::synchronize("unpadIntensityFFT");
+	{
+		_perf.tic("Unpad intensity FFT");
+
+		unpadIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fftAux, volumeResolution, fftVolumeResolution);
+
+		_perf.toc();
+	}
 
 	CudaHelper::free(fft);
 	CudaHelper::free(fftAux);

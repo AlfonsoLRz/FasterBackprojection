@@ -177,3 +177,19 @@ inline __global__ void multiplyTransformTranspose(
         mult[(y * dataResolution.y + x) * dataResolution.z + t] = sum;
     }
 }
+
+inline __global__ void multiplyTransformTransposeInv(
+    const float* __restrict__ volumeGpu, const float* __restrict__ mtx, float* __restrict__ mult, glm::uvec3 dataResolution)
+{
+    const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
+    if (x < dataResolution.x && y < dataResolution.y && t < dataResolution.z)
+    {
+        const glm::uint spatialIndex = y * dataResolution.y + x;
+
+        float sum = 0.0f;
+        for (glm::uint k = 0; k < dataResolution.z; ++k)
+            sum += mtx[t * dataResolution.z + k] * volumeGpu[spatialIndex * dataResolution.z + k];
+
+        mult[(y * dataResolution.y + x) * dataResolution.z + t] = sum;
+    }
+}

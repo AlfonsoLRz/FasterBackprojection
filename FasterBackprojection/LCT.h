@@ -17,7 +17,7 @@ protected:
 	static void reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo);
 
 	cufftComplex* definePSFKernel(const glm::uvec3& dataResolution, float slope, cudaStream_t stream);
-	static void defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseMtx);
+	static void defineTransformOperator(glm::uint M, float*& d_mtx);
 
 	void multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const glm::uvec3& dataResolution);
 

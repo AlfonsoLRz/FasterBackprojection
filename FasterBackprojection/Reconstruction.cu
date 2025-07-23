@@ -60,8 +60,10 @@ void Reconstruction::padIntensity(float* volumeGpu, cufftComplex*& paddedIntensi
 		mode == "zero" ? PadMode::Zero : PadMode::Edge);
 }
 
-void Reconstruction::filter_H_cuda(float* intensityGpu, float wl_mean, float wl_sigma, const std::string& border) const
+void Reconstruction::filter_H_cuda(float* intensityGpu, float wl_mean, float wl_sigma, const std::string& border)
 {
+	_perf.tic("Fourier filter");
+
 	size_t nt = _nlosData->_dims.back();
 	if (glm::epsilonEqual(wl_sigma, .0f, glm::epsilon<float>()))
 	{
@@ -153,12 +155,14 @@ void Reconstruction::filter_H_cuda(float* intensityGpu, float wl_mean, float wl_
 	//normalizeH<<<grid, block>>>(d_H, batch, nt_pad);		// I read the IFFT results, and they were too small; I think this is not needed
 
 	readBackFromIFFT<<<grid, block>>>(d_H, intensityGpu, sliceSize, nt, nt_pad, padding, sliceSize * nt);
-	CudaHelper::downloadBufferGPU(intensityGpu, _nlosData->_data.data(), _nlosData->_data.size(), 0);
+	//CudaHelper::downloadBufferGPU(intensityGpu, _nlosData->_data.data(), _nlosData->_data.size(), 0);
 
 	// 
 	CUFFT_CHECK(cufftDestroy(planH));
 	CudaHelper::free(d_H);
 	CudaHelper::free(d_K);
+
+	_perf.toc();
 }
 
 void Reconstruction::compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)

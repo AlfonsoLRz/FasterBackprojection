@@ -15,7 +15,7 @@ protected:
 	void reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo);
 
 public:
-	void reconstructAABBConfocalMIS(float* volume, const ReconstructionInfo& recInfo);
+	void reconstructAABBConfocalMIS(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
 
 public:
 	void reconstructDepths(

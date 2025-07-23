@@ -23,7 +23,7 @@ __global__ void backproject(float* __restrict__ activation, const double* __rest
 
 	const glm::vec3 lPos = laserTargets[l];
 	const glm::vec3 sPos = laserTargets[s];
-	const glm::vec3 checkPos = laserTargets[checkPosIdx] + rtRecInfo._relayWallNormal * static_cast<float>(depths[d]);
+	const glm::vec3 checkPos = laserTargets[checkPosIdx] + glm::vec3(.0f, 1.0f, .0f) * static_cast<float>(depths[d]);
 
 	float traversedDistance = glm::distance(lPos, checkPos) + glm::distance(checkPos, sPos) - rtRecInfo._timeOffset;
 	if (rtRecInfo._discardFirstLastBounces == 0)
@@ -48,7 +48,7 @@ __global__ void backprojectConfocal(float* __restrict__ activation, const float*
 		return;
 
 	const glm::vec3 lPos = laserTargets[l];
-	const glm::vec3 checkPos = laserTargets[c] + rtRecInfo._relayWallNormal * depths[d];
+	const glm::vec3 checkPos = laserTargets[c] + glm::vec3(.0f, 1.0f, .0f) * depths[d];
 
 	float traversalTime = glm::distance(lPos, checkPos) * 2.0f - rtRecInfo._timeOffset;
 	if (rtRecInfo._discardFirstLastBounces == 0)
@@ -75,7 +75,7 @@ __global__ void backprojectExhaustive(float* __restrict__ activation, const floa
 	const glm::uint l = ls % rtRecInfo._numLaserTargets;
 	const glm::uint s = ls / rtRecInfo._numLaserTargets;
 	const glm::vec3 lPos = laserTargets[l], sPos = sensorTargets[s];
-	const glm::vec3 checkPos = laserTargets[c] + rtRecInfo._relayWallNormal * depths[d];
+	const glm::vec3 checkPos = laserTargets[c] + glm::vec3(.0f, 1.0f, .0f) * depths[d];
 
 	float traversedDistance = glm::distance(lPos, checkPos) + glm::distance(checkPos, sPos) - rtRecInfo._timeOffset;
 	if (rtRecInfo._discardFirstLastBounces == 0)
@@ -212,15 +212,15 @@ __global__ void backprojectConfocalVoxelMIS(
 	// Randomize pdf selection
 	glm::uint l;
 	float pdf, globalPDF;
-	if (getUniformRandom(noise, noiseBufferSize, randomState) < 0.5f)
+	if (getUniformRandom(noise, noiseBufferSize, randomState) < .5f)
 	{
-		l = getMISIndexAlias(randomState, aliasTable, probTable, rtRecInfo._numLaserTargets, noise, noiseBufferSize);
+		l = getMISIndexAlias(randomState, aliasTable, probTable, rtRecInfo._numLaserTargets - 1, noise, noiseBufferSize);
 		pdf = l > 0 ? spatialSum[l] - spatialSum[l - 1] : spatialSum[l];
 		globalPDF = pdf + 1.0f * safeRCP(static_cast<float>(rtRecInfo._numLaserTargets));
 	}
 	else
 	{
-		l = static_cast<glm::uint>(getUniformRandom(noise, noiseBufferSize, randomState) * static_cast<float>(rtRecInfo._numLaserTargets));
+		l = static_cast<glm::uint>(getUniformRandom(noise, noiseBufferSize, randomState) * static_cast<float>(rtRecInfo._numLaserTargets - 1));
 		pdf = 1.0f * safeRCP(static_cast<float>(rtRecInfo._numLaserTargets));
 		globalPDF = pdf + (l > 0 ? spatialSum[l] - spatialSum[l - 1] : spatialSum[l]);
 	}
@@ -257,6 +257,6 @@ __global__ void backprojectConfocalVoxelMIS(
 
 	const float backscatteredLight = intensityCube[getConfocalTransientIndex(l, timeBin)];
 	if (backscatteredLight > EPS)
-		activation[sliceSize * voxelZ + v] += misWeight * backscatteredLight * safeRCP(dist * dist);
+		activation[sliceSize * voxelZ + v] += misWeight * backscatteredLight;
 #endif
 }

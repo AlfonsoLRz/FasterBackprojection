@@ -27,7 +27,7 @@ void LCT::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& rec
 	const glm::uvec3 volumeResolution = glm::uvec3(_nlosData->_dims[0], _nlosData->_dims[1], _nlosData->_dims[2]);
 	float tDistance = static_cast<float>(recInfo._numTimeBins) * recInfo._timeStep;
 	float* intensityGpu = recBuffers._intensity;
-	float* mtx, *mtxi;
+	float* mtx;
 
 	_perf.tic("PSF, transform operators & transform data");
 
@@ -40,8 +40,7 @@ void LCT::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& rec
 	std::future<void> future = std::async(std::launch::async,
 	                                      defineTransformOperator,
 											recInfo._numTimeBins,
-	                                      std::ref(mtx),
-	                                      std::ref(mtxi));
+	                                      std::ref(mtx));
 
 	// Define the point spread function (PSF) kernel
 	cufftComplex* psfKernel = definePSFKernel(volumeResolution, glm::abs(_nlosData->_temporalWidth / tDistance), stream1);
@@ -63,14 +62,13 @@ void LCT::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& rec
 
 	// Inverse transform the data
 	_perf.tic("Inverse transform");
-	inverseTransformData(transformedData, intensityGpu, volumeResolution, mtxi);
+	inverseTransformData(transformedData, intensityGpu, volumeResolution, mtx);
 	_perf.toc();
 
 	emptyQueue();
 	CudaHelper::free(transformedData);
 	CudaHelper::free(psfKernel);
 	CudaHelper::free(mtx);
-	CudaHelper::free(mtxi);
 	cudaStreamDestroy(stream1);
 	cudaStreamDestroy(stream2);
 }
@@ -174,7 +172,7 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 	return rolledPsf;
 }
 
-void LCT::defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseMtx)
+void LCT::defineTransformOperator(glm::uint M, float*& d_mtx)
 {
 	using namespace Eigen;
 	using SparseMatrixF_RowMajor = Eigen::SparseMatrix<float, Eigen::RowMajor>;  // For efficient row access
@@ -199,10 +197,6 @@ void LCT::defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseM
 		mtx.setFromTriplets(triplets.begin(), triplets.end());
 		mtx.makeCompressed(); 
 	}
-
-	// Transpose (now column-major)
-	SparseMatrixF_ColMajor mtxi = mtx.transpose(); // mtxi is explicitly column-major
-	// Transpose already returns a compressed matrix, no need for makeCompressed() here.
 
 	// Hierarchical downsampling
 	int K = static_cast<int>(std::round(std::log2(M)));
@@ -273,66 +267,6 @@ void LCT::defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseM
 		mtx_new.setFromTriplets(combinedAvgTriplets.begin(), combinedAvgTriplets.end());
 		mtx_new.makeCompressed(); 
 		mtx = mtx_new; 
-
-		// Downsample columns (efficient with column-major mtxi)
-		Index newCols = mtxi.cols() / 2;
-		SparseMatrixF_ColMajor mtxi_new(mtxi.rows(), newCols);
-		std::vector<std::vector<TripletF>> threadAvgTriplets_col(omp_get_max_threads());
-
-		#pragma omp parallel
-		{
-			int thread_id = omp_get_thread_num();
-			threadAvgTriplets_col[thread_id].reserve(mtxi.nonZeros() / (2 * omp_get_num_threads()) + 10);
-
-			#pragma omp for nowait
-			for (int j = 0; j < newCols; ++j)
-			{
-				int col1 = 2 * j;
-				int col2 = 2 * j + 1;
-
-				// Get iterators for the two columns
-				SparseMatrixF_ColMajor::InnerIterator it1(mtxi, col1);
-				SparseMatrixF_ColMajor::InnerIterator it2(mtxi, col2);
-
-				// Merge operation 
-				while (it1 || it2) 
-				{
-					if (it1 && (!it2 || it1.row() < it2.row())) 
-					{
-						// Only from col1
-						threadAvgTriplets_col[thread_id].emplace_back(it1.row(), j, 0.5f * it1.value());
-						++it1;
-					}
-					else if (it2 && (!it1 || it2.row() < it1.row())) 
-					{
-						// Only from col2
-						threadAvgTriplets_col[thread_id].emplace_back(it2.row(), j, 0.5f * it2.value());
-						++it2;
-					}
-					else if (it1 && it2 && it1.row() == it2.row()) 
-					{
-						float sum_val = 0.5f * (it1.value() + it2.value());
-						if (std::abs(sum_val) > glm::epsilon<float>())
-							threadAvgTriplets_col[thread_id].emplace_back(it1.row(), j, sum_val);
-						++it1;
-						++it2;
-					}
-					else 
-					{
-						break;
-					}
-				}
-			}
-		}
-
-		// Collect all thread-local triplets into a single vector
-		std::vector<TripletF> combinedAvgTriplets_i;
-		for (const auto& local_vec : threadAvgTriplets_col)
-			combinedAvgTriplets_i.insert(combinedAvgTriplets_i.end(), local_vec.begin(), local_vec.end());
-
-		mtxi_new.setFromTriplets(combinedAvgTriplets_i.begin(), combinedAvgTriplets_i.end());
-		mtxi_new.makeCompressed(); 
-		mtxi = mtxi_new; 
 	}
 
 	std::vector<float> mtxHost(M2);
@@ -344,14 +278,6 @@ void LCT::defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseM
 			mtxHost[it.col() * M + it.row()] = it.value();
 
 	CudaHelper::initializeBufferGPU(d_mtx, mtxHost.size(), mtxHost.data());
-
-	// Prepare inverse matrix(transpose of mtx)
-	#pragma omp parallel for
-	for (int k = 0; k < mtxi.outerSize(); ++k)
-		for (SparseMatrixF_ColMajor::InnerIterator it(mtxi, k); it; ++it) 
-			mtxHost[it.col() * M + it.row()] = it.value();
-
-	CudaHelper::initializeBufferGPU(d_inverseMtx, mtxHost.size(), mtxHost.data());
 }
 
 void LCT::multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const glm::uvec3& dataResolution)
@@ -446,7 +372,7 @@ void LCT::inverseTransformData(const float* volumeGpu, float* multResult, const 
 		(dataResolution.x + blockSize3D.z - 1) / blockSize3D.z
 	);
 
-	multiplyTransformTranspose<<<gridSize3D, blockSize3D>>>(volumeGpu, inverseMtx, multResult, dataResolution);
+	multiplyTransformTransposeInv<<<gridSize3D, blockSize3D>>>(volumeGpu, inverseMtx, multResult, dataResolution);
 }
 
 void LCT::reconstructDepths(NLosData* nlosData, const ReconstructionInfo& recInfo,
