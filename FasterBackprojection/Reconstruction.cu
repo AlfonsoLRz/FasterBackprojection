@@ -163,10 +163,7 @@ void Reconstruction::filter_H_cuda(float* intensityGpu, float wl_mean, float wl_
 
 void Reconstruction::compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
 {
-	ChronoUtilities::startTimer();
-
-	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
-	const glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
+	_perf.tic("Compensate Laser Cosine & Distance");
 
 	glm::uint spatialSize = recInfo._numLaserTargets;
 	if (recInfo._captureSystem == CaptureSystem::Exhaustive)
@@ -180,14 +177,17 @@ void Reconstruction::compensateLaserCosDistance(const ReconstructionInfo& recInf
 
 	compensateLaserPosition<<<gridSize, blockSize>>>(
 		recBuffers._intensity, 
-		recInfo._numLaserTargets, 
 		recInfo._captureSystem == CaptureSystem::Confocal ? 1 : recInfo._numSensorTargets, 
 		spatialSize, recInfo._numTimeBins);
-	CudaHelper::synchronize("compensateLaserCosDistance");
+	//CudaHelper::synchronize("compensateLaserCosDistance");
+
+	_perf.toc();
 }
 
 void Reconstruction::normalizeMatrix(float* v, glm::uint size)
 {
+	_perf.tic("Normalize Matrix");
+
 	size_t tempStorageBytes = 0;
 	void* tempStorage = nullptr;
 
@@ -208,9 +208,11 @@ void Reconstruction::normalizeMatrix(float* v, glm::uint size)
 	CudaHelper::free(tempStorage);
 	CudaHelper::free(maxValue);
 	CudaHelper::free(minValue);
+
+	_perf.toc();
 }
 
-void Reconstruction::saveMaxImage(const std::string& filename, float* volumeGpu, const glm::uvec3& volumeResolution)
+void Reconstruction::saveMaxImage(const std::string& filename, const float* volumeGpu, const glm::uvec3& volumeResolution, bool zMajor)
 {
 	glm::uint sliceSize = volumeResolution.x * volumeResolution.y;
 
@@ -223,7 +225,10 @@ void Reconstruction::saveMaxImage(const std::string& filename, float* volumeGpu,
 		(volumeResolution.x + blockSize.x - 1) / blockSize.x,
 		(volumeResolution.y + blockSize.y - 1) / blockSize.y
 	);
-	composeImage<<<gridSize, blockSize >>>(volumeGpu, maxZ, volumeResolution);
+	if (zMajor)
+		composeImageZ<<<gridSize, blockSize>>>(volumeGpu, maxZ, volumeResolution);
+	else
+		composeImage<<<gridSize, blockSize >>>(volumeGpu, maxZ, volumeResolution);
 	CudaHelper::synchronize("formImage");
 
 	// Normalize the maximum Z values

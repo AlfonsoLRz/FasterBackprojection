@@ -19,10 +19,10 @@ protected:
 	cufftComplex* definePSFKernel(const glm::uvec3& dataResolution, float slope, cudaStream_t stream);
 	static void defineTransformOperator(glm::uint M, float*& d_mtx, float*& d_inverseMtx);
 
-	static void multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const glm::uvec3& dataResolution);
+	void multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const glm::uvec3& dataResolution);
 
 	static float* transformData(float* volumeGpu, const glm::uvec3& dataResolution, const float* mtx, cudaStream_t stream);
-	static void inverseTransformData(float* volumeGpu, float* multResult, const glm::uvec3& dataResolution, float*& inverseMtx);
+	static void inverseTransformData(const float* volumeGpu, float* multResult, const glm::uvec3& dataResolution, float*& inverseMtx);
 
 public:
 	void reconstructDepths(

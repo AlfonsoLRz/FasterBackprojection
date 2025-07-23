@@ -18,9 +18,11 @@
 #include <functional>
 #include <iomanip>
 #include <limits.h>
+#include <map>
 #include <memory>
 #include <numbers>
 #include <numeric>
+#include <queue>
 #include <random>
 #include <sstream>
 #include <stdio.h>
@@ -52,6 +54,7 @@
 
 // Cuda
 #include "cooperative_groups.h"
+#include "cuda_fp16.h"
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include "cuda_texture_types.h"

@@ -49,6 +49,8 @@ protected:
 	// Exhaustive
 	void setUp(std::vector<float>& data, const std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<double>>>>>>>& rawData);
 
+	void swapXYZOrder();
+
 	static glm::uint getZOffset(const std::string& filename);
 
 	void loadMat(const std::string& filename);

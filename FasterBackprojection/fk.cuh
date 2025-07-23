@@ -14,13 +14,14 @@ inline __forceinline__ __device__ glm::uint getKernelIdx(glm::uint x, glm::uint 
     return t + dataResolution.z * (y + dataResolution.y * x);
 }
 
-inline __global__ void padIntensityFFT_FK(const float* __restrict__ H, cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution, float divisor)
+inline __global__ void padIntensityFFT_FK(
+    const float* __restrict__ H, cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution, float divisor)
 {
-    const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
-    if (x >= currentResolution.x || y >= currentResolution.y || t >= currentResolution.z)
+    const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
+    if (x >= currentResolution.x || y >= currentResolution.y || t >= currentResolution.z / 1)
         return;
 
-    H_pad[getKernelIdx(x, y, t, newResolution)].x = H[getKernelIdx(x, y, t, currentResolution)] * static_cast<float>(t) * divisor;
+	H_pad[getKernelIdx(x, y, t, newResolution)] = make_cuComplex(H[getKernelIdx(x, y, t, currentResolution)] * static_cast<float>(t) * divisor, .0f);
 }
 
 inline __global__ void unpadIntensityFFT_FK(float* H, const cufftComplex* H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)
@@ -32,12 +33,11 @@ inline __global__ void unpadIntensityFFT_FK(float* H, const cufftComplex* H_pad,
     H[getKernelIdx(x, y, t, currentResolution)] = H_pad[getKernelIdx(x, y, t, newResolution)].x;
 }
 
-inline __device__ inline glm::uvec3 getCyclicShiftedIndices(glm::uvec3 originalIdx, glm::uvec3 shift, glm::uvec3 resolution)
+inline __device__ glm::uvec3 getCyclicShiftedIndices(glm::uint& x, glm::uint& y, glm::uint& z, glm::uvec3 shift, glm::uvec3 resolution)
 {
-    glm::uint shifted_x = (originalIdx.x + shift.x) % resolution.x;
-    glm::uint shifted_y = (originalIdx.y + shift.y) % resolution.y;
-    glm::uint shifted_z = (originalIdx.z + shift.z) % resolution.z;
-    return glm::uvec3(shifted_x, shifted_y, shifted_z);
+    x = (x + shift.x) % resolution.x;
+    y = (y + shift.y) % resolution.y;
+    z = (z + shift.z) % resolution.z;
 }
 
 __global__ void stoltKernel(
@@ -59,6 +59,7 @@ __global__ void stoltKernel(
 
     if (z <= originalResolution.z)
     {
+        getCyclicShiftedIndices(x, y, z, shift, fftResolution);
         result[getKernelIdx(x, y, z, fftResolution)] = make_cuComplex(0.0f, 0.0f);
         return;
 	}
@@ -75,6 +76,10 @@ __global__ void stoltKernel(
     float ix = (fx + 1.0f) * 0.5f * static_cast<float>(fftResolution.x);
     float iy = (fy + 1.0f) * 0.5f * static_cast<float>(fftResolution.y);
     float iz = (sqrt_term + 1.0f) * 0.5f * static_cast<float>(fftResolution.z);
+
+	ix = fmod(ix + static_cast<float>(shift.x), static_cast<float>(fftResolution.x));
+	iy = fmod(iy + static_cast<float>(shift.y), static_cast<float>(fftResolution.y));
+	iz = fmod(iz + static_cast<float>(shift.z), static_cast<float>(fftResolution.z));
 
     int x0 = static_cast<int>(floorf(ix)), y0 = static_cast<int>(floorf(iy)), z0 = static_cast<int>(floorf(iz));
     int x1 = x0 + 1, y1 = y0 + 1, z1 = z0 + 1;
@@ -112,6 +117,6 @@ __global__ void stoltKernel(
 
     cufftComplex res = complexLerp(c0, c1, dz);
 
-    // Store result
-    result[getKernelIdx(x, y, z, fftResolution)] = complexMulScalar(res, glm::abs(fz) / maxSqrtTerm);
+    getCyclicShiftedIndices(x, y, z, shift, fftResolution);
+    result[getKernelIdx(x, y, z, fftResolution)] = complexMulScalar(res, glm::abs(fz) * maxSqrtTerm);
 }

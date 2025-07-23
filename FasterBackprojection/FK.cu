@@ -68,7 +68,12 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 
 	// Perform forward FFT on the intensity data
 	const float divisor = 1.0f / static_cast<float>(volumeResolution.z);
-	padIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fft, volumeResolution, fftVolumeResolution, divisor);
+	dim3 gridSize2(
+		(volumeResolution.x / 1 + blockSize.x - 1) / blockSize.x,
+		(volumeResolution.y + blockSize.y - 1) / blockSize.y,
+		(volumeResolution.z + blockSize.z - 1) / blockSize.z
+	);
+	padIntensityFFT_FK<<<gridSize2, dim3(8, 8, 8)>>>(intensityGpu, fft, volumeResolution, fftVolumeResolution, divisor);
 	CudaHelper::synchronize("padIntensityFFT");
 
 	std::cout << "FFT padding took " << getElapsedTime(ChronoUtilities::MILLISECONDS) << " milliseconds.\n";
@@ -106,7 +111,7 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 	// Cleanup
 	ChronoUtilities::startTimer();
 
-	float maxValue = sqrtf(divisor * divisor * 2.0f + 1.0f);
+	float maxValue = 1.0f / sqrtf(divisor * divisor * 2.0f + 1.0f);
 	stoltKernel<<<gridSizeFFT, blockSizeFFT>>>(fft, fftAux, volumeResolution, fftVolumeResolution, fftVolumeResolution / 2u, sqrtConst * sqrtConst, maxValue);
 	CudaHelper::synchronize("stoltKernel");
 

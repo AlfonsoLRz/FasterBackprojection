@@ -6,8 +6,7 @@
 #include "math.cuh"
 
 inline __global__ void compensateLaserPosition(
-	float* __restrict__ intensity, 
-	glm::uint numLaserTargets, glm::uint numSensorTargets, glm::uint spatialSize, glm::uint numTimeBins)
+	float* __restrict__ intensity, glm::uint numSensorTargets, glm::uint spatialSize, glm::uint numTimeBins)
 {
 	const glm::uint xy = blockIdx.x * blockDim.x + threadIdx.x;
 	const glm::uint timeBin = blockIdx.y * blockDim.y + threadIdx.y;

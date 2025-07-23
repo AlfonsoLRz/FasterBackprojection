@@ -149,7 +149,7 @@ inline __global__ void buildLoGKernel3D(cufftComplex* kernel, int nx, int ny, in
 
 //
 
-inline __global__ void composeImage(float* __restrict__ volume, float* __restrict__ image, glm::uvec3 dataResolution)
+inline __global__ void composeImage(const float* __restrict__ volume, float* __restrict__ image, glm::uvec3 dataResolution)
 {
 	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
 	if (x >= dataResolution.x || y >= dataResolution.y)
@@ -159,6 +159,22 @@ inline __global__ void composeImage(float* __restrict__ volume, float* __restric
 	for (glm::uint t = 0; t < dataResolution.z; ++t)
 	{
 		const glm::uint idx = x * dataResolution.y * dataResolution.z + y * dataResolution.z + t;
+		maxValue = glm::max(maxValue, volume[idx]);
+	}
+
+	image[y * dataResolution.x + x] = maxValue;
+}
+
+inline __global__ void composeImageZ(const float* __restrict__ volume, float* __restrict__ image, glm::uvec3 dataResolution)
+{
+	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
+	if (x >= dataResolution.x || y >= dataResolution.y)
+		return;
+
+	float maxValue = -FLT_MAX;
+	for (glm::uint t = 0; t < dataResolution.z; ++t)
+	{
+		const glm::uint idx = x + dataResolution.x * y + dataResolution.x * dataResolution.y * t;
 		maxValue = glm::max(maxValue, volume[idx]);
 	}
 

@@ -117,6 +117,7 @@
     <ClInclude Include="ComputeShader.h" />
     <ClInclude Include="CudaContext.h" />
     <ClInclude Include="CudaHelper.h" />
+    <ClInclude Include="CudaPerf.h" />
     <ClInclude Include="DrawCube.h" />
     <ClInclude Include="DrawEllipsoids.h" />
     <ClInclude Include="DrawPointCloud.h" />
@@ -201,6 +202,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="CudaPerf.cpp" />
     <ClCompile Include="DrawCube.cpp" />
     <ClCompile Include="DrawEllipsoids.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>

@@ -216,6 +216,9 @@
     <ClInclude Include="TransientFileReader.h">
       <Filter>header</Filter>
     </ClInclude>
+    <ClInclude Include="CudaPerf.h">
+      <Filter>header</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Window.cpp">
@@ -324,6 +327,9 @@
       <Filter>source</Filter>
     </ClCompile>
     <ClCompile Include="NLosData.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="CudaPerf.cpp">
       <Filter>source</Filter>
     </ClCompile>
   </ItemGroup>

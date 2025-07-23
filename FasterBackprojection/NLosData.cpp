@@ -36,6 +36,8 @@ NLosData::NLosData(const std::string& filename, bool saveBinary, bool useBinary)
 		}
 	}
 
+	swapXYZOrder();
+
 	if (saveBinary && !saveBinaryFile(binaryFile))
 		std::cerr << "NLosData: Failed to save binary file: " << binaryFile << '\n';
 }
@@ -291,6 +293,38 @@ void NLosData::setUp(std::vector<float>& data,
 	}
 
 	_dims = { numRowsLaser, numColsLaser, numRowsCamera, numColsCamera, numTimeBins };
+}
+
+void NLosData::swapXYZOrder()
+{
+	if (_cameraGridPositions.empty())
+		return;
+
+	const glm::vec3 sensorGridPositionFirst = _cameraGridPositions.front(), sensorGridPositionLast = _cameraGridPositions.back();
+
+	if (glm::epsilonEqual(sensorGridPositionFirst.y, sensorGridPositionLast.y, glm::epsilon<float>()))
+		return;
+
+	// Swap Y and Z
+	_cameraPosition = glm::vec3(_cameraPosition.x, _cameraPosition.z, _cameraPosition.y);
+	_laserPosition = glm::vec3(_laserPosition.x, _laserPosition.z, _laserPosition.y);
+
+	for (auto& pos : _cameraGridPositions)
+		pos = glm::vec3(pos.x, pos.z, pos.y);
+
+	for (auto& pos : _laserGridPositions)
+		pos = glm::vec3(pos.x, pos.z, pos.y);
+
+	for (auto& normal : _cameraGridNormals)
+		normal = glm::vec3(normal.x, normal.z, normal.y);
+
+	for (auto& normal : _laserGridNormals)
+		normal = glm::vec3(normal.x, normal.z, normal.y);
+
+	_hiddenGeometry = AABB(
+		glm::vec3(_hiddenGeometry.minPoint().x, _hiddenGeometry.minPoint().z, _hiddenGeometry.minPoint().y),
+		glm::vec3(_hiddenGeometry.maxPoint().x, _hiddenGeometry.maxPoint().z, _hiddenGeometry.maxPoint().y)
+	);
 }
 
 glm::uint NLosData::getZOffset(const std::string& filename)

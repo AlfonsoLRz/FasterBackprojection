@@ -4,6 +4,7 @@
 #include <cufft.h>
 
 #include "ChronoUtilities.h"
+#include "CudaPerf.h"
 #include "GpuStructs.cuh"
 #include "NLosData.h"
 #include "PostprocessingFilters.h"
@@ -33,9 +34,8 @@ protected:
 	};
 
 protected:
-	NLosData*					_nlosData = nullptr;
-	DeleteQueue<float>			_deleteFloatPointers;
-	DeleteQueue<cufftComplex>	_deleteComplexPointers;
+	NLosData* _nlosData = nullptr;
+	CudaPerf  _perf;
 
 	static const PostprocessingFilters* _postprocessingFilters[PostprocessingFilterType::NUM_POSTPROCESSING_FILTERS];
 
@@ -46,10 +46,10 @@ protected:
 	void filter_H_cuda(float* intensityGpu, float wl_mean, float wl_sigma = .0f, const std::string& border = "zero") const;
 
 	// Pre-processing functions
-	static void compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
-	static void normalizeMatrix(float* v, glm::uint size);
+	void compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
+	void normalizeMatrix(float* v, glm::uint size);
 
-	static void saveMaxImage(const std::string& filename, float* volumeGpu, const glm::uvec3& volumeResolution);
+	void saveMaxImage(const std::string& filename, const float* volumeGpu, const glm::uvec3& volumeResolution, bool zMajor = false);
 	static bool saveReconstructedAABB(const std::string& filename, float* voxels, glm::uint numVoxels);
 
 public:

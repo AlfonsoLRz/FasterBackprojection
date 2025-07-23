@@ -8,14 +8,14 @@ protected:
 	static void buildAliasTables(const std::vector<float>& cdf, std::vector<glm::uint>& aliasTable, std::vector<float>& probTable);
 
 protected:
-	static void reconstructDepthConfocal(const ReconstructionInfo& recInfo, std::vector<float>& reconstructionDepths);
-	static void reconstructDepthExhaustive(const ReconstructionInfo& recInfo, std::vector<float>& reconstructionDepths);
+	void reconstructDepthConfocal(const ReconstructionInfo& recInfo, std::vector<float>& reconstructionDepths);
+	void reconstructDepthExhaustive(const ReconstructionInfo& recInfo, std::vector<float>& reconstructionDepths);
 
-	static void reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo);
-	static void reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo);
+	void reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo);
+	void reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo);
 
 public:
-	void reconstructAABBConfocalMIS(float* volume, const ReconstructionInfo& recInfo) const;
+	void reconstructAABBConfocalMIS(float* volume, const ReconstructionInfo& recInfo);
 
 public:
 	void reconstructDepths(

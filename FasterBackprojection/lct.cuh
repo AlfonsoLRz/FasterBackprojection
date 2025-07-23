@@ -81,20 +81,58 @@ inline __global__ void multiplyPSF(cufftComplex* __restrict__ d_H, const cufftCo
 
 inline __global__ void padIntensityFFT(const float* __restrict__ H, cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)
 {
-    const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
+    const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x;
+    const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
+    const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
+
     if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
         return;
 
     H_pad[x * newResolution.y * newResolution.z + y * newResolution.z + t].x = H[x * currentResolution.y * currentResolution.z + y * currentResolution.z + t];
 }
 
+inline __global__ void padIntensityFFT_unrolled(
+    const float* __restrict__ H, cufftComplex* __restrict__ H_pad,
+    glm::uvec3 currentResolution, glm::uvec3 newResolution, glm::uint stride)
+{
+    const glm::uint t = (blockIdx.x * blockDim.x + threadIdx.x) * stride;
+    const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
+    const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
+
+    if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
+        return;
+
+	#pragma unroll
+    for (glm::uint i = t; i < t + stride && i < newResolution.z; ++i)
+    	H_pad[getKernelIdx(x, y, i, newResolution)].x = H[getKernelIdx(x, y, i, currentResolution)];
+}
+
 inline __global__ void unpadIntensityFFT(float* __restrict__ H, const cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)
 {
-    const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
+    const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x;
+    const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
+    const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
+
     if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
         return;
 
     H[x * currentResolution.y * currentResolution.z + y * currentResolution.z + t] = H_pad[x * newResolution.y * newResolution.z + y * newResolution.z + t].x;
+}
+
+inline __global__ void unpadIntensityFFT_unrolled(
+    float* __restrict__ H, const cufftComplex* __restrict__ H_pad,
+    glm::uvec3 currentResolution, glm::uvec3 newResolution, glm::uint stride)
+{
+    const glm::uint t = (blockIdx.x * blockDim.x + threadIdx.x) * stride;
+    const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
+    const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
+
+    if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
+        return;
+
+	#pragma unroll
+    for (glm::uint i = t; i < t + stride && i < currentResolution.z; ++i)
+        H[getKernelIdx(x, y, i, currentResolution)] = H_pad[getKernelIdx(x, y, i, newResolution)].x;
 }
 
 inline __global__ void wienerFilterPsf(cufftComplex* __restrict__ psf, glm::uvec3 dataResolution, float snr)
@@ -110,19 +148,18 @@ inline __global__ void wienerFilterPsf(cufftComplex* __restrict__ psf, glm::uvec
     psf[kernelIdx].y = wienerFactor * conjugate.y;
 }
 
-inline __global__ void scaleIntensity(float* __restrict__ intensity, const glm::uvec3 dataResolution, bool diffuse)
+template <bool diffuse>
+inline __global__ void scaleIntensity(float* __restrict__ intensity, glm::uvec3 dataResolution, glm::uint numElements, float divisor)
 {
-	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;
-    if (x >= dataResolution.x || y >= dataResolution.y || t >= dataResolution.z) 
+	const glm::uint tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= numElements)
 		return;
 
-    float weight = static_cast<float>(t) / (static_cast<float>(dataResolution.z) - 1.0f);
-    if (diffuse)
-        weight = weight * weight * weight * weight;
-    else
-        weight = weight * weight;
+	glm::uint t = tid % dataResolution.z;
+    float weight = static_cast<float>(t) * divisor;
+    weight = diffuse ? weight * weight * weight * weight : weight * weight;
 
-    intensity[getKernelIdx(x, y, t, dataResolution)] *= static_cast<float>(t) * weight;
+    intensity[tid] *= static_cast<float>(t) * weight;
 }
 
 inline __global__ void multiplyTransformTranspose(

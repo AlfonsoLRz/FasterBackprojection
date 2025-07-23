@@ -63,7 +63,8 @@ void Backprojection::reconstructVolume(
 		Backprojection::saveMaxImage(
 			transientParams._outputFolder + transientParams._outputMaxImageName,
 			volumeGpu,
-			voxelResolution);
+			voxelResolution,
+			true);
 
 	CudaHelper::free(volumeGpu);
 }
@@ -284,7 +285,7 @@ void Backprojection::reconstructVolumeExhaustive(float* volume, const Reconstruc
 	CudaHelper::synchronize("backprojectConfocalVoxel");
 }
 
-void Backprojection::reconstructAABBConfocalMIS(float* volume, const ReconstructionInfo& recInfo) const
+void Backprojection::reconstructAABBConfocalMIS(float* volume, const ReconstructionInfo& recInfo)
 {
 	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
 	const glm::uint numVoxels = voxelResolution.x * voxelResolution.y * voxelResolution.z;
@@ -322,13 +323,13 @@ void Backprojection::reconstructAABBConfocalMIS(float* volume, const Reconstruct
 	// Spatio-temporal prefix sum
 	{
 		glm::uint blockSize = 512, blocks = CudaHelper::getNumBlocks(totalElements / numTimeBins, blockSize);
-		spatioTemporalPrefixSum << <blocks, blockSize >> > (spatioTemporalSum, spatialSumGpu, totalElements / numTimeBins, numTimeBins);
+		spatioTemporalPrefixSum<<<blocks, blockSize>>>(spatioTemporalSum, spatialSumGpu, totalElements / numTimeBins, numTimeBins);
 	}
 
 	// Normalize spatio-temporal sum
 	{
 		glm::uint threadsBlock = 512, numBlocks = CudaHelper::getNumBlocks(totalElements / numTimeBins, threadsBlock);
-		normalizeSpatioTemporalPrefixSum << <numBlocks, threadsBlock >> > (spatioTemporalSum, numTimeBins, totalElements);
+		normalizeSpatioTemporalPrefixSum<<<numBlocks, threadsBlock>>>(spatioTemporalSum, numTimeBins, totalElements);
 	}
 
 	// Normalize the spatial sum

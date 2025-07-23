@@ -236,5 +236,19 @@ inline bool TalHDF5Reader::read(const std::string& filename, NLosData& nlosData)
 		setUp(nlosData._data, dataset.read<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<std::vector<float>>>>>>>>(), nlosData._dims);
 	}
 
+	// Hidden geometry
+	{
+		glm::vec3 hiddenGeometryMin = nlosData._cameraGridPositions.front();
+		glm::vec3 hiddenGeometryMax = nlosData._cameraGridPositions.back();
+		if (glm::epsilonEqual(hiddenGeometryMax.x, hiddenGeometryMin.x, glm::epsilon<float>()))
+			hiddenGeometryMax.x += 2.5f; 
+		else if (glm::epsilonEqual(hiddenGeometryMax.y, hiddenGeometryMin.y, glm::epsilon<float>()))
+			hiddenGeometryMax.y += 2.5f; 
+		else if (glm::epsilonEqual(hiddenGeometryMax.z, hiddenGeometryMin.z, glm::epsilon<float>()))
+			hiddenGeometryMax.z += 2.5f; 
+
+		nlosData._hiddenGeometry = AABB(hiddenGeometryMin, hiddenGeometryMax);
+	}
+
 	return true;
 }

@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.io import loadmat
+from scipy.io import loadmat, savemat
 from scipy.fft import fftn, ifftn
 from scipy.sparse import spdiags, lil_matrix
 import time
@@ -36,30 +36,39 @@ def cnlos_reconstruction(scene=7):
     # Load scene & set visualization parameter
     if scene == 1:
         data = loadmat('lct/data_resolution_chart_40cm.mat')
+        savemat('C:/Datasets/transient/lct/data_resolution_chart_40cm.mat', data)
         z_offset = 350
     elif scene == 2:
         data = loadmat('lct/data_resolution_chart_65cm.mat')
+        savemat('C:/Datasets/transient/lct/data_resolution_chart_65cm.mat', data)
         z_offset = 700
     elif scene == 3:
         data = loadmat('lct/data_dot_chart_40cm.mat')
+        savemat('C:/Datasets/transient/lct/data_dot_chart_40cm.mat', data)
         z_offset = 350
     elif scene == 4:
         data = loadmat('lct/data_dot_chart_65cm.mat')
+        savemat('C:/Datasets/transient/lct/data_dot_chart_65cm.mat', data)
         z_offset = 700
     elif scene == 5:
         data = loadmat('lct/data_mannequin.mat')
+        savemat('C:/Datasets/transient/lct/data/mannequin.mat', data)
         z_offset = 300
     elif scene == 6:
         data = loadmat('lct/data_exit_sign.mat')
+        savemat('C:/Datasets/transient/lct/data_exit_sign.mat', data)
         z_offset = 600
     elif scene == 7:
         data = loadmat('lct/data_s_u.mat')
+        savemat('C:/Datasets/transient/lct/data_s_u.mat', data)
         z_offset = 800
     elif scene == 8:
         data = loadmat('lct/data_outdoor_s.mat')
+        savemat('C:/Datasets/transient/lct/data_outdoor_s.mat', data)
         z_offset = 700
     elif scene == 9:
         data = loadmat('lct/data_diffuse_s.mat')
+        savemat('C:/Datasets/transient/lct/data_diffuse_s.mat', data)
         z_offset = 100
         isdiffuse = 1
         snr = snr * 1e-1
@@ -81,6 +90,8 @@ def cnlos_reconstruction(scene=7):
 
     # Set first group of histogram bins to zero (to remove direct component)
     rect_data[:, :, :z_trim] = 0
+
+    print(rect_data[0, 0, 1024:1034])  # Print first 10 bins of the first pixel for debugging
 
     # Define NLOS blur kernel
     psf = define_psf(N, M, width / range_)
@@ -227,4 +238,4 @@ def resampling_operator(M):
     return mtx, mtxi
 
 # Example usage:
-cnlos_reconstruction(scene=5)
+cnlos_reconstruction(scene=1)
