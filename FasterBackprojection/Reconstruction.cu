@@ -216,7 +216,7 @@ void Reconstruction::normalizeMatrix(float* v, glm::uint size)
 	_perf.toc();
 }
 
-void Reconstruction::saveMaxImage(const std::string& filename, const float* volumeGpu, const glm::uvec3& volumeResolution, bool zMajor)
+void Reconstruction::saveMaxImage(const std::string& filename, const float* volumeGpu, const glm::uvec3& volumeResolution, bool zMajor, bool flip)
 {
 	glm::uint sliceSize = volumeResolution.x * volumeResolution.y;
 
@@ -247,7 +247,7 @@ void Reconstruction::saveMaxImage(const std::string& filename, const float* volu
 	transientImage.save(
 		filename, maxZHost.data(),
 		glm::uvec2(volumeResolution.x, volumeResolution.y),
-		1, 0, false, false			// Do not flip, nor normalize
+		1, 0, false, flip			// Do not flip, nor normalize
 	);
 }
 

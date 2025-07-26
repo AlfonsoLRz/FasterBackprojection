@@ -472,7 +472,6 @@ bool NLosData::loadNLOSFile(const HighFive::File& file)
 	dataset = file.getDataSet("cameraGridSize");
 	setUp(_cameraGridSize, dataset.read<std::vector<double>>());
 
-
 	dataset = file.getDataSet("t0");
 	_t0 = static_cast<float>(dataset.read<int>());
 

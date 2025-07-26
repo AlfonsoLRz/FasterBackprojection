@@ -3,10 +3,10 @@
 
 #include <cub/device/device_scan.cuh>
 
+#include "backprojection.cuh"
 #include "CudaHelper.h"
 #include "RandomUtilities.h"
 #include "TransientImage.h"
-#include "transient_reconstruction.cuh"
 
 //
 
@@ -43,11 +43,11 @@ void Backprojection::reconstructVolume(
 		compensateLaserCosDistance(recInfo, recBuffers);
 
 	if (transientParams._useFourierFilter)
-		filter_H_cuda(recBuffers._intensity, recInfo._timeStep * 10.0f, .0f);
+		filter_H_cuda(recBuffers._intensity, recInfo._timeStep * 0.25f, .0f);
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
-		//reconstructVolumeConfocal(volumeGpu, recInfo);
-		reconstructAABBConfocalMIS(volumeGpu, recInfo, recBuffers);
+		reconstructVolumeConfocal(volumeGpu, recInfo);
+		//reconstructAABBConfocalMIS(volumeGpu, recInfo, recBuffers);
 	else if (recInfo._captureSystem == CaptureSystem::Exhaustive)
 		reconstructVolumeExhaustive(volumeGpu, recInfo);
 
@@ -68,7 +68,7 @@ void Backprojection::reconstructVolume(
 			transientParams._outputFolder + transientParams._outputMaxImageName,
 			volumeGpu,
 			voxelResolution,
-			true);
+			false);
 
 	CudaHelper::free(volumeGpu);
 }
@@ -258,13 +258,13 @@ void Backprojection::reconstructVolumeConfocal(float* volume, const Reconstructi
 	_perf.tic("Backprojection");
 
 	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
-	const glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
+	const glm::uint sliceSize = voxelResolution.y * voxelResolution.z;
 
 	dim3 blockSize(BLOCK_X_CONFOCAL, BLOCK_Y_CONFOCAL);
 	dim3 gridSize(
-		(sliceSize + blockSize.x - 1) / blockSize.x,
+		(voxelResolution.z * voxelResolution.y + blockSize.x - 1) / blockSize.x,
 		(recInfo._numLaserTargets + blockSize.y - 1) / blockSize.y,
-		(voxelResolution.z + blockSize.z - 1) / blockSize.z
+		(voxelResolution.x + blockSize.z - 1) / blockSize.z
 	);
 
 	backprojectConfocalVoxel<<<gridSize, blockSize>>>(volume, sliceSize);
@@ -308,7 +308,7 @@ void Backprojection::reconstructAABBConfocalMIS(float* volume, const Reconstruct
 
 	float* noiseGpu = nullptr;
 	std::vector<float> noiseHost(numVoxels * 2);
-#pragma omp parallel for
+	#pragma omp parallel for
 	for (glm::uint i = 0; i < numVoxels; ++i)
 		noiseHost[i] = RandomUtilities::getUniformRandom();
 	CudaHelper::initializeBufferGPU(noiseGpu, numVoxels, noiseHost.data());

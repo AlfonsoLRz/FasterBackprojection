@@ -144,8 +144,9 @@ inline __global__ void wienerFilterPsf(cufftComplex* __restrict__ psf, glm::uvec
 	const glm::uint kernelIdx = getKernelIdx(x, y, t, dataResolution);
 	cufftComplex value = psf[kernelIdx], conjugate = { value.x, -value.y };
     float wienerFactor = safeRCP(value.x * value.x + value.y * value.y + 1.0f / snr);
-    psf[kernelIdx].x = wienerFactor * conjugate.x;
-    psf[kernelIdx].y = wienerFactor * conjugate.y;
+    //psf[kernelIdx].x = wienerFactor * conjugate.x;
+    //psf[kernelIdx].y = wienerFactor * conjugate.y;
+    psf[kernelIdx] = conjugate;
 }
 
 template <bool diffuse>
@@ -171,6 +172,7 @@ inline __global__ void multiplyTransformTranspose(
         const glm::uint spatialIndex = y * dataResolution.y + x;  
 
         float sum = 0.0f;
+		#pragma unroll
         for (glm::uint k = 0; k < dataResolution.z; ++k)
             sum += mtx[k * dataResolution.z + t] * volumeGpu[spatialIndex * dataResolution.z + k];
 

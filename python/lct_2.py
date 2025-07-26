@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from scipy.io import loadmat, savemat
 from scipy.fft import fftn, ifftn
 from scipy.sparse import spdiags, lil_matrix
@@ -52,7 +53,7 @@ def cnlos_reconstruction(scene=7):
         z_offset = 700
     elif scene == 5:
         data = loadmat('lct/data_mannequin.mat')
-        savemat('C:/Datasets/transient/lct/data/mannequin.mat', data)
+        savemat('C:/Datasets/transient/lct/data_mannequin.mat', data)
         z_offset = 300
     elif scene == 6:
         data = loadmat('lct/data_exit_sign.mat')
@@ -94,7 +95,7 @@ def cnlos_reconstruction(scene=7):
     print(rect_data[0, 0, 1024:1034])  # Print first 10 bins of the first pixel for debugging
 
     # Define NLOS blur kernel
-    psf = define_psf(N, M, width / range_)
+    psf = define_psf(N, M, width / 2.0 / range_, plot=True)
 
     # Compute inverse filter of NLOS blur kernel
     fpsf = fftn(psf)
@@ -200,7 +201,9 @@ def cnlos_reconstruction(scene=7):
     plt.show()
 
 
-def define_psf(U, V, slope):
+def define_psf(U, V, slope, plot=False):
+    print(32 * slope * slope)
+
     """Compute NLOS blur kernel"""
     x = np.linspace(-1, 1, 2 * U)
     y = np.linspace(-1, 1, 2 * U)
@@ -213,6 +216,27 @@ def define_psf(U, V, slope):
     psf = psf / np.sum(psf[:, U, U])
     psf = psf / np.linalg.norm(psf)
     psf = np.roll(psf, U, axis=(1, 2))
+
+    # Maximum slice (z) with non-zero elements
+    max_slice = np.max(np.where(psf > 0, psf, 0), axis=(1, 2))
+    print("Maximum slice of PSF:", max_slice)
+
+    if plot:
+        # Get the 3D coordinates of the non-zero PSF elements (the ellipse surface)
+        zz, yy, xx = np.meshgrid(z, y, x, indexing='ij')
+        mask = psf > 0
+
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(xx[mask], yy[mask], zz[mask], s=1, c='blue', alpha=0.5)
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title('3D Ellipse from PSF')
+        ax.view_init(elev=20, azim=135)
+        plt.tight_layout()
+        plt.show()
 
     return psf
 
@@ -238,4 +262,4 @@ def resampling_operator(M):
     return mtx, mtxi
 
 # Example usage:
-cnlos_reconstruction(scene=1)
+cnlos_reconstruction(scene=5)

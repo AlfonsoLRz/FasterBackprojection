@@ -153,9 +153,6 @@
     <ClInclude Include="ChronoUtilities.h">
       <Filter>header</Filter>
     </ClInclude>
-    <ClInclude Include="transient_reconstruction.cuh">
-      <Filter>header\cuda</Filter>
-    </ClInclude>
     <ClInclude Include="fourier.cuh">
       <Filter>header\cuda</Filter>
     </ClInclude>

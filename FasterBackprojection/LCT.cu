@@ -387,13 +387,12 @@ void LCT::reconstructVolume(
 {
 	_nlosData = nlosData;
 
-	//std::vector<float> checkVals(200);
-	//CudaHelper::downloadBufferGPU(recBuffers._intensity, checkVals.data(), 10, 1024);
-
 	_perf.setAlgorithmName("LCT");
 	_perf.tic();
 
-	if (transientParams._compensateLaserCosDistance)
+	if (transientParams._compensateLaserCosDistance && 
+		!glm::all(glm::epsilonEqual(_nlosData->_laserPosition, glm::vec3(0.0f), glm::epsilon<float>())) &&
+		!glm::all(glm::epsilonEqual(_nlosData->_cameraPosition, glm::vec3(0.0f), glm::epsilon<float>())))
 		compensateLaserCosDistance(recInfo, recBuffers);
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
@@ -401,14 +400,22 @@ void LCT::reconstructVolume(
 	else
 		throw std::runtime_error("Unsupported capture system for LCT reconstruction.");
 
+	const glm::uvec3 volumeResolution = glm::uvec3(nlosData->_dims[0], nlosData->_dims[1], nlosData->_dims[2]);
+	float* volumeGpu = recBuffers._intensity;
+
+	// Post-process the activation matrix
+	_postprocessingFilters[transientParams._postprocessingFilterType]->compute(volumeGpu, volumeResolution, transientParams);
+	normalizeMatrix(recBuffers._intensity, volumeResolution.x * volumeResolution.y * volumeResolution.z);
+
 	_perf.toc();
 	_perf.summarize();
 
 	if (transientParams._saveMaxImage)
 		LCT::saveMaxImage(
 			transientParams._outputFolder + transientParams._outputMaxImageName,
-			recBuffers._intensity,
-			glm::uvec3(nlosData->_dims[0], nlosData->_dims[1], nlosData->_dims[2]));
+			volumeGpu,
+			volumeResolution,
+			false, true);
 }
 
 //

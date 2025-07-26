@@ -30,7 +30,7 @@ inline __global__ void unpadIntensityFFT_FK(float* H, const cufftComplex* H_pad,
     if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
         return;
 
-    H[getKernelIdx(x, y, t, currentResolution)] = H_pad[getKernelIdx(x, y, t, newResolution)].x;
+    H[getKernelIdx(x, y, t, currentResolution)] = glm::abs(H_pad[getKernelIdx(x, y, t, newResolution)].x);
 }
 
 inline __device__ glm::uvec3 getCyclicShiftedIndices(glm::uint& x, glm::uint& y, glm::uint& z, glm::uvec3 shift, glm::uvec3 resolution)
@@ -50,12 +50,12 @@ __global__ void stoltKernel(
     float maxSqrtTerm
 )
 {
-	glm::uint z = blockIdx.x * blockDim.x + threadIdx.x + shift.z; 
-    glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;  
+    glm::uint z = blockIdx.x * blockDim.x + threadIdx.x + shift.z;
+    glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
     glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
 
     if (x >= fftResolution.x || y >= fftResolution.y || z >= fftResolution.z)
-		return;
+        return;
 
     // Normalize to [-1, 1]
     float fx = 2.0f * (static_cast<float>(x) / static_cast<float>(fftResolution.x)) - 1.0f;
@@ -70,9 +70,9 @@ __global__ void stoltKernel(
     float iy = (fy + 1.0f) * 0.5f * static_cast<float>(fftResolution.y);
     float iz = (sqrt_term + 1.0f) * 0.5f * static_cast<float>(fftResolution.z);
 
-	ix = fmod(ix + static_cast<float>(shift.x), static_cast<float>(fftResolution.x));
-	iy = fmod(iy + static_cast<float>(shift.y), static_cast<float>(fftResolution.y));
-	iz = fmod(iz + static_cast<float>(shift.z), static_cast<float>(fftResolution.z));
+    ix = fmod(ix + static_cast<float>(shift.x), static_cast<float>(fftResolution.x));
+    iy = fmod(iy + static_cast<float>(shift.y), static_cast<float>(fftResolution.y));
+    iz = fmod(iz + static_cast<float>(shift.z), static_cast<float>(fftResolution.z));
 
     int x0 = static_cast<int>(floorf(ix)), y0 = static_cast<int>(floorf(iy)), z0 = static_cast<int>(floorf(iz));
     int x1 = x0 + 1, y1 = y0 + 1, z1 = z0 + 1;

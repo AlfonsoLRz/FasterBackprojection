@@ -11,6 +11,7 @@
 #define INV_4_PI	0.07957747154594766f
 #define LIGHT_SPEED 299792458.0f
 #define EPS			0.00001f
+#define EPS_HALF	__float2half(0.00001f)
 
 __forceinline  __device__ float square(float a)
 {
