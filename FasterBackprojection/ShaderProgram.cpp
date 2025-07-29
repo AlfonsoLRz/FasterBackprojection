@@ -46,7 +46,7 @@ bool ShaderProgram::setUniform(const std::string& name, GLfloat value) const
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glProgramUniform1f(_handler, glGetUniformLocation(_handler, name.c_str()), value);
 	return true;
@@ -64,7 +64,7 @@ bool ShaderProgram::setUniform(const std::string& name, GLint value) const
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glProgramUniform1i(_handler, glGetUniformLocation(_handler, name.c_str()), value);
 	return true;
@@ -82,7 +82,7 @@ bool ShaderProgram::setUniform(const std::string& name, const GLuint value) cons
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glProgramUniform1ui(_handler, glGetUniformLocation(_handler, name.c_str()), value);
 	return true;
@@ -100,7 +100,7 @@ bool ShaderProgram::setUniform(const std::string& name, const glm::mat4& value) 
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glProgramUniformMatrix4fv(_handler, glGetUniformLocation(_handler, name.c_str()), 1, GL_FALSE, &value[0][0]);
 	return true;
@@ -118,7 +118,7 @@ bool ShaderProgram::setUniform(const std::string& name, const std::vector<glm::m
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glProgramUniformMatrix4fv(_handler, glGetUniformLocation(_handler, name.c_str()), values.size(), GL_FALSE, &(values[0][0][0]));
 	return true;
@@ -136,7 +136,7 @@ bool ShaderProgram::setUniform(const std::string& name, const glm::vec2& value) 
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glProgramUniform2fv(_handler, glGetUniformLocation(_handler, name.c_str()), 1, &value[0]);
 	return true;
@@ -154,7 +154,7 @@ bool ShaderProgram::setUniform(const std::string& name, const glm::ivec2& value)
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glProgramUniform2iv(_handler, glGetUniformLocation(_handler, name.c_str()), 1, &value[0]);
 	return true;
@@ -172,7 +172,7 @@ bool ShaderProgram::setUniform(const std::string& name, const glm::uvec2& value)
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glProgramUniform2uiv(_handler, glGetUniformLocation(_handler, name.c_str()), 1, &value[0]);
 	return true;
@@ -190,9 +190,27 @@ bool ShaderProgram::setUniform(const std::string& name, const glm::vec3& value) 
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glProgramUniform3fv(_handler, glGetUniformLocation(_handler, name.c_str()), 1, &value[0]);
+	return true;
+#endif
+}
+
+bool ShaderProgram::setUniform(const std::string& name, const glm::uvec3& value) const
+{
+#if DEBUG_UNIFORMS	
+	GLint location = glGetUniformLocation(_handler, name.c_str());
+
+	if (location >= 0)
+	{
+		glUniform3uiv(location, 1, &value[0]);
+		return true;
+	}
+
+	return ShaderProgram::showErrorMessage(name);
+#else
+	glProgramUniform3uiv(_handler, glGetUniformLocation(_handler, name.c_str()), 1, &value[0]);
 	return true;
 #endif
 }
@@ -208,7 +226,7 @@ bool ShaderProgram::setUniform(const std::string& name, const glm::ivec3& value)
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glProgramUniform3iv(_handler, glGetUniformLocation(_handler, name.c_str()), 1, &value[0]);
 	return true;
@@ -226,7 +244,7 @@ bool ShaderProgram::setUniform(const std::string& name, const glm::vec4& value) 
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glProgramUniform4fv(_handler, glGetUniformLocation(_handler, name.c_str()), 1, &value[0]);
 	return true;
@@ -244,7 +262,7 @@ bool ShaderProgram::setUniform(const std::string& name, const std::vector<float>
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	glUniformMatrix4fv(_handler, glGetUniformLocation(_handler, name.c_str()), values.size(), &values[0]);
 	return true;
@@ -263,7 +281,7 @@ bool ShaderProgram::setUniformBlock(const std::string& name, const GLuint buffer
 		return true;
 	}
 
-	return this->showErrorMessage(name);
+	return ShaderProgram::showErrorMessage(name);
 #else
 	GLuint uniformBlockIndex = glGetUniformBlockIndex(_handler, name.c_str());
 	glUniformBlockBinding(_handler, uniformBlockIndex, 0);

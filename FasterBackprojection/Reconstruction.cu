@@ -48,7 +48,7 @@ void Reconstruction::padIntensity(float* volumeGpu, cufftComplex*& paddedIntensi
 		sliceSize *= _nlosData->_dims[i];
 
 	paddedIntensity = nullptr;
-	CudaHelper::initializeBufferGPU(paddedIntensity, sliceSize * nt_pad);
+	CudaHelper::initializeBuffer(paddedIntensity, sliceSize * nt_pad);
 
 	dim3 blockSize(64, 16);
 	dim3 gridSize(
@@ -119,7 +119,7 @@ void Reconstruction::filter_H_cuda(float* intensityGpu, float wl_mean, float wl_
 
 	// Transfer H_pad_host and K to device
 	cufftComplex* d_K = nullptr;
-	CudaHelper::initializeBufferGPU(d_K, K.size(), K.data());
+	CudaHelper::initializeBuffer(d_K, K.size(), K.data());
 
 	//
 	size_t dimProduct = 1;
@@ -155,7 +155,7 @@ void Reconstruction::filter_H_cuda(float* intensityGpu, float wl_mean, float wl_
 	//normalizeH<<<grid, block>>>(d_H, batch, nt_pad);		// I read the IFFT results, and they were too small; I think this is not needed
 
 	readBackFromIFFT<<<grid, block>>>(d_H, intensityGpu, sliceSize, nt, nt_pad, padding, sliceSize * nt);
-	//CudaHelper::downloadBufferGPU(intensityGpu, _nlosData->_data.data(), _nlosData->_data.size(), 0);
+	//CudaHelper::downloadBuffer(intensityGpu, _nlosData->_data.data(), _nlosData->_data.size(), 0);
 
 	// 
 	CUFFT_CHECK(cufftDestroy(planH));
@@ -196,10 +196,10 @@ void Reconstruction::normalizeMatrix(float* v, glm::uint size)
 	void* tempStorage = nullptr;
 
 	float* maxValue = nullptr;
-	CudaHelper::initializeBufferGPU(maxValue, 1);
+	CudaHelper::initializeBuffer(maxValue, 1);
 
 	float* minValue = nullptr;
-	CudaHelper::initializeBufferGPU(minValue, 1);
+	CudaHelper::initializeBuffer(minValue, 1);
 
 	cub::DeviceReduce::Max(tempStorage, tempStorageBytes, v, maxValue, size);
 	cudaMalloc(&tempStorage, tempStorageBytes);
@@ -216,12 +216,12 @@ void Reconstruction::normalizeMatrix(float* v, glm::uint size)
 	_perf.toc();
 }
 
-void Reconstruction::saveMaxImage(const std::string& filename, const float* volumeGpu, const glm::uvec3& volumeResolution, bool zMajor, bool flip)
+void Reconstruction::saveMaxImage(const std::string& filename, const float* volumeGpu, const glm::uvec3& volumeResolution, bool flip)
 {
 	glm::uint sliceSize = volumeResolution.x * volumeResolution.y;
 
 	float* maxZ = nullptr;
-	CudaHelper::initializeBufferGPU(maxZ, sliceSize);
+	CudaHelper::initializeBuffer(maxZ, sliceSize);
 
 	// Retrieve the maximum Z value for each pixel
 	dim3 blockSize(16, 16);
@@ -229,18 +229,16 @@ void Reconstruction::saveMaxImage(const std::string& filename, const float* volu
 		(volumeResolution.x + blockSize.x - 1) / blockSize.x,
 		(volumeResolution.y + blockSize.y - 1) / blockSize.y
 	);
-	if (zMajor)
-		composeImageZ<<<gridSize, blockSize>>>(volumeGpu, maxZ, volumeResolution);
-	else
-		composeImage<<<gridSize, blockSize >>>(volumeGpu, maxZ, volumeResolution);
-	CudaHelper::synchronize("formImage");
+
+	composeImage<<<gridSize, blockSize >>>(volumeGpu, maxZ, volumeResolution);
+	//CudaHelper::synchronize("formImage");
 
 	// Normalize the maximum Z values
 	normalizeMatrix(maxZ, sliceSize);
 
 	// Download to the host and save the image
 	std::vector<float> maxZHost(sliceSize);
-	CudaHelper::downloadBufferGPU(maxZ, maxZHost.data(), sliceSize, 0);
+	CudaHelper::downloadBuffer(maxZ, maxZHost.data(), sliceSize, 0);
 	CudaHelper::free(maxZ);
 
 	TransientImage transientImage(static_cast<uint16_t>(volumeResolution.x), static_cast<uint16_t>(volumeResolution.y));
@@ -254,7 +252,7 @@ void Reconstruction::saveMaxImage(const std::string& filename, const float* volu
 bool Reconstruction::saveReconstructedAABB(const std::string& filename, float* voxels, glm::uint numVoxels)
 {
 	std::vector<float> voxelsCpu(numVoxels);
-	CudaHelper::downloadBufferGPU(voxels, voxelsCpu.data(), numVoxels);
+	CudaHelper::downloadBuffer(voxels, voxelsCpu.data(), numVoxels);
 
 	return FileUtilities::write<float>(filename, voxelsCpu);
 }

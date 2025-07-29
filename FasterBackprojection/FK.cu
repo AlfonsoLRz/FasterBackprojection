@@ -34,8 +34,21 @@ void FK::reconstructVolume(
 	else
 		throw std::runtime_error("Unsupported capture system for LCT reconstruction.");
 
+	const glm::uvec3 volumeResolution = glm::uvec3(nlosData->_dims[0], nlosData->_dims[1], nlosData->_dims[2]);
+	float* volumeGpu = recBuffers._intensity;
+
+	// Post-process the activation matrix
+	_postprocessingFilters[transientParams._postprocessingFilterType]->compute(volumeGpu, volumeResolution, transientParams);
+	normalizeMatrix(recBuffers._intensity, volumeResolution.x * volumeResolution.y * volumeResolution.z);
+
 	_perf.toc();
 	_perf.summarize();
+
+	// Save volume & free resources
+	if (transientParams._saveReconstructedBoundingBox)
+		saveReconstructedAABB(
+			transientParams._outputFolder + transientParams._outputAABBName, volumeGpu, 
+			volumeResolution.x * volumeResolution.y * volumeResolution.z);
 
 	if (transientParams._saveMaxImage)
 		FK::saveMaxImage(
@@ -49,14 +62,14 @@ void FK::reconstructVolume(
 void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
 {
 	const glm::uvec3 volumeResolution = glm::uvec3(_nlosData->_dims[0], _nlosData->_dims[1], _nlosData->_dims[2]);
-	const glm::uvec3 fftVolumeResolution = volumeResolution * 2u;
+	const glm::uvec3 fftVolumeResolution = glm::vec3(volumeResolution) * glm::vec3(2);
 
 	_perf.tic("Resource allocation");
 
 	cufftHandle planH;
 	cufftComplex* fft = nullptr, *fftAux = nullptr;
-	CudaHelper::initializeZeroBufferGPU(fft, static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z);
-	CudaHelper::initializeZeroBufferGPU(fftAux, static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z);
+	CudaHelper::initializeZeroBuffer(fft, static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z);
+	CudaHelper::initializeBuffer(fftAux, static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z);
 	float* intensityGpu = recBuffers._intensity;
 
 	_perf.toc();
@@ -75,11 +88,21 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 		(fftVolumeResolution.x + blockSizeFFT.z - 1) / blockSizeFFT.z
 	);
 
+	constexpr glm::uint strides = 8;
+	dim3 strideBlockSizeFFT(8, 8, 8);
+	dim3 strideGridSizeFFT(
+		(volumeResolution.z / strides + strideBlockSizeFFT.x - 1) / strideBlockSizeFFT.x,
+		(volumeResolution.y + strideBlockSizeFFT.y - 1) / strideBlockSizeFFT.y,
+		(volumeResolution.x + strideBlockSizeFFT.z - 1) / strideBlockSizeFFT.z
+	);
+
 	// Perform forward FFT on the intensity data
 	{
 		_perf.tic("Pad Intensity FFT");
 
-		padIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fft, volumeResolution, fftVolumeResolution, 1.0f);
+		float divisor = 1.0f / static_cast<float>(volumeResolution.z);
+		padIntensityFFT_FK<<<strideGridSizeFFT, strideBlockSizeFFT >>>(
+			intensityGpu, fft, volumeResolution, fftVolumeResolution, divisor, strides);
 
 		_perf.toc();
 	}
@@ -105,7 +128,7 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 	{
 		_perf.tic("Stolt");
 
-		float width = _nlosData->_temporalWidth, range = recInfo._timeStep * static_cast<float>(recInfo._numTimeBins);
+		float width = _nlosData->_wallWidth, range = recInfo._timeStep * static_cast<float>(recInfo._numTimeBins);
 		float sqrtConst = static_cast<float>(volumeResolution.x) * range / (static_cast<float>(volumeResolution.z) * width * 4.0f);
 		float maxValue = 1.0f / sqrtf(sqrtConst * sqrtConst * 2.0f + 1.0f);
 
@@ -142,6 +165,8 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 
 		_perf.toc();
 	}
+
+	std::cout << "Allocated memory: " << CudaHelper::getAllocatedMemory() / (1024 * 1024) << " MB" << std::endl;
 
 	CudaHelper::free(fft);
 	CudaHelper::free(fftAux);

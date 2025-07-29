@@ -10,7 +10,7 @@
 #include "FK.h"
 #include "LCT.h"
 #include "NLosData.h"
-
+#include "PhasorFields.h"
 
 //
 
@@ -18,7 +18,7 @@ Reconstruction* Laser::_reconstruction[ReconstructionType::NUM_RECONSTRUCTION_TY
 	new Backprojection(),
 	new LCT(),
 	new FK(),
-	new Backprojection()
+	new PhasorFields()
 };
 
 void Laser::reconstruct(NLosData* nlosData, const TransientParameters& transientParams)
@@ -27,7 +27,7 @@ void Laser::reconstruct(NLosData* nlosData, const TransientParameters& transient
 	ReconstructionBuffers recBuffers;
 
 	// Transfer data to GPU
-	//nlosData->downsampleTime(2);
+	//nlosData->downsampleTime(4);
 	//nlosData->downsampleSpace(2);
 	nlosData->toGpu(recInfo, recBuffers, transientParams);
 

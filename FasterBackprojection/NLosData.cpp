@@ -6,7 +6,9 @@
 
 #include "ChronoUtilities.h"
 #include "CudaHelper.h"
+#include "MatFkReader.h"
 #include "math.cuh"
+#include "MatLCTReader.h"
 #include "progressbar.hpp"
 #include "TalHDF5Reader.h"
 #include "TransientImage.h"
@@ -23,7 +25,13 @@ NLosData::NLosData(const std::string& filename, bool saveBinary, bool useBinary)
 
 	if (filename.find(".mat") != std::string::npos)
 	{
-		loadMat(filename);
+		MatLCTReader lctReader;
+		if (!lctReader.read(filename, *this))
+		{
+			MatFkReader fkReader;
+			if (!fkReader.read(filename, *this))
+				throw std::runtime_error("NLosData: Failed to read the file: " + filename);
+		}
 	}
 	else if (filename.find("hdf5") != std::string::npos)
 	{
@@ -120,13 +128,13 @@ void NLosData::downsampleTime(glm::uint times)
 
 void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, const TransientParameters& transientParameters)
 {
-	CudaHelper::initializeBufferGPU(recBuffers._intensity, _data.size(), _data.data());
+	CudaHelper::initializeBuffer(recBuffers._intensity, _data.size(), _data.data());
 	if (!_cameraGridPositions.empty())
-		CudaHelper::initializeBufferGPU(recBuffers._sensorTargets, _cameraGridPositions.size(), _cameraGridPositions.data());
+		CudaHelper::initializeBuffer(recBuffers._sensorTargets, _cameraGridPositions.size(), _cameraGridPositions.data());
 	if (!_laserGridPositions.empty())
-		CudaHelper::initializeBufferGPU(recBuffers._laserTargets, _laserGridPositions.size(), _laserGridPositions.data());
+		CudaHelper::initializeBuffer(recBuffers._laserTargets, _laserGridPositions.size(), _laserGridPositions.data());
 	if (!_laserGridNormals.empty())
-		CudaHelper::initializeBufferGPU(recBuffers._laserTargetsNormals, _laserGridNormals.size(), _laserGridNormals.data());
+		CudaHelper::initializeBuffer(recBuffers._laserTargetsNormals, _laserGridNormals.size(), _laserGridNormals.data());
 
 	recInfo._sensorPosition = _cameraPosition;
 	recInfo._numSensorTargets = static_cast<glm::uint>(_cameraGridPositions.size());
@@ -327,122 +335,6 @@ void NLosData::swapXYZOrder()
 	);
 }
 
-glm::uint NLosData::getZOffset(const std::string& filename)
-{
-	if (filename.find("data_resolution_chart_40cm") != std::string::npos)
-		return 350;
-	if (filename.find("data_resolution_chart_65cm") != std::string::npos)
-		return 700;
-	if (filename.find("data_dot_chart_40cm") != std::string::npos)
-		return 350;
-	if (filename.find("data_dot_chart_65cm") != std::string::npos)
-		return 700;
-	if (filename.find("data_mannequin") != std::string::npos)
-		return 300;
-	if (filename.find("data_exit_sign") != std::string::npos)
-		return 600;
-	if (filename.find("data_s_u") != std::string::npos)
-		return 800;
-	if (filename.find("data_outdoor_s") != std::string::npos)
-		return 700;
-	if (filename.find("data_diffuse_s") != std::string::npos)
-		return 100;
-
-	return 0;
-}
-
-void NLosData::loadMat(const std::string& filename)
-{
-	// Open the .mat file
-	mat_t* matFile = Mat_Open(filename.c_str(), MAT_ACC_RDONLY);
-	if (!matFile) 
-		throw std::runtime_error("NLosData: Failed to load LCT data from .mat file.");
-
-	//matvar_t* matvar;
-	//while ((matvar = Mat_VarReadNextInfo(matFile)) != nullptr) {
-	//	std::cout << "Found variable: " << matvar->name << std::endl;
-	//	Mat_VarFree(matvar);
-	//}
-
-	if (loadLCTMat(matFile, 700, getZOffset(filename)))
-		return;
-}
-
-bool NLosData::loadLCTMat(mat_t* matFile, glm::uint zTrim, glm::uint zOffset)
-{
-	matvar_t* rectDataVar = Mat_VarRead(matFile, "rect_data");
-	if (!rectDataVar)
-	{
-		Mat_Close(matFile);
-		return false;
-	}
-
-	glm::uint16_t* rectData = static_cast<glm::uint16_t*>(rectDataVar->data);
-
-	size_t globalSize = 1;
-	_dims.resize(rectDataVar->rank);
-	for (int i = 0; i < rectDataVar->rank; ++i)
-	{
-		_dims[i] = rectDataVar->dims[i];
-		globalSize *= rectDataVar->dims[i];
-	}
-
-	_data.resize(globalSize);
-	#pragma omp parallel for
-	for (size_t x = 0; x < _dims[0]; ++x)
-	{
-		for (size_t y = 0; y < _dims[1]; ++y)
-		{
-			for (size_t t = 0; t < _dims[2]; ++t)
-			{
-				size_t idx = y * _dims[1] * _dims[2] + x * _dims[2] + t;
-				_data[idx] = static_cast<float>(rectData[t * _dims[0] * _dims[1] + x * _dims[0] + y]) * static_cast<float>(t >= zTrim);
-			}
-		}
-	}
-
-	matvar_t* widthVar = Mat_VarRead(matFile, "width");
-	if (!widthVar)
-	{
-		Mat_VarFree(rectDataVar);
-		Mat_Close(matFile);
-		return false;
-	}
-
-	double* temporalWidth = static_cast<double*>(widthVar->data);
-	_temporalWidth = static_cast<float>(temporalWidth[0]);
-
-	// Fill with fake laser and sensor grid positions and normals
-	const glm::uint numRelayWallTargets = _dims[0] * _dims[1];
-	_cameraGridPositions.resize(numRelayWallTargets);
-	_cameraGridNormals.resize(numRelayWallTargets);
-	_laserGridPositions.resize(numRelayWallTargets);
-	_laserGridNormals.resize(numRelayWallTargets);
-	_cameraPosition = glm::vec3(0.0f, 0.0f, 0.0f);
-	_laserPosition = glm::vec3(0.0f, 0.0f, 0.0f);
-	_cameraGridSize = glm::vec2(_dims[1], _dims[0]);
-	_laserGridSize = glm::vec2(_dims[1], _dims[0]);
-	_discardFirstLastBounces = true;
-	_isConfocal = true;
-	_deltaT = static_cast<float>(4e-12) * LIGHT_SPEED;
-	_t0 = .0f;
-	_zOffset = zOffset;
-
-	#pragma omp parallel for
-	for (size_t i = 0; i < _cameraGridPositions.size(); ++i)
-	{
-		_cameraGridPositions[i] = glm::vec3(static_cast<float>(i) / static_cast<float>(_dims[0]), 0.0f, static_cast<float>(i % _dims[0]));
-		_cameraGridNormals[i] = glm::vec3(0.0f, -1.0f, 0.0f);
-
-		_laserGridPositions[i] = glm::vec3(static_cast<float>(i) / static_cast<float>(_dims[0]), 0.0f, static_cast<float>(i % _dims[0]));
-		_laserGridNormals[i] = glm::vec3(0.0f, -1.0f, 0.0f);
-	}
-
-	Mat_VarFree(widthVar);
-
-	return true;
-}
-
 bool NLosData::loadNLOSFile(const HighFive::File& file)
 {
 	if (!file.exist("cameraGridPositions") ||
@@ -518,7 +410,7 @@ bool NLosData::loadNLOSFile(const HighFive::File& file)
 	dataset = file.getDataSet("isConfocal");
 	_isConfocal = static_cast<bool>(dataset.read<glm::uint>());
 	_discardFirstLastBounces = false;
-	_temporalWidth = _cameraGridPositions.back().x;
+	_wallWidth = glm::abs(_cameraGridPositions.back().x);
 
 	if (_isConfocal)
 	{
@@ -551,7 +443,7 @@ bool NLosData::loadBinaryFile(const std::string& filename)
 	file.read(reinterpret_cast<char*>(&_laserPosition), sizeof(glm::vec3));
 	file.read(reinterpret_cast<char*>(&_deltaT), sizeof(float));
 	file.read(reinterpret_cast<char*>(&_t0), sizeof(float));
-	file.read(reinterpret_cast<char*>(&_temporalWidth), sizeof(float));
+	file.read(reinterpret_cast<char*>(&_wallWidth), sizeof(float));
 	file.read(reinterpret_cast<char*>(&_isConfocal), sizeof(bool));
 	file.read(reinterpret_cast<char*>(&_hiddenGeometry), sizeof(AABB));
 	file.read(reinterpret_cast<char*>(&_zOffset), sizeof(glm::uint));
@@ -602,7 +494,7 @@ bool NLosData::saveBinaryFile(const std::string& filename) const
 	file.write(reinterpret_cast<const char*>(&_laserPosition), sizeof(glm::vec3));
 	file.write(reinterpret_cast<const char*>(&_deltaT), sizeof(float));
 	file.write(reinterpret_cast<const char*>(&_t0), sizeof(float));
-	file.write(reinterpret_cast<const char*>(&_temporalWidth), sizeof(float));
+	file.write(reinterpret_cast<const char*>(&_wallWidth), sizeof(float));
 	file.write(reinterpret_cast<const char*>(&_isConfocal), sizeof(bool));
 	file.write(reinterpret_cast<const char*>(&_hiddenGeometry), sizeof(AABB));
 	file.write(reinterpret_cast<const char*>(&_zOffset), sizeof(glm::uint));

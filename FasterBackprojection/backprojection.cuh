@@ -12,32 +12,6 @@
 
 //#define ACCUMULATE_VOXEL_SCATTERING
 
-__global__ void backproject(float* __restrict__ activation, const double* __restrict__ depths, glm::uint numDepths, glm::uint checkPosIdx)
-{
-	glm::uint l = blockIdx.x * blockDim.x + threadIdx.x;
-	glm::uint s = blockIdx.y * blockDim.y + threadIdx.y;
-	glm::uint d = blockIdx.z * blockDim.z + threadIdx.z;
-
-	if (l >= rtRecInfo._numLaserTargets || s >= rtRecInfo._numSensorTargets || d >= numDepths)
-		return;
-
-	const glm::vec3 lPos = laserTargets[l];
-	const glm::vec3 sPos = laserTargets[s];
-	const glm::vec3 checkPos = laserTargets[checkPosIdx] + glm::vec3(.0f, 1.0f, .0f) * static_cast<float>(depths[d]);
-
-	float traversedDistance = glm::distance(lPos, checkPos) + glm::distance(checkPos, sPos) - rtRecInfo._timeOffset;
-	if (rtRecInfo._discardFirstLastBounces == 0)
-		traversedDistance += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(sPos, rtRecInfo._sensorPosition);
-
-	const int timeBin = static_cast<int>(traversedDistance / rtRecInfo._timeStep);
-	if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
-		return;
-
-	float intensity = intensityCube[getExhaustiveTransientIndex(l, s, timeBin)];
-	if (intensity > EPS)
-		atomicAdd(&activation[checkPosIdx * numDepths + d], intensity);
-}
-
 __global__ void backprojectConfocal(float* __restrict__ activation, const float* __restrict__ depths, glm::uint numDepths)
 {
 	glm::uint c = blockIdx.x * blockDim.x + threadIdx.x;

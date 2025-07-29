@@ -1,7 +1,6 @@
 ﻿#include "stdafx.h"
 #include "LCT.h"
 
-#include <future>
 #include <cub/device/device_reduce.cuh>
 
 #include "cusparse.h"
@@ -43,7 +42,7 @@ void LCT::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& rec
 	                                      std::ref(mtx));
 
 	// Define the point spread function (PSF) kernel
-	cufftComplex* psfKernel = definePSFKernel(volumeResolution, glm::abs(_nlosData->_temporalWidth / tDistance), stream1);
+	cufftComplex* psfKernel = definePSFKernel(volumeResolution, glm::abs(_nlosData->_wallWidth / tDistance), stream1);
 
 	// Transform data using previous operators
 	future.get();
@@ -88,9 +87,9 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 	void* tempStorage = nullptr;
 	size_t tempStorageBytes = 0;
 
-	CudaHelper::initializeBufferGPU(psf, size);
-	CudaHelper::initializeBufferGPU(rolledPsf, size);
-	CudaHelper::initializeBufferGPU(singleFloat, 1);
+	CudaHelper::initializeBuffer(psf, size);
+	CudaHelper::initializeBuffer(rolledPsf, size);
+	CudaHelper::initializeBuffer(singleFloat, 1);
 
 	cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf, psf, size);
 	cudaMalloc(&tempStorage, tempStorageBytes);
@@ -277,18 +276,18 @@ void LCT::defineTransformOperator(glm::uint M, float*& d_mtx)
 		for (SparseMatrixF_RowMajor::InnerIterator it(mtx, k); it; ++it) 
 			mtxHost[it.col() * M + it.row()] = it.value();
 
-	CudaHelper::initializeBufferGPU(d_mtx, mtxHost.size(), mtxHost.data());
+	CudaHelper::initializeBuffer(d_mtx, mtxHost.size(), mtxHost.data());
 }
 
 void LCT::multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const glm::uvec3& dataResolution)
 {
 	//
-	glm::uvec3 newDims = dataResolution * glm::uvec3(2);
+	glm::uvec3 newDims = dataResolution * 2u;
 	size_t newDimProduct = static_cast<size_t>(newDims.x) * newDims.y * newDims.z;
 
 	// Transfer H to a padded H
 	cufftComplex* d_H = nullptr;
-	CudaHelper::initializeZeroBufferGPU(d_H, newDimProduct);
+	CudaHelper::initializeZeroBuffer(d_H, newDimProduct);
 
 	ChronoUtilities::startTimer();
 	dim3 blockSize(16, 8, 8);
@@ -339,7 +338,7 @@ void LCT::multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const
 float* LCT::transformData(float* volumeGpu, const glm::uvec3& dataResolution, const float* mtx, cudaStream_t stream)
 {
 	float* multResult = nullptr;
-	CudaHelper::initializeZeroBufferGPU(multResult, static_cast<size_t>(dataResolution.x) * dataResolution.y * dataResolution.z);
+	CudaHelper::initializeZeroBuffer(multResult, static_cast<size_t>(dataResolution.x) * dataResolution.y * dataResolution.z);
 
 	glm::uint numElements = dataResolution.x * dataResolution.y * dataResolution.z;
 
@@ -415,7 +414,7 @@ void LCT::reconstructVolume(
 			transientParams._outputFolder + transientParams._outputMaxImageName,
 			volumeGpu,
 			volumeResolution,
-			false, true);
+			true);
 }
 
 //

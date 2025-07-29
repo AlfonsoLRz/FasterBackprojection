@@ -214,7 +214,7 @@ inline bool TalHDF5Reader::read(const std::string& filename, NLosData& nlosData)
 	glm::uint H_format = dataset.read<glm::uint>();
 	nlosData._isConfocal = H_format == 1 || H_format == 3 || H_format == 10 || H_format == 12;
 	nlosData._discardFirstLastBounces = !file.getDataSet("t_accounts_first_and_last_bounces").read<bool>();
-	nlosData._temporalWidth = nlosData._cameraGridPositions.back().x;
+	nlosData._wallWidth = nlosData._cameraGridPositions.back().x;
 
 	if (nlosData._isConfocal)
 	{

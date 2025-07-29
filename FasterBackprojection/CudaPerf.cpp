@@ -7,7 +7,7 @@
 
 //
 
-CudaPerf::CudaPerf(std::string algName): _algName(std::move(algName))
+CudaPerf::CudaPerf(std::string algName): _algName(std::move(algName)), _startEvent(nullptr), _stopEvent(nullptr)
 {
 }
 

@@ -3,7 +3,9 @@
 class CudaHelper
 {
 protected:
-	static CUdevice _selectedDevice;
+	static CUdevice								_selectedDevice;
+	static size_t								_allocatedMemory;
+	static std::unordered_map<void*, size_t>	_allocatedPointers;
 
 public:
 	CudaHelper();
@@ -12,58 +14,90 @@ public:
 	static void checkError(cudaError_t result);
 
 	template<typename T>
-	static void uploadDataToGPU(T*& bufferPointer, T* buffer, size_t size);
+	static void uploadDataTo(T*& bufferPointer, T* buffer, size_t size);
 
 	template<typename T>
-	static void downloadBufferGPU(T*& bufferPointer, T* buffer, size_t size, size_t offset = 0);
+	static void downloadBuffer(T*& bufferPointer, T* buffer, size_t size, size_t offset = 0);
 
 	template<typename T>
-	static void free(T*& bufferPointer) { cudaFree(bufferPointer); }
-
+	static void free(T*& bufferPointer);
 	template<typename T>
-	static void freeHost(T*& bufferPointer) { cudaFreeHost(bufferPointer); }
+	static void freeHost(T*& bufferPointer);
 
 	static glm::uint getMaxThreadsBlock();
 	static glm::ivec3 getMaxBlockDimensions();
 	static glm::ivec3 getMaxGridSize();
 	static glm::uint getNumBlocks(glm::uint size, glm::uint blockThreads) { return (size + blockThreads) / blockThreads; }
+	static size_t getAllocatedMemory() { return _allocatedMemory; }
 
 	template<typename T>
-	static void initializeBufferGPU(T*& bufferPointer, size_t size, T* buffer = nullptr);
-
+	static void initializeBuffer(T*& bufferPointer, size_t size, T* buffer = nullptr);
 	template<typename T>
-	static void initializeZeroBufferGPU(T*& bufferPointer, size_t size);
+	static void initializeZeroBuffer(T*& bufferPointer, size_t size);
+	static void initializeBuffer(void*& bufferPointer, size_t size);
 
 	static void synchronize(const std::string& kernelName = "");
 
 	static void startTimer(cudaEvent_t& startEvent, cudaEvent_t& stopEvent);
 
-	static float stopTimer(cudaEvent_t& startEvent, cudaEvent_t& stopEvent);
+	static float stopTimer(const cudaEvent_t& startEvent, const cudaEvent_t& stopEvent);
 };
 
 template <typename T>
-void CudaHelper::uploadDataToGPU(T*& bufferPointer, T* buffer, size_t size)
+void CudaHelper::uploadDataTo(T*& bufferPointer, T* buffer, size_t size)
 {
 	CudaHelper::checkError(cudaMemcpy(bufferPointer, buffer, size * sizeof(T), cudaMemcpyHostToDevice));
 }
 
 template<typename T>
-void CudaHelper::downloadBufferGPU(T*& bufferPointer, T* buffer, size_t size, size_t offset)
+void CudaHelper::downloadBuffer(T*& bufferPointer, T* buffer, size_t size, size_t offset)
 {
 	CudaHelper::checkError(cudaMemcpy(buffer, bufferPointer + offset, sizeof(T) * size, cudaMemcpyDeviceToHost));
 }
 
-template<typename T>
-void CudaHelper::initializeBufferGPU(T*& bufferPointer, size_t size, T* buffer)
+template <typename T>
+void CudaHelper::free(T*& bufferPointer)
 {
-	CudaHelper::checkError(cudaMalloc((void**)&bufferPointer, size * sizeof(T)));
-	if (buffer)
-		CudaHelper::checkError(cudaMemcpy(bufferPointer, buffer, size * sizeof(T), cudaMemcpyHostToDevice));
+	cudaFree(bufferPointer);
+
+	const auto it = _allocatedPointers.find(bufferPointer);
+	if (it != _allocatedPointers.end())
+	{
+		_allocatedMemory -= it->second;
+		_allocatedPointers.erase(it);
+	}
 }
 
 template <typename T>
-void CudaHelper::initializeZeroBufferGPU(T*& bufferPointer, size_t size)
+void CudaHelper::freeHost(T*& bufferPointer)
 {
-	CudaHelper::checkError(cudaMalloc((void**)&bufferPointer, size * sizeof(T)));
+	cudaFreeHost(bufferPointer);
+
+	const auto it = _allocatedPointers.find(bufferPointer);
+	if (it != _allocatedPointers.end())
+	{
+		_allocatedMemory -= it->second;
+		_allocatedPointers.erase(it);
+	}
+}
+
+template<typename T>
+void CudaHelper::initializeBuffer(T*& bufferPointer, size_t size, T* buffer)
+{
+	CudaHelper::checkError(cudaMalloc((void**)(&bufferPointer), size * sizeof(T)));
+	if (buffer)
+		CudaHelper::checkError(cudaMemcpy(bufferPointer, buffer, size * sizeof(T), cudaMemcpyHostToDevice));
+
+	_allocatedMemory += size * sizeof(T);
+	_allocatedPointers[bufferPointer] = size * sizeof(T);
+}
+
+template <typename T>
+void CudaHelper::initializeZeroBuffer(T*& bufferPointer, size_t size)
+{
+	CudaHelper::checkError(cudaMalloc((void**)(&bufferPointer), size * sizeof(T)));
 	CudaHelper::checkError(cudaMemset(bufferPointer, 0, size * sizeof(T)));
+
+	_allocatedMemory += size * sizeof(T);
+	_allocatedPointers[bufferPointer] = size * sizeof(T);
 }

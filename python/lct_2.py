@@ -92,8 +92,6 @@ def cnlos_reconstruction(scene=7):
     # Set first group of histogram bins to zero (to remove direct component)
     rect_data[:, :, :z_trim] = 0
 
-    print(rect_data[0, 0, 1024:1034])  # Print first 10 bins of the first pixel for debugging
-
     # Define NLOS blur kernel
     psf = define_psf(N, M, width / 2.0 / range_, plot=True)
 

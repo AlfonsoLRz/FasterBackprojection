@@ -19,7 +19,7 @@ inline __global__ void computePSFKernel(float* __restrict__ psf, glm::uvec3 data
 		(2.0f * static_cast<float>(t)) / (static_cast<float>(dataResolution.z) - 1)
 	);
 
-    psf[getKernelIdx(x, y, t, dataResolution)] = fabsf(((4 * slope) * (4 * slope)) * (grid.x * grid.x + grid.y * grid.y) - grid.z);
+    psf[getKernelIdx(x, y, t, dataResolution)] = fabsf((4 * slope) * (4 * slope) * (grid.x * grid.x + grid.y * grid.y) - grid.z);
 }
 
 inline __global__ void findMinimumBinarize(float* __restrict__ psf, glm::uvec3 dataResolution)
@@ -75,7 +75,7 @@ inline __global__ void multiplyPSF(cufftComplex* __restrict__ d_H, const cufftCo
     if (idx >= size)
         return;
 
-    cufftComplex h = d_H[idx], k = d_K[idx];
+    const cufftComplex h = d_H[idx], k = d_K[idx];
     d_H[idx] = { h.x * k.x - h.y * k.y, h.x * k.y + h.y * k.x };
 }
 
@@ -85,10 +85,10 @@ inline __global__ void padIntensityFFT(const float* __restrict__ H, cufftComplex
     const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
     const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
 
-    if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
+    if (x >= currentResolution.x || y >= currentResolution.y || t >= currentResolution.z)
         return;
 
-    H_pad[x * newResolution.y * newResolution.z + y * newResolution.z + t].x = H[x * currentResolution.y * currentResolution.z + y * currentResolution.z + t];
+    H_pad[getKernelIdx(x, y, t, newResolution)] = make_cuComplex(H[getKernelIdx(x, y, t, currentResolution)], .0f);
 }
 
 inline __global__ void padIntensityFFT_unrolled(
@@ -99,12 +99,12 @@ inline __global__ void padIntensityFFT_unrolled(
     const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
     const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
 
-    if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
+    if (x >= currentResolution.x || y >= currentResolution.y || t >= currentResolution.z)
         return;
 
 	#pragma unroll
     for (glm::uint i = t; i < t + stride && i < newResolution.z; ++i)
-    	H_pad[getKernelIdx(x, y, i, newResolution)].x = H[getKernelIdx(x, y, i, currentResolution)];
+        H_pad[getKernelIdx(x, y, i, newResolution)] = make_cuComplex(H[getKernelIdx(x, y, i, currentResolution)], .0f);
 }
 
 inline __global__ void unpadIntensityFFT(float* __restrict__ H, const cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)
@@ -113,7 +113,7 @@ inline __global__ void unpadIntensityFFT(float* __restrict__ H, const cufftCompl
     const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
     const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
 
-    if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
+    if (x >= currentResolution.x || y >= currentResolution.y || t >= currentResolution.z)
         return;
 
     H[x * currentResolution.y * currentResolution.z + y * currentResolution.z + t] = H_pad[x * newResolution.y * newResolution.z + y * newResolution.z + t].x;
@@ -127,7 +127,7 @@ inline __global__ void unpadIntensityFFT_unrolled(
     const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
     const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
 
-    if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
+    if (x >= currentResolution.x || y >= currentResolution.y || t >= currentResolution.z)
         return;
 
 	#pragma unroll
@@ -144,9 +144,9 @@ inline __global__ void wienerFilterPsf(cufftComplex* __restrict__ psf, glm::uvec
 	const glm::uint kernelIdx = getKernelIdx(x, y, t, dataResolution);
 	cufftComplex value = psf[kernelIdx], conjugate = { value.x, -value.y };
     float wienerFactor = safeRCP(value.x * value.x + value.y * value.y + 1.0f / snr);
-    //psf[kernelIdx].x = wienerFactor * conjugate.x;
-    //psf[kernelIdx].y = wienerFactor * conjugate.y;
-    psf[kernelIdx] = conjugate;
+    psf[kernelIdx].x = wienerFactor * conjugate.x;
+    psf[kernelIdx].y = wienerFactor * conjugate.y;
+    //psf[kernelIdx] = conjugate;
 }
 
 template <bool diffuse>

@@ -21,7 +21,7 @@ enum ReconstructionType
 class TransientParameters
 {
 public:
-	ReconstructionType			_reconstructionType = ReconstructionType::FK_MIGRATION;
+	ReconstructionType			_reconstructionType = ReconstructionType::PHASOR_FIELD;
 	bool						_useFourierFilter = true;
 	bool						_compensateLaserCosDistance = true;
 	bool						_reconstructAABB = true;

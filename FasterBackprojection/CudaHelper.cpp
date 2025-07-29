@@ -3,22 +3,20 @@
 
 //
 
-CUdevice CudaHelper::_selectedDevice = 0;
+CUdevice                            CudaHelper::_selectedDevice = 0;
+size_t								CudaHelper::_allocatedMemory = 0;
+std::unordered_map<void*, size_t>	CudaHelper::_allocatedPointers;
 
 // Public methods
 
-CudaHelper::CudaHelper()
-{
-}
+CudaHelper::CudaHelper() = default;
 
-CudaHelper::~CudaHelper()
-= default;
+CudaHelper::~CudaHelper() = default;
 
 glm::uint CudaHelper::getMaxThreadsBlock()
 {
     cudaDeviceProp prop;
     checkError(cudaGetDeviceProperties(&prop, _selectedDevice));
-
     return prop.maxThreadsPerBlock;
 }
 
@@ -36,6 +34,13 @@ glm::ivec3 CudaHelper::getMaxGridSize()
 	return { prop.maxGridSize[0], prop.maxGridSize[1], prop.maxGridSize[2] };
 }
 
+void CudaHelper::initializeBuffer(void*& bufferPointer, size_t size)
+{
+    CudaHelper::checkError(cudaMalloc(&bufferPointer, size));
+    _allocatedMemory += size;
+    _allocatedPointers[bufferPointer] = size;
+}
+
 void CudaHelper::synchronize(const std::string& kernelName)
 {
     cudaError_t error = cudaGetLastError();
@@ -51,10 +56,10 @@ void CudaHelper::startTimer(cudaEvent_t& startEvent, cudaEvent_t& stopEvent)
     checkError(cudaEventRecord(startEvent, nullptr));
 }
 
-float CudaHelper::stopTimer(cudaEvent_t& startEvent, cudaEvent_t& stopEvent)
+float CudaHelper::stopTimer(const cudaEvent_t& startEvent, const cudaEvent_t& stopEvent)
 {
     float ms;
-    checkError(cudaEventRecord(stopEvent, 0));
+    checkError(cudaEventRecord(stopEvent, nullptr));
     checkError(cudaEventSynchronize(stopEvent));
     checkError(cudaEventElapsedTime(&ms, startEvent, stopEvent));
 

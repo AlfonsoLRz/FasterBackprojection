@@ -49,7 +49,7 @@ protected:
 	void compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
 	void normalizeMatrix(float* v, glm::uint size);
 
-	void saveMaxImage(const std::string& filename, const float* volumeGpu, const glm::uvec3& volumeResolution, bool zMajor = false, bool flip = true);
+	void saveMaxImage(const std::string& filename, const float* volumeGpu, const glm::uvec3& volumeResolution, bool flip = true);
 	static bool saveReconstructedAABB(const std::string& filename, float* voxels, glm::uint numVoxels);
 
 public:

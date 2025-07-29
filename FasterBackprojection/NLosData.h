@@ -31,7 +31,7 @@ public:
 
 	AABB					_hiddenGeometry;
 
-	float					_deltaT = .0f, _t0 = .0f, _temporalWidth = .0f;
+	float					_deltaT = .0f, _t0 = .0f, _wallWidth = .0f;
 
 	bool					_isConfocal = true;
 	bool					_discardFirstLastBounces = true;
@@ -51,10 +51,6 @@ protected:
 
 	void swapXYZOrder();
 
-	static glm::uint getZOffset(const std::string& filename);
-
-	void loadMat(const std::string& filename);
-	bool loadLCTMat(mat_t* matFile, glm::uint zTrim = 700, glm::uint zOffset = 0);
 	bool loadNLOSFile(const HighFive::File& file);
 
 	bool loadBinaryFile(const std::string& filename);

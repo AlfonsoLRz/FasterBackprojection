@@ -14,8 +14,8 @@ void LoG::compute(float*& input, const glm::uvec3& size, const TransientParamete
 	std::vector<float> kernel = calculateLaplacianKernel(transientParameters._kernelSize, transientParameters._sigma);
 
 	float* dKernel = nullptr, * dOutput = nullptr;
-    CudaHelper::initializeBufferGPU(dKernel, kernel.size(), kernel.data());
-	CudaHelper::initializeZeroBufferGPU(dOutput, size.x * size.y * size.z * sizeof(float));
+    CudaHelper::initializeBuffer(dKernel, kernel.size(), kernel.data());
+	CudaHelper::initializeZeroBuffer(dOutput, size.x * size.y * size.z * sizeof(float));
 
     dim3 blockSize(8, 8, 8);
     dim3 gridSize((size.x + blockSize.x - 1) / blockSize.x,
@@ -40,8 +40,8 @@ void LoGFFT::compute(float*& input, const glm::uvec3& size, const TransientParam
     glm::uint complexDimensionSize = (size.x / 2 + 1) * size.y * size.z;
 
     cufftComplex* fourierReconstruction, * kernel;
-    CudaHelper::initializeZeroBufferGPU(fourierReconstruction, complexDimensionSize);
-    CudaHelper::initializeZeroBufferGPU(kernel, complexDimensionSize);
+    CudaHelper::initializeZeroBuffer(fourierReconstruction, complexDimensionSize);
+    CudaHelper::initializeZeroBuffer(kernel, complexDimensionSize);
 
     cufftHandle forward_plan, inverse_plan;
     cufftPlan3d(&forward_plan, size.x, size.y, size.z, CUFFT_R2C);
@@ -81,7 +81,7 @@ void LoGFFT::compute(float*& input, const glm::uvec3& size, const TransientParam
 void Laplacian::compute(float*& input, const glm::uvec3& size, const TransientParameters& transientParameters) const
 {
     float* dOutput = nullptr;
-    CudaHelper::initializeZeroBufferGPU(dOutput, static_cast<size_t>(size.x) * size.y * size.z);
+    CudaHelper::initializeZeroBuffer(dOutput, static_cast<size_t>(size.x) * size.y * size.z);
 
     dim3 blockSize = dim3(8, 8, 8);
     dim3 gridSize = dim3(

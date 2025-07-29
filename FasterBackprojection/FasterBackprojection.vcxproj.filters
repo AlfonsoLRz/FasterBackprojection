@@ -28,7 +28,10 @@
     <Filter Include="header\progressbar">
       <UniqueIdentifier>{19e4244d-14d6-43be-9bae-39bfa8957887}</UniqueIdentifier>
     </Filter>
-    <Filter Include="header\cuda">
+    <Filter Include="resources\shaders\compute">
+      <UniqueIdentifier>{8b048b0c-6f05-41cd-ad0f-da5b30b94aff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="resources\cuda">
       <UniqueIdentifier>{a79bd1f4-8d1c-4ad0-a728-e59655c3ae2c}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -133,7 +136,7 @@
       <Filter>header</Filter>
     </ClInclude>
     <ClInclude Include="random_kernels.cuh">
-      <Filter>header\cuda</Filter>
+      <Filter>resources\cuda</Filter>
     </ClInclude>
     <ClInclude Include="Laser.cuh">
       <Filter>header</Filter>
@@ -142,7 +145,7 @@
       <Filter>header\progressbar</Filter>
     </ClInclude>
     <ClInclude Include="math.cuh">
-      <Filter>header\cuda</Filter>
+      <Filter>resources\cuda</Filter>
     </ClInclude>
     <ClInclude Include="FileUtilities.h">
       <Filter>header</Filter>
@@ -154,10 +157,10 @@
       <Filter>header</Filter>
     </ClInclude>
     <ClInclude Include="fourier.cuh">
-      <Filter>header\cuda</Filter>
+      <Filter>resources\cuda</Filter>
     </ClInclude>
     <ClInclude Include="transient_utils.cuh">
-      <Filter>header\cuda</Filter>
+      <Filter>resources\cuda</Filter>
     </ClInclude>
     <ClInclude Include="DrawPointCloud.h">
       <Filter>header</Filter>
@@ -181,18 +184,15 @@
       <Filter>header</Filter>
     </ClInclude>
     <ClInclude Include="transient_postprocessing.cuh">
-      <Filter>header\cuda</Filter>
+      <Filter>resources\cuda</Filter>
     </ClInclude>
     <ClInclude Include="LCT.h">
       <Filter>header</Filter>
     </ClInclude>
     <ClInclude Include="lct.cuh">
-      <Filter>header\cuda</Filter>
+      <Filter>resources\cuda</Filter>
     </ClInclude>
     <ClInclude Include="PostprocessingFilters.h">
-      <Filter>header</Filter>
-    </ClInclude>
-    <ClInclude Include="backprojection.cuh">
       <Filter>header</Filter>
     </ClInclude>
     <ClInclude Include="Backprojection.h">
@@ -205,7 +205,7 @@
       <Filter>header</Filter>
     </ClInclude>
     <ClInclude Include="fk.cuh">
-      <Filter>header\cuda</Filter>
+      <Filter>resources\cuda</Filter>
     </ClInclude>
     <ClInclude Include="TalHDF5Reader.h">
       <Filter>header</Filter>
@@ -215,6 +215,21 @@
     </ClInclude>
     <ClInclude Include="CudaPerf.h">
       <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="MatLCTReader.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="MatFkReader.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="phasor_fields.cuh">
+      <Filter>resources\cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="PhasorFields.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="backprojection.cuh">
+      <Filter>resources\cuda</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -329,6 +344,12 @@
     <ClCompile Include="CudaPerf.cpp">
       <Filter>source</Filter>
     </ClCompile>
+    <ClCompile Include="MatLCTReader.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="MatFkReader.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="GpuStructs.cu">
@@ -344,7 +365,7 @@
       <Filter>source</Filter>
     </CudaCompile>
     <CudaCompile Include="preprocessing.cuh">
-      <Filter>header\cuda</Filter>
+      <Filter>resources\cuda</Filter>
     </CudaCompile>
     <CudaCompile Include="LCT.cu">
       <Filter>source</Filter>
@@ -353,6 +374,9 @@
       <Filter>source</Filter>
     </CudaCompile>
     <CudaCompile Include="FK.cu">
+      <Filter>source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="PhasorFields.cu">
       <Filter>source</Filter>
     </CudaCompile>
   </ItemGroup>
@@ -399,6 +423,12 @@
     </None>
     <None Include="assets\shaders\shading\backprojection-vs.glsl">
       <Filter>resources\shaders\shading</Filter>
+    </None>
+    <None Include="assets\shaders\compute\backprojection_confocal-comp.glsl">
+      <Filter>resources\shaders\compute</Filter>
+    </None>
+    <None Include="assets\shaders\compute\constants.glsl">
+      <Filter>resources\shaders\compute</Filter>
     </None>
   </ItemGroup>
 </Project>

@@ -7,12 +7,12 @@ class CudaPerf
 	typedef std::chrono::time_point<std::chrono::high_resolution_clock> Chrono;
 	typedef std::chrono::duration<double> ElapsedTime;
 
-	std::queue<std::string> _stageNames; // Queue to keep track of stage names for timing
-
 protected:
 	std::string _algName;
 
+	cudaEvent_t							_startEvent, _stopEvent; // CUDA events for timing the whole algorithm
 	std::map<std::string, Chrono>		_stageStartTime;	// Start times for different stages
+	std::queue<std::string>				_stageNames;		// Queue to keep track of stage names for timing
 	std::map<std::string, long long>	_timings;			// Timings for different stages
 
 public:

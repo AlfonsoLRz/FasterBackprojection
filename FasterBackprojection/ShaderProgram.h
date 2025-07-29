@@ -1,6 +1,6 @@
 #pragma once
 
-#define DEBUG_UNIFORMS false
+#define DEBUG_UNIFORMS true
 
 class ShaderProgram
 {
@@ -52,6 +52,7 @@ public:
 	bool setUniform(const std::string& name, const glm::ivec2& value) const;
 	bool setUniform(const std::string& name, const glm::uvec2& value) const;
 	bool setUniform(const std::string& name, const glm::vec3& value) const;
+	bool setUniform(const std::string& name, const glm::uvec3& value) const;
 	bool setUniform(const std::string& name, const glm::ivec3& value) const;
 	bool setUniform(const std::string& name, const glm::vec4& value) const;
 	bool setUniform(const std::string& name, const std::vector<float>& values) const;

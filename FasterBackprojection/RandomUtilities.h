@@ -111,7 +111,7 @@ inline float* RandomUtilities::getNoiseBuffer(size_t numPoints)
 		n = RandomUtilities::getUniformRandom();
 
 	float* noiseBuffer = nullptr;
-	CudaHelper::initializeBufferGPU(noiseBuffer, numPoints, noise.data());
+	CudaHelper::initializeBuffer(noiseBuffer, numPoints, noise.data());
 
 	return noiseBuffer;
 }

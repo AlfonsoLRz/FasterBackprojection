@@ -6,22 +6,27 @@
 
 #include "math.cuh"
 
-// 3D texture for interpolation (x, y, z order)
-//texture<float, 3, cudaReadModeElementType> texInterpData;
-
 inline __forceinline__ __device__ glm::uint getKernelIdx(glm::uint x, glm::uint y, glm::uint t, const glm::uvec3& dataResolution)
 {
     return t + dataResolution.z * (y + dataResolution.y * x);
 }
 
 inline __global__ void padIntensityFFT_FK(
-    const float* __restrict__ H, cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution, float divisor)
+    const float* __restrict__ H, cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution, float divisor, glm::uint stride)
 {
-    const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
-    if (x >= currentResolution.x || y >= currentResolution.y || t >= currentResolution.z / 1)
+	const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x;
+    const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
+    const glm::uint x = blockIdx.z * blockDim.z + threadIdx.z;
+	if (x >= currentResolution.x || y >= currentResolution.y || t >= currentResolution.z)
         return;
 
-	H_pad[getKernelIdx(x, y, t, newResolution)] = make_cuComplex(H[getKernelIdx(x, y, t, currentResolution)] * static_cast<float>(t) / static_cast<float>(currentResolution.z), .0f);
+	#pragma unroll
+    for (glm::uint i = 0; i < stride && t + i < currentResolution.z; ++i) 
+    {
+        glm::uint z = t * stride + i;
+        H_pad[getKernelIdx(x, y, z, newResolution)] = 
+            make_cuComplex(H[getKernelIdx(x, y, z, currentResolution)] * static_cast<float>(z) * divisor, 0.0f);
+    }
 }
 
 inline __global__ void unpadIntensityFFT_FK(float* H, const cufftComplex* H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution)

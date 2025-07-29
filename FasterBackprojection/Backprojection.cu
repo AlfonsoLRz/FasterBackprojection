@@ -1,9 +1,11 @@
+// ReSharper disable CppExpressionWithoutSideEffects
 #include "stdafx.h"
 #include "Backprojection.h"
 
 #include <cub/device/device_scan.cuh>
 
 #include "backprojection.cuh"
+#include "ComputeShader.h"
 #include "CudaHelper.h"
 #include "RandomUtilities.h"
 #include "TransientImage.h"
@@ -37,16 +39,17 @@ void Backprojection::reconstructVolume(
 	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
 	const glm::uint numVoxels = voxelResolution.x * voxelResolution.y * voxelResolution.z;
 	float* volumeGpu = nullptr;
-	CudaHelper::initializeZeroBufferGPU(volumeGpu, numVoxels);
+	CudaHelper::initializeZeroBuffer(volumeGpu, numVoxels);
 
-	if (transientParams._compensateLaserCosDistance)
-		compensateLaserCosDistance(recInfo, recBuffers);
+	//if (transientParams._compensateLaserCosDistance)
+	//	compensateLaserCosDistance(recInfo, recBuffers);
 
-	if (transientParams._useFourierFilter)
-		filter_H_cuda(recBuffers._intensity, recInfo._timeStep * 0.25f, .0f);
+	//if (transientParams._useFourierFilter)
+	//	filter_H_cuda(recBuffers._intensity, recInfo._timeStep * 80.0f, .0f);
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
 		reconstructVolumeConfocal(volumeGpu, recInfo);
+		//reconstructVolumeConfocalGLSL(volumeGpu, recInfo);
 		//reconstructAABBConfocalMIS(volumeGpu, recInfo, recBuffers);
 	else if (recInfo._captureSystem == CaptureSystem::Exhaustive)
 		reconstructVolumeExhaustive(volumeGpu, recInfo);
@@ -154,13 +157,13 @@ void Backprojection::reconstructDepthConfocal(const ReconstructionInfo& recInfo,
 {
 	// Pointer to reconstruction depths in GPU memory
 	float* depthsGPU = nullptr;
-	CudaHelper::initializeBufferGPU(depthsGPU, reconstructionDepths.size(), reconstructionDepths.data());
+	CudaHelper::initializeBuffer(depthsGPU, reconstructionDepths.size(), reconstructionDepths.data());
 
 	// Let's initialize a matrix of size (sx, sy, depths)
 	const glm::uint numDepths = static_cast<glm::uint>(reconstructionDepths.size());
 	const glm::uint numPixels = recInfo._numSensorTargets * numDepths;
 	float* activationGpu = nullptr;
-	CudaHelper::initializeZeroBufferGPU(activationGpu, numPixels);
+	CudaHelper::initializeZeroBuffer(activationGpu, numPixels);
 
 	ChronoUtilities::startTimer();
 
@@ -185,7 +188,7 @@ void Backprojection::reconstructDepthConfocal(const ReconstructionInfo& recInfo,
 	std::cout << "Camera target resolution: " << cameraTargetRes << '\n';
 
 	std::vector<float> reconstruction(numPixels);
-	CudaHelper::downloadBufferGPU(activationGpu, reconstruction.data(), numPixels, 0);
+	CudaHelper::downloadBuffer(activationGpu, reconstruction.data(), numPixels, 0);
 
 	#pragma omp parallel for
 	for (int idx = 0; idx < static_cast<int>(numDepths); ++idx)
@@ -208,13 +211,13 @@ void Backprojection::reconstructDepthExhaustive(const ReconstructionInfo& recInf
 
 	// Pointer to reconstruction depths in GPU memory
 	float* depthsGPU = nullptr;
-	CudaHelper::initializeBufferGPU(depthsGPU, reconstructionDepths.size(), reconstructionDepths.data());
+	CudaHelper::initializeBuffer(depthsGPU, reconstructionDepths.size(), reconstructionDepths.data());
 
 	// Let's initialize a matrix of size (sx, sy, depths)
 	const glm::uint numDepths = static_cast<glm::uint>(reconstructionDepths.size());
 	const glm::uint numPixels = recInfo._numSensorTargets * numDepths;
 	float* activationGpu = nullptr;
-	CudaHelper::initializeZeroBufferGPU(activationGpu, numPixels);
+	CudaHelper::initializeZeroBuffer(activationGpu, numPixels);
 
 	// Determine size of thread groups and threads within them
 	dim3 blockSize(BLOCK_X_EXHAUSTIVE, BLOCK_Y_EXHAUSTIVE);
@@ -237,7 +240,7 @@ void Backprojection::reconstructDepthExhaustive(const ReconstructionInfo& recInf
 	std::cout << "Camera target resolution: " << cameraTargetRes << '\n';
 
 	std::vector<float> reconstruction(numPixels);
-	CudaHelper::downloadBufferGPU(activationGpu, reconstruction.data(), numPixels, 0);
+	CudaHelper::downloadBuffer(activationGpu, reconstruction.data(), numPixels, 0);
 
 	#pragma omp parallel for
 	for (int idx = 0; idx < static_cast<int>(numDepths); ++idx)
@@ -268,6 +271,63 @@ void Backprojection::reconstructVolumeConfocal(float* volume, const Reconstructi
 	);
 
 	backprojectConfocalVoxel<<<gridSize, blockSize>>>(volume, sliceSize);
+
+	_perf.toc();
+}
+
+void Backprojection::reconstructVolumeConfocalGLSL(float* volume, const ReconstructionInfo& recInfo)
+{
+	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
+	const glm::uint sliceSize = voxelResolution.y * voxelResolution.z;
+
+	glm::uint activationSsbo = ComputeShader::setWriteBuffer(glm::uint(), voxelResolution.x * voxelResolution.y * voxelResolution.z, GL_DYNAMIC_DRAW);
+	glm::uint intensitySsbo = ComputeShader::setReadBuffer(_nlosData->_data, GL_DYNAMIC_STORAGE_BIT);
+	glm::uint laserPositionSsbo = ComputeShader::setReadBuffer(_nlosData->_laserGridPositions, GL_DYNAMIC_STORAGE_BIT);
+
+	_backprojectionConfocalVoxelShader = new ComputeShader();
+	_backprojectionConfocalVoxelShader->createShaderProgram("assets/shaders/compute/backprojection_confocal");
+
+	_perf.tic("Backprojection");
+
+	ComputeShader::bindBuffers(std::vector<GLuint>{ activationSsbo, intensitySsbo, laserPositionSsbo  });
+
+	_backprojectionConfocalVoxelShader->use();
+	_backprojectionConfocalVoxelShader->setUniform("sliceSize", sliceSize);
+	_backprojectionConfocalVoxelShader->setUniform("voxelResolution", recInfo._voxelResolution);
+	_backprojectionConfocalVoxelShader->setUniform("hiddenVolumeMin", recInfo._hiddenVolumeMin);
+	_backprojectionConfocalVoxelShader->setUniform("hiddenVolumeVoxelSize", recInfo._hiddenVolumeVoxelSize);
+	_backprojectionConfocalVoxelShader->setUniform("numLaserTargets", recInfo._numLaserTargets);
+	_backprojectionConfocalVoxelShader->setUniform("numTimeBins", recInfo._numTimeBins);
+	_backprojectionConfocalVoxelShader->setUniform("sensorPosition", recInfo._sensorPosition);
+	_backprojectionConfocalVoxelShader->setUniform("laserPosition", recInfo._laserPosition);
+	_backprojectionConfocalVoxelShader->setUniform("timeOffset", recInfo._timeOffset);
+	_backprojectionConfocalVoxelShader->setUniform("timeStep", recInfo._timeStep);
+	_backprojectionConfocalVoxelShader->setUniform("discardFirstLastBounces", static_cast<glm::uint>(recInfo._discardFirstLastBounces));
+	_backprojectionConfocalVoxelShader->applyActiveSubroutines();
+
+	glm::uvec3 workgroupSize(16, 8, 8);
+	glm::uvec3 numGroups = glm::uvec3(
+		(voxelResolution.z * voxelResolution.y + workgroupSize.x - 1) / workgroupSize.x,
+		(recInfo._numLaserTargets + workgroupSize.y - 1) / workgroupSize.y,
+		(voxelResolution.x + workgroupSize.z - 1) / workgroupSize.z
+	);
+
+	ComputeShader::execute(
+		numGroups.x, numGroups.y, numGroups.z, 
+		workgroupSize.x, workgroupSize.y, workgroupSize.z
+	);
+
+	glFinish();
+
+	// Synchronize to ensure all operations are completed
+	//std::vector<float> activationData(voxelResolution.x * voxelResolution.y * voxelResolution.z);
+	//glm::uint* activationDataPointer = ComputeShader::readData(activationSsbo, glm::uint());
+	//for (glm::uint i = 0; i < voxelResolution.x * voxelResolution.y * voxelResolution.z; ++i)
+	//{
+	//	activationData[i] = float(activationDataPointer[i]) / 10000.0f;
+	//	if (activationData[i] > 0.0f)
+	//		std::cout << "Activation at index " << i << ": " << activationData[i] << '\n';
+	//}
 
 	_perf.toc();
 }
@@ -303,15 +363,15 @@ void Backprojection::reconstructAABBConfocalMIS(float* volume, const Reconstruct
 		totalElements *= static_cast<glm::uint>(dim);
 
 	float* spatioTemporalSum = nullptr, * spatialSumGpu = nullptr;
-	CudaHelper::initializeBufferGPU(spatioTemporalSum, totalElements);
-	CudaHelper::initializeBufferGPU(spatialSumGpu, totalElements / numTimeBins);
+	CudaHelper::initializeBuffer(spatioTemporalSum, totalElements);
+	CudaHelper::initializeBuffer(spatialSumGpu, totalElements / numTimeBins);
 
 	float* noiseGpu = nullptr;
 	std::vector<float> noiseHost(numVoxels * 2);
 	#pragma omp parallel for
 	for (glm::uint i = 0; i < numVoxels; ++i)
 		noiseHost[i] = RandomUtilities::getUniformRandom();
-	CudaHelper::initializeBufferGPU(noiseGpu, numVoxels, noiseHost.data());
+	CudaHelper::initializeBuffer(noiseGpu, numVoxels, noiseHost.data());
 
 	// CUB's inclusive sum
 	{
@@ -346,14 +406,14 @@ void Backprojection::reconstructAABBConfocalMIS(float* volume, const Reconstruct
 	float* probTableGpu = nullptr;
 	{
 		std::vector<float> spatialCDF(totalElements / numTimeBins);
-		CudaHelper::downloadBufferGPU(spatialSumGpu, spatialCDF.data(), totalElements / numTimeBins);
+		CudaHelper::downloadBuffer(spatialSumGpu, spatialCDF.data(), totalElements / numTimeBins);
 
 		std::vector<glm::uint> aliasTable;
 		std::vector<float> probTable;
 		buildAliasTables(spatialCDF, aliasTable, probTable);
 
-		CudaHelper::initializeBufferGPU(aliasTableGpu, aliasTable.size(), aliasTable.data());
-		CudaHelper::initializeBufferGPU(probTableGpu, probTable.size(), probTable.data());
+		CudaHelper::initializeBuffer(aliasTableGpu, aliasTable.size(), aliasTable.data());
+		CudaHelper::initializeBuffer(probTableGpu, probTable.size(), probTable.data());
 	}
 
 	glm::uint numSamples = recInfo._numLaserTargets / 4;
