@@ -25,10 +25,10 @@ void SceneContent::buildScenario()
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/nlos/usaf/usaf_l[0.00,-0.50,0.00]_r[1.57,0.00,3.14]_v[0.57,0.01,0.60]_s[256]_l[256]_gs[1.00]_conf.hdf5");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/nlos/usaf/usaf_l[0.00,-0.50,0.00]_r[1.57,0.00,3.14]_v[0.57,0.01,0.60]_s[16]_l[16]_gs[1.00].hdf5");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/fk/bike/fk_10min.mat");
-	NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_mannequin.mat");
+	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_mannequin.mat");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_exit_sign.mat");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_resolution_chart_65cm.mat");
-	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/fk/bike/meas_180min.mat");
+	NLosData* transientVoxels = new NLosData("C:/Datasets/transient/fk/bike/meas_180min.mat");
 
 	//transientVoxels.saveImages("output/");
 
