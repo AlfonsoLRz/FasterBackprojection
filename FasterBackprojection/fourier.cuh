@@ -51,17 +51,17 @@ inline __global__ void padBuffer(
 
 inline __global__ void readBackFromIFFT(
     const cufftComplex* __restrict__ H, float* __restrict__ H_orig, 
-	glm::uint sliceSize, glm::uint timeBins, glm::uint paddedTimeBins, glm::uint padding, glm::uint size)
+	glm::uint timeBins, glm::uint paddedTimeBins, glm::uint padding, glm::uint size)
 {
     const glm::uint idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size)
         return;
 
     const glm::uint xy = idx / timeBins, t = idx % timeBins;
-	H_orig[xy * timeBins + t] = glm::abs(H[xy * paddedTimeBins + t + padding].x);
+	H_orig[xy * timeBins + t] = fabs(H[xy * paddedTimeBins + t + padding].x);
 }
 
-inline __global__ void multiplyHK(cufftComplex *d_H, const cufftComplex *d_K, glm::uint batch, glm::uint numTimeBins, glm::uint size)
+inline __global__ void multiplyHK(cufftComplex *d_H, const cufftComplex *d_K, glm::uint numTimeBins, glm::uint size)
 {
     const glm::uint idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size)

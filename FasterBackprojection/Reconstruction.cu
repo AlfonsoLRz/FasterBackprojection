@@ -148,13 +148,13 @@ void Reconstruction::filter_H_cuda(float* intensityGpu, float wl_mean, float wl_
 	dim3 block(512);
 	dim3 grid((dimProduct + block.x - 1) / block.x);
 
-	multiplyHK<<<grid, block >>>(d_H, d_K, sliceSize, nt_pad, sliceSize * nt_pad);
+	multiplyHK<<<grid, block >>>(d_H, d_K, nt_pad, sliceSize * nt_pad);
 	CUFFT_CHECK(cufftExecC2C(planH, d_H, d_H, CUFFT_INVERSE));
 
 	//
 	//normalizeH<<<grid, block>>>(d_H, batch, nt_pad);		// I read the IFFT results, and they were too small; I think this is not needed
 
-	readBackFromIFFT<<<grid, block>>>(d_H, intensityGpu, sliceSize, nt, nt_pad, padding, sliceSize * nt);
+	readBackFromIFFT<<<grid, block>>>(d_H, intensityGpu, nt, nt_pad, padding, sliceSize * nt);
 	//CudaHelper::downloadBuffer(intensityGpu, _nlosData->_data.data(), _nlosData->_data.size(), 0);
 
 	// 
@@ -169,9 +169,9 @@ void Reconstruction::compensateLaserCosDistance(const ReconstructionInfo& recInf
 {
 	_perf.tic("Compensate Laser Cosine & Distance");
 
-	glm::uint spatialSize = recInfo._numLaserTargets;
+	glm::uint spatialSize = static_cast<glm::uint>(_nlosData->_dims[0] * _nlosData->_dims[1]);
 	if (recInfo._captureSystem == CaptureSystem::Exhaustive)
-		spatialSize *= recInfo._numSensorTargets;
+		spatialSize *= static_cast<glm::uint>(_nlosData->_dims[2] * _nlosData->_dims[3]);
 
 	dim3 blockSize(64, 8);
 	dim3 gridSize(

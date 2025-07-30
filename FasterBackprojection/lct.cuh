@@ -116,7 +116,7 @@ inline __global__ void unpadIntensityFFT(float* __restrict__ H, const cufftCompl
     if (x >= currentResolution.x || y >= currentResolution.y || t >= currentResolution.z)
         return;
 
-    H[x * currentResolution.y * currentResolution.z + y * currentResolution.z + t] = H_pad[x * newResolution.y * newResolution.z + y * newResolution.z + t].x;
+    H[getKernelIdx(x, y, t, currentResolution)] = H_pad[getKernelIdx(x, y, t, newResolution)].x;
 }
 
 inline __global__ void unpadIntensityFFT_unrolled(
@@ -169,14 +169,14 @@ inline __global__ void multiplyTransformTranspose(
 	const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x < dataResolution.x && y < dataResolution.y && t < dataResolution.z) 
     {
-        const glm::uint spatialIndex = y * dataResolution.y + x;  
+        const glm::uint spatialIndex = y * dataResolution.x + x;  
 
         float sum = 0.0f;
 		#pragma unroll
         for (glm::uint k = 0; k < dataResolution.z; ++k)
             sum += mtx[k * dataResolution.z + t] * volumeGpu[spatialIndex * dataResolution.z + k];
 
-        mult[(y * dataResolution.y + x) * dataResolution.z + t] = sum;
+        mult[getKernelIdx(x, y, t, dataResolution)] = sum;
     }
 }
 
@@ -186,12 +186,12 @@ inline __global__ void multiplyTransformTransposeInv(
     const glm::uint t = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, x = blockIdx.z * blockDim.z + threadIdx.z;
     if (x < dataResolution.x && y < dataResolution.y && t < dataResolution.z)
     {
-        const glm::uint spatialIndex = y * dataResolution.y + x;
+        const glm::uint spatialIndex = y * dataResolution.x + x;
 
         float sum = 0.0f;
         for (glm::uint k = 0; k < dataResolution.z; ++k)
             sum += mtx[t * dataResolution.z + k] * volumeGpu[spatialIndex * dataResolution.z + k];
 
-        mult[(y * dataResolution.y + x) * dataResolution.z + t] = sum;
+        mult[getKernelIdx(x, y, t, dataResolution)] = sum;
     }
 }

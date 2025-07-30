@@ -11,6 +11,8 @@
 #include <Eigen/Dense>
 #include <omp.h>
 
+#include "transient_postprocessing.cuh"
+
 //
 
 void PhasorFields::reconstructDepths(
@@ -43,8 +45,8 @@ void PhasorFields::reconstructVolume(
 		throw std::runtime_error("Unsupported capture system for Phasor Fields reconstruction.");
 
 	// Post-process the activation matrix
-	//_postprocessingFilters[transientParams._postprocessingFilterType]->compute(volumeGpu, volumeResolution, transientParams);
-	//normalizeMatrix(recBuffers._intensity, volumeResolution.x * volumeResolution.y * volumeResolution.z);
+	_postprocessingFilters[transientParams._postprocessingFilterType]->compute(volumeGpu, volumeResolution, transientParams);
+	normalizeMatrix(volumeGpu, volumeResolution.x * volumeResolution.y * volumeResolution.z);
 
 	_perf.toc();
 	_perf.summarize();
@@ -59,7 +61,7 @@ void PhasorFields::reconstructVolume(
 
 //
 
-cufftComplex* PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, float slope, cudaStream_t stream)
+cufftComplex* PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, float slope)
 {
 	glm::uvec3 totalRes = dataResolution * 2u; // Assuming the PSF kernel is twice the resolution in each dimension
 	glm::uint size = totalRes.x * totalRes.y * totalRes.z;
@@ -97,7 +99,7 @@ cufftComplex* PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, fl
 
 	// RSD
 	{
-		computePSFKernel_pf<<<gridSize, blockSize, 0, stream>>>(psf, totalRes, slope);
+		computePSFKernel_pf<<<gridSize, blockSize>>>(psf, totalRes, slope);
 	}
 
 	// Find minimum along z-axis and binarize (only 1 value per xy, or a few at most)
@@ -108,7 +110,7 @@ cufftComplex* PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, fl
 			(totalRes.y + blockSize2D.y - 1) / blockSize2D.y
 		);
 
-		findMinimumBinarize_pf<<<gridSize2D, blockSize2D, 0, stream>>>(psf, totalRes);
+		findMinimumBinarize_pf<<<gridSize2D, blockSize2D>>>(psf, totalRes);
 	}
 
 	// Normalization according to center 
@@ -120,7 +122,7 @@ cufftComplex* PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, fl
 		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z);
 		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z);
 
-		normalizePSF_pf<<<gridSize, blockSize, 0, stream>>>(psf, singleFloat, totalRes);
+		normalizePSF_pf<<<gridSize, blockSize>>>(psf, singleFloat, totalRes);
 	}
 
 	// L2 normalization
@@ -130,21 +132,23 @@ cufftComplex* PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, fl
 		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf, singleFloat, size);
 		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf, singleFloat, size);
 
-		l2NormPSF_pf <<<gridSize, blockSize, 0, stream>>>(psf, singleFloat, totalRes);
+		l2NormPSF_pf <<<gridSize, blockSize>>>(psf, singleFloat, totalRes);
 	}
 
-	rollPSF_pf<<<gridSize, blockSize, 0, stream>>>(psf, rolledPsf, dataResolution, totalRes);
+	rollPSF_pf<<<gridSize, blockSize>>>(psf, rolledPsf, dataResolution, totalRes);
 
 	// Fourier transform the PSF kernel
 	{
-		CUFFT_CHECK(cufftSetStream(fftPlan, stream));
 		CUFFT_CHECK(cufftExecC2C(fftPlan, rolledPsf, rolledPsf, CUFFT_FORWARD));
 	}
 
 	// Get the conjugate of the PSF kernel
 	{
-		extractConjugate_pf<<<gridSize, blockSize, 0, stream>>>(rolledPsf, totalRes);
+		extractConjugate_pf<<<gridSize, blockSize>>>(rolledPsf, totalRes);
 	}
+
+	std::vector<cufftComplex> psfBuffer(512);
+	CudaHelper::downloadBuffer(rolledPsf, psfBuffer.data(), psfBuffer.size(), totalRes.z);
 
 	CudaHelper::free(psf);
 	CudaHelper::free(singleFloat);
@@ -254,7 +258,7 @@ void PhasorFields::defineTransformOperator(glm::uint M, float*& d_mtx)
 	std::vector<float> mtxHost(M2);
 
 	// Iterate over the sparse matrix and copy to dense
-#pragma omp parallel for
+	#pragma omp parallel for
 	for (int k = 0; k < mtx.outerSize(); ++k)
 		for (SparseMatrixF_RowMajor::InnerIterator it(mtx, k); it; ++it)
 			mtxHost[it.col() * M + it.row()] = it.value();
@@ -268,7 +272,6 @@ cufftComplex* PhasorFields::waveconv(
 {
 	const glm::uint numSamples = static_cast<int>(roundf(cycles * virtualWavelength / deltaDistance));
 	const float numCycles = static_cast<float>(numSamples) * deltaDistance / virtualWavelength, sigma = 1.0f / 0.3f;
-	const float mean = static_cast<float>(numSamples) / 2.0f;
 
 	// Build virtual waves
 	float* virtualWaveSin = nullptr, *virtualWaveCos = nullptr;
@@ -277,8 +280,10 @@ cufftComplex* PhasorFields::waveconv(
 
 	dim3 blockSize(256);
 	dim3 gridSize((numSamples + blockSize.x - 1) / blockSize.x);
-	createVirtualWaves<<<gridSize, blockSize>>>(virtualWaveCos, virtualWaveSin, numSamples, numCycles, sigma, mean);
-	CudaHelper::synchronize("createVirtualWaves");
+	createVirtualWaves<<<gridSize, blockSize>>>(virtualWaveCos, virtualWaveSin, numSamples, numCycles, sigma);
+
+	std::vector<float> virtualWaves(numSamples);
+	CudaHelper::downloadBuffer(virtualWaveSin, virtualWaves.data(), numSamples);
 
 	dim3 blockSize3D(16, 8, 8);
 	dim3 gridSize3D(
@@ -292,6 +297,9 @@ cufftComplex* PhasorFields::waveconv(
 
 	convolveVirtualWaves<<<gridSize3D, blockSize3D>>>(data, dataResolution, virtualWaveSin, virtualWaveCos, phasorCos, phasorSin, numSamples);
 
+	std::vector<float> convolved(512);
+	CudaHelper::downloadBuffer(phasorSin, convolved.data(), convolved.size(), convolved.size());
+
 	return nullptr;
 }
 
@@ -301,8 +309,10 @@ void PhasorFields::transformData(
 	float* phasorCos, float* phasorSin,
 	cufftComplex*& phasorDataCos, cufftComplex*& phasorDataSin)
 {
-	CudaHelper::initializeBuffer(phasorDataCos, static_cast<size_t>(dataResolution.x) * dataResolution.y * dataResolution.z);
-	CudaHelper::initializeBuffer(phasorDataSin, static_cast<size_t>(dataResolution.x) * dataResolution.y * dataResolution.z);
+	glm::uvec3 fftResolution = dataResolution * 2u;
+
+	CudaHelper::initializeZeroBuffer(phasorDataCos, static_cast<size_t>(fftResolution.x) * fftResolution.y * fftResolution.z);
+	CudaHelper::initializeZeroBuffer(phasorDataSin, static_cast<size_t>(fftResolution.x) * fftResolution.y * fftResolution.z);
 
 	// Multiply phasorCos and phasorSin with the transformation matrix
 	dim3 blockSize(16, 8, 8);
@@ -312,23 +322,30 @@ void PhasorFields::transformData(
 		(dataResolution.x + blockSize.z - 1) / blockSize.z
 	);
 
-	multiplyTransformTranspose<<<gridSize, blockSize>>>(phasorCos, phasorSin, mtx, phasorDataCos, phasorDataSin, dataResolution);
+	multiplyTransformTranspose<<<gridSize, blockSize>>>(phasorCos, phasorSin, mtx, phasorDataCos, phasorDataSin, dataResolution, fftResolution);
 	CudaHelper::synchronize("multiplyTransformTranspose");
 
-	std::vector<float> support(512);
-	CudaHelper::downloadBuffer(phasorCos, support.data(), 512);
+	std::vector<cufftComplex> support(512);
+	CudaHelper::downloadBuffer(phasorDataCos, support.data(), 512, 1024);
 
 	for (glm::uint i = 0; i < 512; ++i)
-		std::cout << support[i] << '\n';
+		std::cout << support[i].x << " " << support[i].y << '\n';
+
+	CudaHelper::downloadBuffer(phasorDataSin, support.data(), 512, 1024);
+
+	for (glm::uint i = 0; i < 512; ++i)
+		std::cout << support[i].x << " " << support[i].y << '\n';
 }
 
 void PhasorFields::convolveBackprojection(cufftComplex* phasorDataCos, cufftComplex* phasorDataSin, cufftComplex* psf, const glm::uvec3& dataResolution)
 {
+	glm::uvec3 fftResolution = dataResolution * 2u;
+
 	cufftHandle planH;
 	int rank = 3;  
-	int n[3] = { static_cast<int>(dataResolution[0]),
-				 static_cast<int>(dataResolution[1]),
-				 static_cast<int>(dataResolution[2]) };
+	int n[3] = { static_cast<int>(fftResolution[0]),
+				 static_cast<int>(fftResolution[1]),
+				 static_cast<int>(fftResolution[2]) };
 
 	CUFFT_CHECK(cufftPlanMany(&planH, rank, n,
 		NULL, 1, 0,
@@ -342,12 +359,15 @@ void PhasorFields::convolveBackprojection(cufftComplex* phasorDataCos, cufftComp
 		CUFFT_C2C, 1));
 	CUFFT_CHECK(cufftExecC2C(planH, phasorDataSin, phasorDataSin, CUFFT_FORWARD));
 
+	//std::vector<cufftComplex> fftCos(512);
+	//CudaHelper::downloadBuffer(phasorDataCos, fftCos.data(), 512);
+
 	// Multiply by inverse PSF
 	dim3 blockSize(16, 8, 8);
 	dim3 gridSize(
-		(dataResolution.z + blockSize.x - 1) / blockSize.x,
-		(dataResolution.y + blockSize.y - 1) / blockSize.y,
-		(dataResolution.x + blockSize.z - 1) / blockSize.z
+		(fftResolution.z + blockSize.x - 1) / blockSize.x,
+		(fftResolution.y + blockSize.y - 1) / blockSize.y,
+		(fftResolution.x + blockSize.z - 1) / blockSize.z
 	);
 	convolveBackprojectionKernel<<<gridSize, blockSize>>>(phasorDataCos, phasorDataSin, psf, dataResolution);
 
@@ -362,6 +382,34 @@ void PhasorFields::convolveBackprojection(cufftComplex* phasorDataCos, cufftComp
 		NULL, 1, 0,
 		CUFFT_C2C, 1));
 	CUFFT_CHECK(cufftExecC2C(planH, phasorDataSin, phasorDataSin, CUFFT_INVERSE));
+
+	// IFFT requires normalization, but it also produces very small values, so we avoid this and produce valid results by normalizing later
+	//size_t fftSize = static_cast<size_t>(fftResolution.x) * fftResolution.y * fftResolution.z;
+	//normalizeIFFT<<<CudaHelper::getNumBlocks(fftSize, 512), 512>>>(phasorDataCos, fftSize, 1.0f / static_cast<float>(fftSize));
+	//normalizeIFFT<<<CudaHelper::getNumBlocks(fftSize, 512), 512>>>(phasorDataSin, fftSize, 1.0f / static_cast<float>(fftSize));
+
+	//std::vector<cufftComplex> convolved(512);
+	//CudaHelper::downloadBuffer(phasorDataCos, convolved.data(), 512);
+
+	//for (glm::uint i = 0; i < 512; ++i)
+	//	std::cout << convolved[i].x << " " << convolved[i].y << '\n';
+}
+
+void PhasorFields::computeMagnitude(cufftComplex* phasorDataCos, cufftComplex* phasorDataSin, float* mtx, float* result1, float* result2, const glm::uvec3& dataResolution)
+{
+	glm::uvec3 fftResolution = dataResolution * 2u;
+	dim3 blockSize(16, 8, 8);
+	dim3 gridSize(
+		(dataResolution.z + blockSize.x - 1) / blockSize.x,
+		(dataResolution.y + blockSize.y - 1) / blockSize.y,
+		(dataResolution.x + blockSize.z - 1) / blockSize.z
+	);
+
+	computePhasorFieldMagnitude<<<gridSize, blockSize>>>(phasorDataCos, phasorDataSin, result2, fftResolution, dataResolution);
+	CudaHelper::synchronize("computePhasorFieldMagnitude");
+
+	//multiplyTransformTransposeInv<<<gridSize, blockSize>>>(result1, mtx, result2, dataResolution);
+	//CudaHelper::synchronize("multiplyTransformTranspose");
 }
 
 void PhasorFields::reconstructVolumeConfocal(float*& volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
@@ -380,7 +428,7 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 
 	// Waveconv
 	float lambdaLimit = _nlosData->_wallWidth * 2.0f / static_cast<float>(volumeResolution.x - 1);
-	float samplingCoeff = 2;										// Scale the size of the virtual wavelength (usually 2, optionally 3 for noisy scenes)
+	float samplingCoeff = 2;				// Scale the size of the virtual wavelength (usually 2, optionally 3 for noisy scenes)
 	float virtualWavelength = samplingCoeff * (lambdaLimit * 2);	
 
 	float* phasorCos = nullptr, * phasorSin = nullptr;
@@ -390,7 +438,7 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 	defineTransformOperator(recInfo._numTimeBins, mtx);
 
 	// Define the point spread function (PSF) kernel
-	cufftComplex* psfKernel = definePSFKernel(volumeResolution, glm::abs(_nlosData->_wallWidth / tDistance), stream1);
+	cufftComplex* psfKernel = definePSFKernel(volumeResolution, glm::abs(_nlosData->_wallWidth / tDistance));
 
 	// Transform data using previous operators
 	cufftComplex* phasorDataCos, * phasorDataSin;
@@ -399,7 +447,7 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 	// Convolve with backprojection kernel, psf
 	convolveBackprojection(phasorDataCos, phasorDataSin, psfKernel, volumeResolution);
 
-	//volume = phasorDataCos;
+	computeMagnitude(phasorDataCos, phasorDataSin, mtx, phasorCos, intensityGpu, volumeResolution);
 
 	cuStreamSynchronize(stream1);
 
@@ -409,6 +457,8 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 	_perf.tic("FFT + PSF + IFFT");
 	//multiplyKernel(transformedData, psfKernel, volumeResolution);
 	_perf.toc();
+
+
 
 	// Inverse transform the data
 	_perf.tic("Inverse transform");

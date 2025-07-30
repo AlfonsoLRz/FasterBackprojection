@@ -39,7 +39,7 @@ void FK::reconstructVolume(
 
 	// Post-process the activation matrix
 	_postprocessingFilters[transientParams._postprocessingFilterType]->compute(volumeGpu, volumeResolution, transientParams);
-	normalizeMatrix(recBuffers._intensity, volumeResolution.x * volumeResolution.y * volumeResolution.z);
+	normalizeMatrix(volumeGpu, volumeResolution.x * volumeResolution.y * volumeResolution.z);
 
 	_perf.toc();
 	_perf.summarize();
@@ -53,7 +53,7 @@ void FK::reconstructVolume(
 	if (transientParams._saveMaxImage)
 		FK::saveMaxImage(
 			transientParams._outputFolder + transientParams._outputMaxImageName,
-			recBuffers._intensity,
+			volumeGpu,
 			glm::uvec3(nlosData->_dims[0], nlosData->_dims[1], nlosData->_dims[2]));
 }
 

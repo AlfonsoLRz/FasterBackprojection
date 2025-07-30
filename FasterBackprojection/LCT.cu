@@ -404,7 +404,7 @@ void LCT::reconstructVolume(
 
 	// Post-process the activation matrix
 	_postprocessingFilters[transientParams._postprocessingFilterType]->compute(volumeGpu, volumeResolution, transientParams);
-	normalizeMatrix(recBuffers._intensity, volumeResolution.x * volumeResolution.y * volumeResolution.z);
+	normalizeMatrix(volumeGpu, volumeResolution.x * volumeResolution.y * volumeResolution.z);
 
 	_perf.toc();
 	_perf.summarize();
@@ -414,7 +414,7 @@ void LCT::reconstructVolume(
 			transientParams._outputFolder + transientParams._outputMaxImageName,
 			volumeGpu,
 			volumeResolution,
-			true);
+			false);
 }
 
 //

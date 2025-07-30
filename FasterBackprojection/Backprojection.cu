@@ -41,11 +41,11 @@ void Backprojection::reconstructVolume(
 	float* volumeGpu = nullptr;
 	CudaHelper::initializeZeroBuffer(volumeGpu, numVoxels);
 
-	//if (transientParams._compensateLaserCosDistance)
-	//	compensateLaserCosDistance(recInfo, recBuffers);
+	if (transientParams._compensateLaserCosDistance)
+		compensateLaserCosDistance(recInfo, recBuffers);
 
-	//if (transientParams._useFourierFilter)
-	//	filter_H_cuda(recBuffers._intensity, recInfo._timeStep * 80.0f, .0f);
+	if (transientParams._useFourierFilter)
+		filter_H_cuda(recBuffers._intensity, recInfo._timeStep, .0f);
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
 		reconstructVolumeConfocal(volumeGpu, recInfo);

@@ -21,14 +21,14 @@ enum ReconstructionType
 class TransientParameters
 {
 public:
-	ReconstructionType			_reconstructionType = ReconstructionType::PHASOR_FIELD;
+	ReconstructionType			_reconstructionType = ReconstructionType::LCT_REC;
 	bool						_useFourierFilter = true;
 	bool						_compensateLaserCosDistance = true;
 	bool						_reconstructAABB = true;
 	glm::uint					_numReconstructionDepths = 200;
 	glm::uvec3					_voxelResolution = glm::uvec3(256u);
 
-	PostprocessingFilterType	_postprocessingFilterType = PostprocessingFilterType::NONE;
+	PostprocessingFilterType	_postprocessingFilterType = PostprocessingFilterType::LAPLACIAN;
 	int							_kernelSize = 5;	
 	float						_sigma = 1.0f;
 
