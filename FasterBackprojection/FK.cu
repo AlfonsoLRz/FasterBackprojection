@@ -24,10 +24,10 @@ void FK::reconstructVolume(
 	_perf.setAlgorithmName("fk-migration");
 	_perf.tic();
 
-	if (transientParams._compensateLaserCosDistance &&
-		!glm::all(glm::epsilonEqual(_nlosData->_laserPosition, glm::vec3(0.0f), glm::epsilon<float>())) &&
-		!glm::all(glm::epsilonEqual(_nlosData->_cameraPosition, glm::vec3(0.0f), glm::epsilon<float>())))
-		compensateLaserCosDistance(recInfo, recBuffers);
+	//if (transientParams._compensateLaserCosDistance &&
+	//	!glm::all(glm::epsilonEqual(_nlosData->_laserPosition, glm::vec3(0.0f), glm::epsilon<float>())) &&
+	//	!glm::all(glm::epsilonEqual(_nlosData->_cameraPosition, glm::vec3(0.0f), glm::epsilon<float>())))
+	//	compensateLaserCosDistance(recInfo, recBuffers);
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
 		reconstructVolumeConfocal(nullptr, recInfo, recBuffers);

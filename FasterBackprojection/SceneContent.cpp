@@ -28,7 +28,7 @@ void SceneContent::buildScenario()
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_mannequin.mat");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_exit_sign.mat");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_resolution_chart_65cm.mat");
-	NLosData* transientVoxels = new NLosData("C:/Datasets/transient/fk/bike/meas_180min.mat");
+	NLosData* transientVoxels = new NLosData("C:/Datasets/transient/fk/bike/meas_10min.mat");
 
 	//transientVoxels.saveImages("output/");
 

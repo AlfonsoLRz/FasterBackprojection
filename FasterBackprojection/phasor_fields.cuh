@@ -238,13 +238,9 @@ inline __global__ void convolveBackprojectionKernel(
 
     const glm::uint kernelIdx = getKernelIdx(x, y, t, dataResolution);
     cufftComplex psfValue = psf[kernelIdx];
-    cufftComplex& phasorCosValue = phasorDataCos[kernelIdx];
-    cufftComplex& phasorSinValue = phasorDataSin[kernelIdx];
 
-    phasorCosValue.x *= psfValue.x;
-    phasorCosValue.y *= psfValue.y;
-    phasorSinValue.x *= psfValue.x;
-    phasorSinValue.y *= psfValue.y;
+    phasorDataCos[kernelIdx] = complexMul(phasorDataCos[kernelIdx], psfValue);
+    phasorDataSin[kernelIdx] = complexMul(phasorDataSin[kernelIdx], psfValue);
 }
 
 inline __global__ void computePhasorFieldMagnitude(
@@ -278,6 +274,6 @@ inline __global__ void multiplyTransformTransposeInv(
         for (glm::uint k = 0; k < dataResolution.z; ++k)
             sum += mtx[t * dataResolution.z + k] * vol[getKernelIdx(x, y, k, dataResolution)];
 
-        result[getKernelIdx(x, y, t, dataResolution)] = sum;
+        result[getKernelIdx(x, y, t, dataResolution)] = fmax(sum, .0f);
     }
 }

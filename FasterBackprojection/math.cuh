@@ -61,6 +61,14 @@ inline __device__ cufftComplex complexMulScalar(cufftComplex a, float s)
 	return result;
 }
 
+inline __device__ cufftComplex complexMul(cufftComplex a, cufftComplex b)
+{
+	cufftComplex result;
+	result.x = a.x * b.x - a.y * b.y;
+	result.y = a.x * b.y + a.y * b.x;
+	return result;
+}
+
 inline __device__ cufftComplex complexLerp(cufftComplex a, cufftComplex b, float t)
 {
 	return complexAdd(complexMulScalar(a, 1.0f - t), complexMulScalar(b, t));

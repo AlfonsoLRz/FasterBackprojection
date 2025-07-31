@@ -14,7 +14,7 @@ enum ReconstructionType
 	BACKPROJECTION,
 	LCT_REC,
 	FK_MIGRATION,
-	PHASOR_FIELD,
+	PHASOR_FIELDS,
 	NUM_RECONSTRUCTION_TYPES
 };
 
@@ -28,7 +28,7 @@ public:
 	glm::uint					_numReconstructionDepths = 200;
 	glm::uvec3					_voxelResolution = glm::uvec3(256u);
 
-	PostprocessingFilterType	_postprocessingFilterType = PostprocessingFilterType::LAPLACIAN;
+	PostprocessingFilterType	_postprocessingFilterType = PostprocessingFilterType::NONE;
 	int							_kernelSize = 5;	
 	float						_sigma = 1.0f;
 

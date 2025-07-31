@@ -25,7 +25,7 @@ inline __global__ void padIntensityFFT_FK(
     {
         glm::uint z = t * stride + i;
         H_pad[getKernelIdx(x, y, z, newResolution)] = 
-            make_cuComplex(H[getKernelIdx(x, y, z, currentResolution)] * static_cast<float>(z) * divisor, 0.0f);
+            make_cuComplex(sqrtf(H[getKernelIdx(x, y, z, currentResolution)] * static_cast<float>(z) * divisor), 0.0f);
     }
 }
 
@@ -35,7 +35,8 @@ inline __global__ void unpadIntensityFFT_FK(float* H, const cufftComplex* H_pad,
     if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
         return;
 
-    H[getKernelIdx(x, y, t, currentResolution)] = glm::abs(H_pad[getKernelIdx(x, y, t, newResolution)].x);
+	float real = H_pad[getKernelIdx(x, y, t, newResolution)].x;
+    H[getKernelIdx(x, y, t, currentResolution)] = real * real;
 }
 
 inline __device__ glm::uvec3 getCyclicShiftedIndices(glm::uint& x, glm::uint& y, glm::uint& z, glm::uvec3 shift, glm::uvec3 resolution)
@@ -45,7 +46,7 @@ inline __device__ glm::uvec3 getCyclicShiftedIndices(glm::uint& x, glm::uint& y,
     z = (z + shift.z) % resolution.z;
 }
 
-__global__ void stoltKernel(
+inline __global__ void stoltKernel(
     const cufftComplex* __restrict__ H,
     cufftComplex* __restrict__ result,
     glm::uvec3 originalResolution,

@@ -56,7 +56,7 @@ void PhasorFields::reconstructVolume(
 			transientParams._outputFolder + transientParams._outputMaxImageName,
 			volumeGpu,
 			volumeResolution,
-			true);
+			false);
 }
 
 //
@@ -325,16 +325,16 @@ void PhasorFields::transformData(
 	multiplyTransformTranspose<<<gridSize, blockSize>>>(phasorCos, phasorSin, mtx, phasorDataCos, phasorDataSin, dataResolution, fftResolution);
 	CudaHelper::synchronize("multiplyTransformTranspose");
 
-	std::vector<cufftComplex> support(512);
-	CudaHelper::downloadBuffer(phasorDataCos, support.data(), 512, 1024);
+	//std::vector<cufftComplex> support(512);
+	//CudaHelper::downloadBuffer(phasorDataCos, support.data(), 512, 1024);
 
-	for (glm::uint i = 0; i < 512; ++i)
-		std::cout << support[i].x << " " << support[i].y << '\n';
+	//for (glm::uint i = 0; i < 512; ++i)
+	//	std::cout << support[i].x << " " << support[i].y << '\n';
 
-	CudaHelper::downloadBuffer(phasorDataSin, support.data(), 512, 1024);
+	//CudaHelper::downloadBuffer(phasorDataSin, support.data(), 512, 1024);
 
-	for (glm::uint i = 0; i < 512; ++i)
-		std::cout << support[i].x << " " << support[i].y << '\n';
+	//for (glm::uint i = 0; i < 512; ++i)
+	//	std::cout << support[i].x << " " << support[i].y << '\n';
 }
 
 void PhasorFields::convolveBackprojection(cufftComplex* phasorDataCos, cufftComplex* phasorDataSin, cufftComplex* psf, const glm::uvec3& dataResolution)
@@ -369,7 +369,7 @@ void PhasorFields::convolveBackprojection(cufftComplex* phasorDataCos, cufftComp
 		(fftResolution.y + blockSize.y - 1) / blockSize.y,
 		(fftResolution.x + blockSize.z - 1) / blockSize.z
 	);
-	convolveBackprojectionKernel<<<gridSize, blockSize>>>(phasorDataCos, phasorDataSin, psf, dataResolution);
+	convolveBackprojectionKernel<<<gridSize, blockSize>>>(phasorDataCos, phasorDataSin, psf, fftResolution);
 
 	CUFFT_CHECK(cufftPlanMany(&planH, rank, n,
 		NULL, 1, 0,
@@ -384,9 +384,9 @@ void PhasorFields::convolveBackprojection(cufftComplex* phasorDataCos, cufftComp
 	CUFFT_CHECK(cufftExecC2C(planH, phasorDataSin, phasorDataSin, CUFFT_INVERSE));
 
 	// IFFT requires normalization, but it also produces very small values, so we avoid this and produce valid results by normalizing later
-	//size_t fftSize = static_cast<size_t>(fftResolution.x) * fftResolution.y * fftResolution.z;
-	//normalizeIFFT<<<CudaHelper::getNumBlocks(fftSize, 512), 512>>>(phasorDataCos, fftSize, 1.0f / static_cast<float>(fftSize));
-	//normalizeIFFT<<<CudaHelper::getNumBlocks(fftSize, 512), 512>>>(phasorDataSin, fftSize, 1.0f / static_cast<float>(fftSize));
+	size_t fftSize = static_cast<size_t>(fftResolution.x) * fftResolution.y * fftResolution.z;
+	normalizeIFFT<<<CudaHelper::getNumBlocks(fftSize, 512), 512>>>(phasorDataCos, fftSize, 1.0f / static_cast<float>(fftSize));
+	normalizeIFFT<<<CudaHelper::getNumBlocks(fftSize, 512), 512>>>(phasorDataSin, fftSize, 1.0f / static_cast<float>(fftSize));
 
 	//std::vector<cufftComplex> convolved(512);
 	//CudaHelper::downloadBuffer(phasorDataCos, convolved.data(), 512);
@@ -405,11 +405,11 @@ void PhasorFields::computeMagnitude(cufftComplex* phasorDataCos, cufftComplex* p
 		(dataResolution.x + blockSize.z - 1) / blockSize.z
 	);
 
-	computePhasorFieldMagnitude<<<gridSize, blockSize>>>(phasorDataCos, phasorDataSin, result2, fftResolution, dataResolution);
+	computePhasorFieldMagnitude<<<gridSize, blockSize>>>(phasorDataCos, phasorDataSin, result1, fftResolution, dataResolution);
 	CudaHelper::synchronize("computePhasorFieldMagnitude");
 
-	//multiplyTransformTransposeInv<<<gridSize, blockSize>>>(result1, mtx, result2, dataResolution);
-	//CudaHelper::synchronize("multiplyTransformTranspose");
+	multiplyTransformTransposeInv<<<gridSize, blockSize>>>(result1, mtx, result2, dataResolution);
+	CudaHelper::synchronize("multiplyTransformTranspose");
 }
 
 void PhasorFields::reconstructVolumeConfocal(float*& volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
@@ -466,10 +466,10 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 	_perf.toc();
 
 	//CudaHelper::free(transformedData);
-	CudaHelper::free(psfKernel);
-	CudaHelper::free(mtx);
-	CudaHelper::free(phasorDataCos);
-	CudaHelper::free(phasorDataSin);
+	//CudaHelper::free(psfKernel);
+	//CudaHelper::free(mtx);
+	//CudaHelper::free(phasorDataCos);
+	//CudaHelper::free(phasorDataSin);
 	cudaStreamDestroy(stream1);
 	cudaStreamDestroy(stream2);
 }
