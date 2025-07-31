@@ -101,8 +101,7 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 		_perf.tic("Pad Intensity FFT");
 
 		float divisor = 1.0f / static_cast<float>(volumeResolution.z);
-		padIntensityFFT_FK<<<strideGridSizeFFT, strideBlockSizeFFT >>>(
-			intensityGpu, fft, volumeResolution, fftVolumeResolution, divisor, strides);
+		padIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fft, volumeResolution, fftVolumeResolution, divisor);
 
 		_perf.toc();
 	}
@@ -130,16 +129,18 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 
 		float width = _nlosData->_wallWidth, range = recInfo._timeStep * static_cast<float>(recInfo._numTimeBins);
 		float sqrtConst = static_cast<float>(volumeResolution.x) * range / (static_cast<float>(volumeResolution.z) * width * 4.0f);
-		float maxValue = 1.0f / sqrtf(sqrtConst * sqrtConst * 2.0f + 1.0f);
 
-		dim3 paddedBlockSizeFFT(16, 8, 8);
+		dim3 paddedBlockSizeFFT(8, 8, 8);
 		dim3 paddedGridSizeFFT(
 			(fftVolumeResolution.z / 2 + paddedBlockSizeFFT.x - 1) / paddedBlockSizeFFT.x,
 			(fftVolumeResolution.y + paddedBlockSizeFFT.y - 1) / paddedBlockSizeFFT.y,
 			(fftVolumeResolution.x + paddedBlockSizeFFT.z - 1) / paddedBlockSizeFFT.z
 		);
 
-		stoltKernel<<<paddedGridSizeFFT, paddedBlockSizeFFT>>>(fft, fftAux, volumeResolution, fftVolumeResolution, fftVolumeResolution / 2u, sqrtConst * sqrtConst, maxValue);
+		stoltKernel<<<paddedGridSizeFFT, paddedBlockSizeFFT>>>(
+			fft, fftAux,
+			fftVolumeResolution, fftVolumeResolution / 2u, 
+			sqrtConst * sqrtConst);
 
 		_perf.toc();
 	}

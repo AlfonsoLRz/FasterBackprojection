@@ -28,7 +28,7 @@ public:
 	glm::uint					_numReconstructionDepths = 200;
 	glm::uvec3					_voxelResolution = glm::uvec3(256u);
 
-	PostprocessingFilterType	_postprocessingFilterType = PostprocessingFilterType::NONE;
+	PostprocessingFilterType	_postprocessingFilterType = PostprocessingFilterType::LAPLACIAN;
 	int							_kernelSize = 5;	
 	float						_sigma = 1.0f;
 

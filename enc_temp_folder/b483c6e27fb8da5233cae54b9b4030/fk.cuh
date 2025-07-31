@@ -32,7 +32,7 @@ inline __global__ void unpadIntensityFFT_FK(float* H, const cufftComplex* H_pad,
     if (x >= newResolution.x || y >= newResolution.y || t >= newResolution.z)
         return;
 
-	float real = H_pad[getKernelIdx(x, y, t, newResolution)].x;
+	float real = fabs(H_pad[getKernelIdx(x, y, t, newResolution)].x);
     H[getKernelIdx(x, y, t, currentResolution)] = real * real;
 }
 
