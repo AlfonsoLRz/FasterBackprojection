@@ -2,19 +2,31 @@
 #include "CudaPerf.h"
 
 #include "CudaHelper.h"
+#include "PcResourceTracker.h"
 
 #include <pprint/pprint.hpp>
 
 //
 
-CudaPerf::CudaPerf(std::string algName): _algName(std::move(algName)), _startEvent(nullptr), _stopEvent(nullptr)
+CudaPerf::CudaPerf(bool trackResources)
 {
+	if (trackResources)
+		_pcResourceTracker = new PcResourceTracker;
+}
+
+CudaPerf::~CudaPerf()
+{
+	delete _pcResourceTracker;
 }
 
 void CudaPerf::tic(const std::string& name)
 {
 	if (name.empty())
+	{
 		_stageStartTime[_algName] = std::chrono::high_resolution_clock::now();
+		if (_pcResourceTracker)
+			_pcResourceTracker->track();
+	}
 	else
 	{
 		_stageStartTime[name] = std::chrono::high_resolution_clock::now();
@@ -36,6 +48,8 @@ void CudaPerf::toc(const std::string& name)
 		else
 		{
 			key = _algName;
+			if (_pcResourceTracker)
+				_pcResourceTracker->stop();
 		}
 	}
 
@@ -50,7 +64,7 @@ void CudaPerf::toc(const std::string& name)
 	_timings[key] += elapsedTime;
 }
 
-void CudaPerf::summarize()
+void CudaPerf::summarize() const
 {
 	pprint::PrettyPrinter printer;
 
@@ -58,17 +72,55 @@ void CudaPerf::summarize()
 	std::cout << "CudaPerf Summary for algorithm: " << _algName << '\n';
 
 	// Per stage timings
-	for (auto& timing : _timings)
-		timing.second /= 1000000; // ms
-	printer.print(_timings);
+	auto timings = _timings;
+	for (auto& timing : timings)
+		timing.second /= TimeMeasurementDivisor; // ms
+	printer.print(timings);
 
 	// Global elapsed time
-	long long globalElapsedTime = std::accumulate(_timings.begin(), _timings.end(), long long{},
+	long long globalElapsedTime;
+	_timings.contains(_algName) ? 
+		globalElapsedTime = _timings.at(_algName) / TimeMeasurementDivisor :
+		globalElapsedTime = std::accumulate(_timings.begin(), _timings.end(), long long{},
 		[](const long long& sum, const std::pair<std::string, long long>& timing) {
-			return sum + timing.second / 1000000; // ms
+			return sum + timing.second / TimeMeasurementDivisor; // ms
 		});
-	if (_timings.contains(_algName))
-		globalElapsedTime = _timings[_algName];
 
 	std::cout << std::setw(30) << std::left << "Total Time" << ": " << std::fixed << std::setprecision(6) << globalElapsedTime << " milliseconds\n";
+}
+
+void CudaPerf::write(const std::string& outPath) const
+{
+	std::ofstream outFile(outPath);
+	if (!outFile.is_open())
+	{
+		std::cerr << "Failed to open output file: " << outPath << '\n';
+		return;
+	}
+
+	// Stage and global timings
+	std::string timingStr;
+
+	auto timings = _timings;
+	for (auto& timing : timings)
+		timing.second /= TimeMeasurementDivisor; // ms
+
+	for (const auto& timing : timings)
+		timingStr += timing.first + ": " + std::to_string(timing.second) + " ms\n";
+
+	// Global elapsed time
+	timingStr += "Total: ";
+	_timings.contains(_algName) ?
+		timingStr += std::to_string(_timings.at(_algName) / TimeMeasurementDivisor):
+		timingStr += std::accumulate(_timings.begin(), _timings.end(), long long{},
+			[](const long long& sum, const std::pair<std::string, long long>& timing) {
+				return sum + timing.second / TimeMeasurementDivisor; // ms
+			});
+
+	// Resource tracker summary
+	if (_pcResourceTracker)
+	{
+		std::string resourceInfo = _pcResourceTracker->summarize();
+		outFile << resourceInfo;
+	}
 }

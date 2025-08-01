@@ -5,17 +5,29 @@
 class PhasorFields : public Reconstruction
 {
 protected:
-	cufftComplex* definePSFKernel(const glm::uvec3& dataResolution, float slope);
+	std::vector<float*>			_deleteFloatQueue;
+	std::vector<void*>			_deleteVoidQueue;
+	std::vector<cufftHandle>	_deleteCufftHandles;
+
+	void emptyQueue();
+
+protected:
+	//
+	void definePSFKernel(const glm::uvec3& dataResolution, float slope, cufftComplex*& rolledPsf, cudaStream_t stream);
+
 	static void defineTransformOperator(glm::uint M, float*& d_mtx);
-	void waveconv(
+
+	void virtualWaveConvolution(
 		float* data, const glm::uvec3& dataResolution, float deltaDistance, float virtualWavelength, float cycles, 
-		float*& phasorCos, float*& phasorSin);
+		float*& phasorCos, float*& phasorSin,
+		cudaStream_t stream);
 
 	static void transformData(
 		const glm::uvec3& dataResolution, 
 		const float* mtx, 
 		float* phasorCos, float* phasorSin, 
-		cufftComplex*& phasorDataCos, cufftComplex*& phasorDataSin);
+		cufftComplex*& phasorDataCos, cufftComplex*& phasorDataSin,
+		cudaStream_t stream);
 
 	static void convolveBackprojection(
 		cufftComplex* phasorDataCos, cufftComplex* phasorDataSin,
@@ -28,6 +40,7 @@ protected:
 		float* result1, float* result2,
 		const glm::uvec3& dataResolution);
 
+	//
 	void reconstructVolumeConfocal(float*& volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
 	static void reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo);
 

@@ -29,6 +29,7 @@ public:
 	static glm::ivec3 getMaxGridSize();
 	static glm::uint getNumBlocks(glm::uint size, glm::uint blockThreads) { return (size + blockThreads) / blockThreads; }
 	static size_t getAllocatedMemory() { return _allocatedMemory; }
+	static size_t getMaxAllocatableMemory();
 
 	template<typename T>
 	static void initializeBuffer(T*& bufferPointer, size_t size, T* buffer = nullptr);

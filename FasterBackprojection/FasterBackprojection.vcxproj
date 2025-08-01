@@ -141,6 +141,7 @@
     <ClInclude Include="LCT.h" />
     <ClInclude Include="MatFkReader.h" />
     <ClInclude Include="MatLCTReader.h" />
+    <ClInclude Include="PcResourceTracker.h" />
     <ClInclude Include="PhasorFields.h" />
     <ClInclude Include="phasor_fields.cuh" />
     <ClInclude Include="PostprocessingFilters.h" />
@@ -268,6 +269,7 @@
     <CudaCompile Include="PhasorFields.cu">
       <FileType>Document</FileType>
     </CudaCompile>
+    <ClCompile Include="PcResourceTracker.cpp" />
     <ClCompile Include="Renderer.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>

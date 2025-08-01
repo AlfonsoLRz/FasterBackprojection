@@ -231,6 +231,9 @@
     <ClInclude Include="backprojection.cuh">
       <Filter>resources\cuda</Filter>
     </ClInclude>
+    <ClInclude Include="PcResourceTracker.h">
+      <Filter>header</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Window.cpp">
@@ -348,6 +351,9 @@
       <Filter>source</Filter>
     </ClCompile>
     <ClCompile Include="MatFkReader.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="PcResourceTracker.cpp">
       <Filter>source</Filter>
     </ClCompile>
   </ItemGroup>

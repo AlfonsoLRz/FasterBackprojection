@@ -34,6 +34,13 @@ glm::ivec3 CudaHelper::getMaxGridSize()
 	return { prop.maxGridSize[0], prop.maxGridSize[1], prop.maxGridSize[2] };
 }
 
+size_t CudaHelper::getMaxAllocatableMemory()
+{
+    cudaDeviceProp prop;
+    checkError(cudaGetDeviceProperties(&prop, _selectedDevice));
+    return prop.totalGlobalMem;
+}
+
 void CudaHelper::initializeBuffer(void*& bufferPointer, size_t size)
 {
     CudaHelper::checkError(cudaMalloc(&bufferPointer, size));

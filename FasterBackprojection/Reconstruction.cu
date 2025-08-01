@@ -183,7 +183,6 @@ void Reconstruction::compensateLaserCosDistance(const ReconstructionInfo& recInf
 		recBuffers._intensity, 
 		recInfo._captureSystem == CaptureSystem::Confocal ? 1 : recInfo._numSensorTargets, 
 		spatialSize, recInfo._numTimeBins);
-	//CudaHelper::synchronize("compensateLaserCosDistance");
 
 	_perf.toc();
 }

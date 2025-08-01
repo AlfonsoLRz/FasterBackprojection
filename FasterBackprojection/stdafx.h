@@ -6,6 +6,12 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #define GLM_ENABLE_EXPERIMENTAL
 
+//
+#ifdef _WIN32
+#include <windows.h>								// DWORD is undefined otherwise
+#include <Psapi.h>
+#endif
+
 #include <any>
 #include <chrono>
 #include <cmath>
@@ -25,6 +31,7 @@
 #include <numeric>
 #include <queue>
 #include <random>
+#include <semaphore>
 #include <sstream>
 #include <stdio.h>
 #include <time.h>

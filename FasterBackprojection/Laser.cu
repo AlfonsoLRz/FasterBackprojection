@@ -27,8 +27,8 @@ void Laser::reconstruct(NLosData* nlosData, const TransientParameters& transient
 	ReconstructionBuffers recBuffers;
 
 	// Transfer data to GPU
-	//nlosData->downsampleTime(4);
-	nlosData->downsampleSpace(2);
+	nlosData->downsampleTime(4);
+	//nlosData->downsampleSpace(2);
 	nlosData->toGpu(recInfo, recBuffers, transientParams);
 
 	CudaHelper::checkError(cudaMemcpyToSymbol(rtRecInfo, &recInfo, sizeof(ReconstructionInfo)));
@@ -42,6 +42,7 @@ void Laser::reconstruct(NLosData* nlosData, const TransientParameters& transient
 	_reconstruction[transientParams._reconstructionType]->reconstructVolume(nlosData, recInfo, recBuffers, transientParams);
 
 	CudaHelper::free(recBuffers._laserTargets);
+	CudaHelper::free(recBuffers._laserTargetsNormals);
 	CudaHelper::free(recBuffers._sensorTargets);
 	CudaHelper::free(recBuffers._intensity);
 }

@@ -18,9 +18,11 @@ inline __global__ void normalizeReconstruction(float* __restrict__ v, glm::uint 
 
 // 
 
-inline __global__ void laplacianFilter(const float* __restrict__ volume, float* __restrict__ processed, glm::uvec3 resolution, float filterSize)
+inline __global__ void laplacianFilter(const float* __restrict__ volume, float* __restrict__ processed, glm::ivec3 resolution, float filterSize)
 {
-	const glm::uint tx = blockIdx.x * blockDim.x + threadIdx.x, ty = blockIdx.y * blockDim.y + threadIdx.y, tz = blockIdx.z * blockDim.z + threadIdx.z;
+	const int tz = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+	const int ty = static_cast<int>(blockIdx.y * blockDim.y + threadIdx.y);
+	const int tx = static_cast<int>(blockIdx.z * blockDim.z + threadIdx.z);
 	if (tx >= resolution.x || ty >= resolution.y || tz >= resolution.z)
 		return;
 

@@ -35,7 +35,7 @@ void LCT::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& rec
 	CudaHelper::checkError(cudaStreamCreate(&stream1));
 	CudaHelper::checkError(cudaStreamCreate(&stream2));
 
-	// Forward and backward transform operators
+	// Forward transform operator (mtxi is simply the transpose of mtx)
 	std::future<void> future = std::async(std::launch::async,
 	                                      defineTransformOperator,
 											recInfo._numTimeBins,
@@ -91,7 +91,7 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 	CudaHelper::initializeBuffer(rolledPsf, size);
 	CudaHelper::initializeBuffer(singleFloat, 1);
 
-	cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf, psf, size);
+	cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf, psf, size, stream);
 	cudaMalloc(&tempStorage, tempStorageBytes);
 	
     dim3 blockSize(16, 8, 8);
@@ -134,8 +134,8 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 
 		CudaHelper::checkError(cudaMemset(singleFloat, 0, sizeof(float)));
 
-		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z);
-		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z);
+		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z, stream);
+		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z, stream);
 
 		normalizePSF<<<gridSize, blockSize, 0, stream>>>(psf, singleFloat, totalRes);
 	}
@@ -144,8 +144,8 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 	{
 		CudaHelper::checkError(cudaMemset(singleFloat, 0, sizeof(float)));
 
-		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf, singleFloat, size);
-		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf, singleFloat, size);
+		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf, singleFloat, size, stream);
+		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf, singleFloat, size, stream);
 
 		l2NormPSF<<<gridSize, blockSize, 0, stream>>>(psf, singleFloat, totalRes);
 	}
