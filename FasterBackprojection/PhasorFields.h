@@ -7,7 +7,7 @@ class PhasorFields : public Reconstruction
 protected:
 	cufftComplex* definePSFKernel(const glm::uvec3& dataResolution, float slope);
 	static void defineTransformOperator(glm::uint M, float*& d_mtx);
-	cufftComplex* waveconv(
+	void waveconv(
 		float* data, const glm::uvec3& dataResolution, float deltaDistance, float virtualWavelength, float cycles, 
 		float*& phasorCos, float*& phasorSin);
 

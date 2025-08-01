@@ -21,14 +21,14 @@ enum ReconstructionType
 class TransientParameters
 {
 public:
-	ReconstructionType			_reconstructionType = ReconstructionType::FK_MIGRATION;
+	ReconstructionType			_reconstructionType = ReconstructionType::LCT_REC;
 	bool						_useFourierFilter = true;
-	bool						_compensateLaserCosDistance = true;
+	bool						_compensateLaserCosDistance = false;
 	bool						_reconstructAABB = true;
 	glm::uint					_numReconstructionDepths = 200;
 	glm::uvec3					_voxelResolution = glm::uvec3(256u);
 
-	PostprocessingFilterType	_postprocessingFilterType = PostprocessingFilterType::LAPLACIAN;
+	PostprocessingFilterType	_postprocessingFilterType = PostprocessingFilterType::NONE;
 	int							_kernelSize = 5;	
 	float						_sigma = 1.0f;
 

@@ -47,7 +47,7 @@ bool MatFkReader::read(const std::string& filename, NLosData& nlosData)
 			for (size_t t = 0; t < nlosData._dims[2]; ++t)
 			{
 				size_t sourceIdx = t * nlosData._dims[0] * nlosData._dims[1] + y * nlosData._dims[0] + x;
-				size_t destIdx = x * (nlosData._dims[1] * nlosData._dims[2]) + y * nlosData._dims[2] + t;
+				size_t destIdx = y * (nlosData._dims[0] * nlosData._dims[2]) + x * nlosData._dims[2] + t;
 				nlosData._data[destIdx] = rectData[sourceIdx];
 			}
 		}
@@ -89,7 +89,7 @@ bool MatFkReader::read(const std::string& filename, NLosData& nlosData)
 				{
 					for (size_t y = 0; y < nlosData._dims[1]; ++y)
 					{
-						size_t idx = y * nlosData._dims[0] + x;
+						size_t idx = x * nlosData._dims[1] + y;
 						tof.push_back(static_cast<float>(tofData[idx]));
 					}
 				}
