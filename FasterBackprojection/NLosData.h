@@ -65,5 +65,6 @@ public:
 	void toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, const TransientParameters& transientParameters);
 
 	void discardDistanceToSensorAndLaser();
+	void reduceToConfocal();
 	void saveImages(const std::string& outPath);
 };

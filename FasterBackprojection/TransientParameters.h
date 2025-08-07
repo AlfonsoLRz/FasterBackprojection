@@ -21,7 +21,7 @@ enum ReconstructionType
 class TransientParameters
 {
 public:
-	ReconstructionType			_reconstructionType = ReconstructionType::BACKPROJECTION;
+	ReconstructionType			_reconstructionType = ReconstructionType::FK_MIGRATION;
 	bool						_useFourierFilter = false;
 	bool						_compensateLaserCosDistance = false;
 	bool						_reconstructAABB = true;
@@ -30,7 +30,7 @@ public:
 
 	PostprocessingFilterType	_postprocessingFilterType = PostprocessingFilterType::NONE;
 	int							_kernelSize = 5;	
-	float						_sigma = 1.0f;
+	float						_sigma = 0.3f;
 
 	std::string					_outputFolder = "output/";
 	std::string					_outputMaxImageName = "max_activation.png";

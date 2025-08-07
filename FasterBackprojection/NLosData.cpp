@@ -2,6 +2,7 @@
 #include "NLosData.h"
 
 #include <matio.h> 
+#include <algorithm>
 #include <print>
 
 #include "ChronoUtilities.h"
@@ -164,11 +165,11 @@ void NLosData::discardDistanceToSensorAndLaser()
 {
 	if (!_discardFirstLastBounces)		// Otherwise the recording process did not record the distance to the sensor and laser
 	{
-		float maxLaserDistance = 0.0f, maxCameraDistance = 0.0f;
+		float maxLaserDistance = FLT_MAX, maxCameraDistance = FLT_MAX;
 		for (const auto& pos : _laserGridPositions)
-			maxLaserDistance = std::max(maxLaserDistance, glm::length(pos - _laserPosition));
+			maxLaserDistance = std::min(maxLaserDistance, glm::length(pos - _laserPosition));
 		for (const auto& pos : _cameraGridPositions)
-			maxCameraDistance = std::max(maxCameraDistance, glm::length(pos - _cameraPosition));
+			maxCameraDistance = std::min(maxCameraDistance, glm::length(pos - _cameraPosition));
 
 		glm::uint numAdditionalTimeBins = static_cast<glm::uint>(std::ceil((maxLaserDistance + maxCameraDistance) / _deltaT));
 
@@ -176,20 +177,58 @@ void NLosData::discardDistanceToSensorAndLaser()
 		const size_t newTimeBins = _dims.back() - numAdditionalTimeBins;
 		std::vector<float> newData(_data.size() / _dims.back() * newTimeBins, .0f);
 
-		// Currently, this only works for confocal data
-		for (size_t x = 0; x < _dims[0]; ++x)
+		if (_isConfocal)
 		{
-			for (size_t y = 0; y < _dims[1]; ++y)
+#pragma omp parallel for
+			for (size_t x = 0; x < _dims[0]; ++x)
 			{
-				const glm::uint laserTimeBins = static_cast<glm::uint>(std::ceil(glm::length(_laserGridPositions[x * _dims[1] + y] - _laserPosition) / _deltaT));
-				const glm::uint cameraTimeBins = static_cast<glm::uint>(std::ceil(glm::length(_cameraGridPositions[x * _dims[1] + y] - _cameraPosition) / _deltaT));
-				const glm::uint offset = laserTimeBins + cameraTimeBins;
-
-				for (size_t t = offset; t < _dims.back(); ++t)
+				for (size_t y = 0; y < _dims[1]; ++y)
 				{
-					size_t oldIndex = x * _dims[1] * _dims.back() + y * _dims.back() + t;
-					size_t newIndex = x * _dims[1] * newTimeBins + y * newTimeBins + t - offset;
-					newData[newIndex] = _data[oldIndex];
+					const glm::uint laserTimeBins = static_cast<glm::uint>(std::ceil(glm::length(_laserGridPositions[x * _dims[1] + y] - _laserPosition) / _deltaT));
+					const glm::uint cameraTimeBins = static_cast<glm::uint>(std::ceil(glm::length(_cameraGridPositions[x * _dims[1] + y] - _cameraPosition) / _deltaT));
+					const glm::uint offset = laserTimeBins + cameraTimeBins;
+
+					for (size_t t = offset; t < _dims.back(); ++t)
+					{
+						size_t oldIndex = x * _dims[1] * _dims.back() + y * _dims.back() + t;
+						size_t newIndex = x * _dims[1] * newTimeBins + y * newTimeBins + t - offset;
+						newData[newIndex] = _data[oldIndex];
+					}
+				}
+			}
+		}
+		else
+		{
+#pragma omp parallel for
+			for (size_t x1 = 0; x1 < _dims[0]; ++x1)
+			{
+				for (size_t y1 = 0; y1 < _dims[1]; ++y1)
+				{
+					const glm::uint laserTimeBins = static_cast<glm::uint>(std::ceil(glm::length(_laserGridPositions[x1 * _dims[1] + y1] - _laserPosition) / _deltaT));
+
+					for (size_t x2 = 0; x2 < _dims[2]; ++x2)
+					{
+						for (size_t y2 = 0; y2 < _dims[3]; ++y2)
+						{
+							const glm::uint cameraTimeBins = static_cast<glm::uint>(std::ceil(glm::length(_cameraGridPositions[x2 * _dims[3] + y2] - _cameraPosition) / _deltaT));
+							const glm::uint offset = laserTimeBins + cameraTimeBins;
+
+							for (size_t t = offset; t < _dims.back(); ++t)
+							{
+								size_t oldIndex = 
+									x1 * _dims[1] * _dims[2] * _dims[3] * _dims.back() + 
+									y1 * _dims[2] * _dims[3] * _dims.back() + 
+									x2 * _dims[3] * _dims.back() + 
+									y2 * _dims.back() + t;
+								size_t newIndex = 
+									x1 * _dims[1] * _dims[2] * _dims[3] * newTimeBins + 
+									y1 * _dims[2] * _dims[3] * newTimeBins +
+									x2 * _dims[3] * newTimeBins + 
+									y2 * newTimeBins + t - offset;
+								newData[newIndex] = _data[oldIndex];
+							}
+						}
+					}
 				}
 			}
 		}
@@ -198,6 +237,104 @@ void NLosData::discardDistanceToSensorAndLaser()
 		_dims.back() = newTimeBins;
 		_discardFirstLastBounces = true; 
 	}
+}
+
+void NLosData::reduceToConfocal()
+{
+	if (_isConfocal)
+		return;
+
+	// From exhaustive to confocal following Lindell et al. 2019
+	// This implies computing midpoints between any camera and laser points in the wall
+	std::vector<glm::vec3> newLaserPositions, newCameraNormals;
+	std::vector<std::vector<float>> newData;
+
+	// Retrieve max distance between laser and camera points to determine the offset
+	float maxDistance = .0f;
+	for (const auto& laserPos : _laserGridPositions)
+		for (const auto& cameraPos : _cameraGridPositions)
+			maxDistance = std::max(glm::distance(laserPos, cameraPos), maxDistance);
+
+	const size_t timeOffset = static_cast<size_t>(glm::ceil(maxDistance / _deltaT));
+	for (size_t x1 = 0; x1 < _dims[0]; ++x1)
+	{
+		for (size_t y1 = 0; y1 < _dims[1]; ++y1)
+		{
+			const glm::vec3& laserPos = _laserGridPositions[x1 * _dims[1] + y1];
+
+			for (size_t x2 = 0; x2 < _dims[2]; ++x2)
+			{
+				for (size_t y2 = 0; y2 < _dims[3]; ++y2)
+				{
+					std::vector<float> dataSlice;
+
+					const glm::vec3& cameraPos = _cameraGridPositions[x2 * _dims[3] + y2];
+					const glm::vec3 midpoint = (laserPos + cameraPos) / 2.0f;
+					newLaserPositions.push_back(midpoint);
+					newCameraNormals.emplace_back(.0f, 1.0f, .0f);
+
+					float pointDistance = glm::distance(cameraPos, laserPos);
+
+					for (size_t t = 0; t < _dims.back(); ++t)
+					{
+						// new_t^2 = current_t^2 + (distance^2 / v^2)
+
+						float time = static_cast<float>(t) * _deltaT / LIGHT_SPEED; // Convert to time
+						time = time * time - 1.0f / (LIGHT_SPEED * LIGHT_SPEED) * pointDistance;
+
+						float newTime = std::sqrt(glm::max(time, .0f)) * LIGHT_SPEED; // Convert back to meters
+						size_t newTimeIndex = static_cast<size_t>(std::round(newTime / _deltaT));
+
+						size_t oldIndex = x1 * _dims[1] * _dims[2] * _dims[3] * _dims.back() + 
+										  y1 * _dims[2] * _dims[3] * _dims.back() + 
+										  x2 * _dims[3] * _dims.back() + 
+										  y2 * _dims.back() + t;
+						if (dataSlice.size() <= newTimeIndex)
+							dataSlice.resize(newTimeIndex + 1, .0f);
+						dataSlice[newTimeIndex] += _data[oldIndex];
+					}
+
+					newData.push_back(dataSlice);
+				}
+			}
+		}
+	}
+
+	// Sort new laser positions based on Z (primary) and X (secondary) coordinates
+	// We don't need to sort the vector, but an index vector that will allow to access the data in the correct order
+	std::vector<size_t> indices(newLaserPositions.size());
+	std::iota(indices.begin(), indices.end(), 0);
+	std::sort(indices.begin(), indices.end(), 
+		[&newLaserPositions](size_t a, size_t b) {
+			return newLaserPositions[a].z > newLaserPositions[b].z || 
+				   (newLaserPositions[a].z == newLaserPositions[b].z && newLaserPositions[a].x > newLaserPositions[b].x);
+		});
+
+	std::vector<glm::vec3> sortedLaserPositions(newLaserPositions.size());
+	std::vector<glm::vec3> sortedCameraNormals(newCameraNormals.size());
+
+	size_t newTimeDimension = _dims.back();
+	for (const auto& i : newData)
+		newTimeDimension = std::max(newTimeDimension, i.size());
+	std::vector<float> sortedData(newData.size() * newTimeDimension, .0f);
+
+	for (size_t i = 0; i < indices.size(); ++i)
+	{
+		size_t idx = indices[i];
+		sortedLaserPositions[i] = newLaserPositions[idx];
+		sortedCameraNormals[i] = newCameraNormals[idx];
+		for (size_t t = 0; t < newData[idx].size(); ++t)
+			sortedData[i * newTimeDimension + t] = newData[idx][t];
+	}
+
+	_cameraGridPositions = std::move(sortedLaserPositions);
+	_cameraGridNormals = std::move(sortedCameraNormals);
+	_laserGridPositions = _cameraGridPositions;
+	_laserGridNormals = _cameraGridNormals;
+	_data = std::move(sortedData);
+	size_t sqrtLaserDims = static_cast<size_t>(std::sqrt(_cameraGridPositions.size()));
+	_dims = { sqrtLaserDims, sqrtLaserDims, newTimeDimension };
+	_isConfocal = true;
 }
 
 void NLosData::saveImages(const std::string& outPath)

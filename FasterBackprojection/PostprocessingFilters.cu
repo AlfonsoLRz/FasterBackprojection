@@ -18,9 +18,9 @@ void LoG::compute(float*& input, const glm::uvec3& size, const TransientParamete
 	CudaHelper::initializeZeroBuffer(dOutput, size.x * size.y * size.z * sizeof(float));
 
     dim3 blockSize(8, 8, 8);
-    dim3 gridSize((size.x + blockSize.x - 1) / blockSize.x,
+    dim3 gridSize((size.z + blockSize.x - 1) / blockSize.x,
                   (size.y + blockSize.y - 1) / blockSize.y,
-				  (size.z + blockSize.z - 1) / blockSize.z);
+				  (size.x + blockSize.z - 1) / blockSize.z);
 
     LoGFilter<<<gridSize, blockSize>>>(
         input, dOutput, 
@@ -165,7 +165,7 @@ std::vector<float> LoG::calculateLaplacianKernel(int size, float std1)
         sum_w1 += w1[i];
     }
 
-    // Step 5: Make the filter sum to zero (final `w` in MATLAB)
+    // Step 5: Make the filter sum to zero
     std::vector<float> w_final(size * size * size);
     float adjustment = sum_w1 / static_cast<float>(size * size * size); // Average value to subtract
     for (int i = 0; i < w_final.size(); ++i)

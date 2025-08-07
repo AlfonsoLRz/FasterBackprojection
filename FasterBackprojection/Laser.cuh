@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Reconstruction.h"
+class Reconstruction;
 #include "TransientParameters.h"
 
 class NLosData;

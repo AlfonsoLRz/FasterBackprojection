@@ -20,8 +20,6 @@ inline __global__ void normalizeReconstruction(float* __restrict__ v, glm::uint 
 
 inline __global__ void laplacianFilter(const float* __restrict__ volume, float* __restrict__ processed, glm::ivec3 resolution, float filterSize)
 {
-	extern __shared__ float shared[];
-
 	const int tz = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
 	const int ty = static_cast<int>(blockIdx.y * blockDim.y + threadIdx.y);
 	const int tx = static_cast<int>(blockIdx.z * blockDim.z + threadIdx.z);
@@ -53,34 +51,35 @@ inline __global__ void laplacianFilter(const float* __restrict__ volume, float* 
 inline __global__ void LoGFilter(
 	const float* __restrict__ volume, float* __restrict__ processed, glm::uvec3 resolution, 
 	const float* __restrict__ kernel, int kernelSize, int kernelHalf) {
-	int x = blockIdx.x * blockDim.x + threadIdx.x;
-	int y = blockIdx.y * blockDim.y + threadIdx.y;
-	int z = blockIdx.z * blockDim.z + threadIdx.z;
-	
-	if (x < resolution.x && y < resolution.y && z < resolution.z) {
-		float sum = 0.0f; 
+	const int tz = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+	const int ty = static_cast<int>(blockIdx.y * blockDim.y + threadIdx.y);
+	const int tx = static_cast<int>(blockIdx.z * blockDim.z + threadIdx.z);
 
-		for (int kz = -kernelHalf; kz <= kernelHalf; ++kz) {
-			for (int ky = -kernelHalf; ky <= kernelHalf; ++ky) {
-				for (int kx = -kernelHalf; kx <= kernelHalf; ++kx) {
-					int ix = x + kx, iy = y + ky, iz = z + kz;
+	if (tx >= resolution.x || ty >= resolution.y || tz >= resolution.z)
+		return;
 
-					ix = static_cast<int>(fmaxf(0.0f, fminf(static_cast<float>(resolution.x - 1), static_cast<float>(ix))));
-					iy = static_cast<int>(fmaxf(0.0f, fminf(static_cast<float>(resolution.y - 1), static_cast<float>(iy))));
-					iz = static_cast<int>(fmaxf(0.0f, fminf(static_cast<float>(resolution.z - 1), static_cast<float>(iz))));
+	float sum = 0.0f; 
 
-					float kernelWeight = kernel[
+	for (int kz = -kernelHalf; kz <= kernelHalf; ++kz) {
+		for (int ky = -kernelHalf; ky <= kernelHalf; ++ky) {
+			for (int kx = -kernelHalf; kx <= kernelHalf; ++kx) {
+				int ix = tx + kx, iy = ty + ky, iz = tz + kz;
+
+				ix = glm::clamp(ix, 0, static_cast<int>(resolution.x - 1));
+				iy = glm::clamp(iy, 0, static_cast<int>(resolution.y - 1));
+				iz = glm::clamp(iz, 0, static_cast<int>(resolution.z - 1));
+
+				float kernelWeight = kernel[
 						(kz + kernelHalf) * kernelSize * kernelSize +
 						(ky + kernelHalf) * kernelSize +
 						(kx + kernelHalf)];
 
-					sum += volume[iz * resolution.y * resolution.x + iy * resolution.x + ix] * kernelWeight;
-				}
+				sum += volume[getKernelIdx(ix, iy, iz, resolution)] * kernelWeight;
 			}
 		}
-
-		processed[z * resolution.y * resolution.x + y * resolution.x + x] = sum;
 	}
+
+	processed[getKernelIdx(tx, ty, tz, resolution)] = sum;
 }
 
 // LoG

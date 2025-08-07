@@ -336,14 +336,14 @@ void Backprojection::reconstructVolumeExhaustive(float* volume, const Reconstruc
 {
 	_perf.tic("Backprojection");
 
-	const glm::uvec3 volumeResolution = glm::uvec3(_nlosData->_dims[0], _nlosData->_dims[1], _nlosData->_dims[2]);
-	const glm::uint sliceSize = volumeResolution.x * volumeResolution.y;
+	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
+	const glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
 
 	dim3 blockSize(BLOCK_X_CONFOCAL, BLOCK_Y_CONFOCAL);
 	dim3 gridSize(
-		(recInfo._numLaserTargets * recInfo._numSensorTargets + blockSize.x - 1) / blockSize.x,
-		(sliceSize + blockSize.y - 1) / blockSize.y,
-		(volumeResolution.z + blockSize.z - 1) / blockSize.z
+		(voxelResolution.x * voxelResolution.y + blockSize.x - 1) / blockSize.x,
+		(recInfo._numLaserTargets * recInfo._numSensorTargets + blockSize.y - 1) / blockSize.y,
+		(voxelResolution.z + blockSize.z - 1) / blockSize.z
 	);
 
 	backprojectExhaustiveVoxel<<<gridSize, blockSize>>>(volume, sliceSize);

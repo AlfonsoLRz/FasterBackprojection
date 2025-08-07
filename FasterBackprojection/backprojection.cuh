@@ -49,6 +49,9 @@ __global__ void backprojectExhaustive(float* __restrict__ activation, const floa
 	const glm::vec3 checkPos = laserTargets[c] + glm::vec3(.0f, 1.0f, .0f) * depths[d];
 
 	float traversedDistance = glm::distance(lPos, checkPos) + glm::distance(checkPos, sPos) - rtRecInfo._timeOffset;
+	if (!rtRecInfo._discardFirstLastBounces)
+		traversedDistance += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(sPos, rtRecInfo._sensorPosition);
+
 	const int timeBin = static_cast<int>(traversedDistance / rtRecInfo._timeStep);
 	if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
 		return;
@@ -74,6 +77,9 @@ __global__ void backprojectConfocalVoxel(float* __restrict__ activation, glm::ui
 	const glm::vec3 checkPos = rtRecInfo._hiddenVolumeMin + glm::vec3(vx, vz, vy) * rtRecInfo._hiddenVolumeVoxelSize + 0.5f * rtRecInfo._hiddenVolumeVoxelSize;
 
 	float dist = glm::distance(lPos, checkPos) * 2.0f - rtRecInfo._timeOffset;
+	if (!rtRecInfo._discardFirstLastBounces)
+		dist += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(lPos, rtRecInfo._sensorPosition);
+
 #ifdef ACCUMULATE_VOXEL_SCATTERING
 	float voxelExtent = glm::length(rtRecInfo._hiddenVolumeVoxelSize) / 2.0f;
 	float minDist = glm::max(.0f, dist - voxelExtent), maxDist = dist + voxelExtent;
@@ -105,30 +111,30 @@ __global__ void backprojectExhaustiveVoxel(float* __restrict__ activation, glm::
 {
 	glm::uint v = blockIdx.x * blockDim.x + threadIdx.x;
 	glm::uint ls = blockIdx.y * blockDim.y + threadIdx.y;
-	glm::uint voxelZ = blockIdx.z * blockDim.z + threadIdx.z;
+	glm::uint vx = blockIdx.z * blockDim.z + threadIdx.z;
 
-	if (ls >= rtRecInfo._numLaserTargets * rtRecInfo._numSensorTargets || v >= sliceSize || voxelZ >= rtRecInfo._voxelResolution.z)
+	if (ls >= rtRecInfo._numLaserTargets * rtRecInfo._numSensorTargets || v >= sliceSize || vx >= rtRecInfo._voxelResolution.x)
 		return;
 
 	const glm::uint l = ls / rtRecInfo._numLaserTargets;
 	const glm::uint s = ls % rtRecInfo._numLaserTargets;
-	const glm::uint vx = v % rtRecInfo._voxelResolution.x;
+	const glm::uint vz = v % rtRecInfo._voxelResolution.x;
 	const glm::uint vy = v / rtRecInfo._voxelResolution.x;
 
 	const glm::vec3 lPos = laserTargets[l], sPos = sensorTargets[s];
-	const glm::vec3 checkPos = rtRecInfo._hiddenVolumeMin + glm::vec3(vx, voxelZ, vy) * rtRecInfo._hiddenVolumeVoxelSize + 0.5f * rtRecInfo._hiddenVolumeVoxelSize;
+	const glm::vec3 checkPos = rtRecInfo._hiddenVolumeMin + glm::vec3(vx, vz, vy) * rtRecInfo._hiddenVolumeVoxelSize + 0.5f * rtRecInfo._hiddenVolumeVoxelSize;
 
-	float dist = glm::distance(lPos, checkPos) + glm::distance(sPos, checkPos) - rtRecInfo._timeOffset;
-	if (rtRecInfo._discardFirstLastBounces == 0)
-		dist += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(sPos, rtRecInfo._sensorPosition);
+	float traversedDistance = glm::distance(lPos, checkPos) + glm::distance(sPos, checkPos) - rtRecInfo._timeOffset;
+	if (!rtRecInfo._discardFirstLastBounces)
+		traversedDistance += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(lPos, rtRecInfo._sensorPosition);
 
-	const int timeBin = static_cast<int>(dist / rtRecInfo._timeStep);
+	const int timeBin = static_cast<int>(traversedDistance / rtRecInfo._timeStep);
 	if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
 		return;
 
 	const float backscatteredLight = intensityCube[getExhaustiveTransientIndex(l, s, timeBin)];
 	if (backscatteredLight > EPS)
-		atomicAdd(&activation[sliceSize * voxelZ + v], backscatteredLight);
+		atomicAdd(&activation[getKernelIdx(vx, vy, vz, rtRecInfo._voxelResolution)], backscatteredLight);
 }
 
 // MIS

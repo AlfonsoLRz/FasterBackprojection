@@ -11,6 +11,7 @@
 #include "LCT.h"
 #include "NLosData.h"
 #include "PhasorFields.h"
+#include "Reconstruction.h"
 
 //
 
@@ -28,7 +29,8 @@ void Laser::reconstruct(NLosData* nlosData, const TransientParameters& transient
 
 	// Transfer data to GPU
 	nlosData->discardDistanceToSensorAndLaser();
-	//nlosData->downsampleTime(4);
+	nlosData->reduceToConfocal();
+	nlosData->downsampleTime(4);
 	//nlosData->downsampleSpace(2);
 	nlosData->toGpu(recInfo, recBuffers, transientParams);
 
