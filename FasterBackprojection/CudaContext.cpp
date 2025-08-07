@@ -14,7 +14,7 @@ CudaContext::CudaContext()
 
 	//
 	cuDeviceGet(&device, 0);
-	cuCtxCreate(&_cudaContext, 0, device);
+	cuCtxCreate(&_cudaContext, nullptr, 0, device);
 	if (_cudaContext == nullptr)
 		throw std::runtime_error("Failed to create CUDA context");
 }

@@ -261,13 +261,13 @@ void Backprojection::reconstructVolumeConfocal(float* volume, const Reconstructi
 	_perf.tic("Backprojection");
 
 	const glm::uvec3 voxelResolution = recInfo._voxelResolution;
-	const glm::uint sliceSize = voxelResolution.y * voxelResolution.z;
+	const glm::uint sliceSize = voxelResolution.x * voxelResolution.y;
 
 	dim3 blockSize(BLOCK_X_CONFOCAL, BLOCK_Y_CONFOCAL);
 	dim3 gridSize(
-		(voxelResolution.z * voxelResolution.y + blockSize.x - 1) / blockSize.x,
+		(voxelResolution.x * voxelResolution.y + blockSize.x - 1) / blockSize.x,
 		(recInfo._numLaserTargets + blockSize.y - 1) / blockSize.y,
-		(voxelResolution.x + blockSize.z - 1) / blockSize.z
+		(voxelResolution.z + blockSize.z - 1) / blockSize.z
 	);
 
 	backprojectConfocalVoxel<<<gridSize, blockSize>>>(volume, sliceSize);

@@ -73,3 +73,8 @@ inline __device__ cufftComplex complexLerp(cufftComplex a, cufftComplex b, float
 {
 	return complexAdd(complexMulScalar(a, 1.0f - t), complexMulScalar(b, t));
 }
+
+inline __forceinline__ __device__ glm::uint getKernelIdx(glm::uint x, glm::uint y, glm::uint t, const glm::uvec3& dataResolution)
+{
+	return t + dataResolution.z * (y + dataResolution.y * x);
+}

@@ -25,9 +25,6 @@ __global__ void backprojectConfocal(float* __restrict__ activation, const float*
 	const glm::vec3 checkPos = laserTargets[c] + glm::vec3(.0f, 1.0f, .0f) * depths[d];
 
 	float traversalTime = glm::distance(lPos, checkPos) * 2.0f - rtRecInfo._timeOffset;
-	if (rtRecInfo._discardFirstLastBounces == 0)
-		traversalTime += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(lPos, rtRecInfo._sensorPosition);
-
 	const int timeBin = static_cast<int>(traversalTime / rtRecInfo._timeStep);
 	if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
 		return;
@@ -52,9 +49,6 @@ __global__ void backprojectExhaustive(float* __restrict__ activation, const floa
 	const glm::vec3 checkPos = laserTargets[c] + glm::vec3(.0f, 1.0f, .0f) * depths[d];
 
 	float traversedDistance = glm::distance(lPos, checkPos) + glm::distance(checkPos, sPos) - rtRecInfo._timeOffset;
-	if (rtRecInfo._discardFirstLastBounces == 0)
-		traversedDistance += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(sPos, rtRecInfo._sensorPosition);
-
 	const int timeBin = static_cast<int>(traversedDistance / rtRecInfo._timeStep);
 	if (timeBin < 0 || timeBin >= rtRecInfo._numTimeBins)
 		return;
@@ -80,9 +74,6 @@ __global__ void backprojectConfocalVoxel(float* __restrict__ activation, glm::ui
 	const glm::vec3 checkPos = rtRecInfo._hiddenVolumeMin + glm::vec3(vx, vz, vy) * rtRecInfo._hiddenVolumeVoxelSize + 0.5f * rtRecInfo._hiddenVolumeVoxelSize;
 
 	float dist = glm::distance(lPos, checkPos) * 2.0f - rtRecInfo._timeOffset;
-	if (rtRecInfo._discardFirstLastBounces == 0)
-		dist += glm::distance(lPos, rtRecInfo._laserPosition) + glm::distance(lPos, rtRecInfo._sensorPosition);
-
 #ifdef ACCUMULATE_VOXEL_SCATTERING
 	float voxelExtent = glm::length(rtRecInfo._hiddenVolumeVoxelSize) / 2.0f;
 	float minDist = glm::max(.0f, dist - voxelExtent), maxDist = dist + voxelExtent;
@@ -106,7 +97,7 @@ __global__ void backprojectConfocalVoxel(float* __restrict__ activation, glm::ui
 
 	const float backscatteredLight = intensityCube[getConfocalTransientIndex(l, timeBin)];
 	if (backscatteredLight > EPS)
-		atomicAdd(&activation[vx * sliceSize + vy * rtRecInfo._voxelResolution.z + vz], backscatteredLight);
+		atomicAdd(&activation[getKernelIdx(vx, vy, vz, rtRecInfo._voxelResolution)], backscatteredLight);
 #endif
 }
 

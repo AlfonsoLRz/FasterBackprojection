@@ -5,7 +5,7 @@ enum CaptureSystem : glm::uint
 	Confocal = 0, Exhaustive = 1
 };
 
-struct ReconstructionInfo
+struct __align__(16) ReconstructionInfo
 {
 	glm::vec3		_sensorPosition;
 	CaptureSystem	_captureSystem;

@@ -20,15 +20,17 @@ inline __global__ void normalizeReconstruction(float* __restrict__ v, glm::uint 
 
 inline __global__ void laplacianFilter(const float* __restrict__ volume, float* __restrict__ processed, glm::ivec3 resolution, float filterSize)
 {
+	extern __shared__ float shared[];
+
 	const int tz = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
 	const int ty = static_cast<int>(blockIdx.y * blockDim.y + threadIdx.y);
 	const int tx = static_cast<int>(blockIdx.z * blockDim.z + threadIdx.z);
+
 	if (tx >= resolution.x || ty >= resolution.y || tz >= resolution.z)
 		return;
 
 	int halfFilterSize = static_cast<int>(floor(filterSize / 2));
 	float laplacian = .0f;
-
 	for (int x = -halfFilterSize; x <= halfFilterSize; ++x)
 	{
 		for (int y = -halfFilterSize; y <= halfFilterSize; ++y)
@@ -44,8 +46,8 @@ inline __global__ void laplacianFilter(const float* __restrict__ volume, float* 
 		}
 	}
 
-	processed[tz * resolution.y * resolution.x + ty * resolution.x + tx] = 
-		filterSize * filterSize * filterSize * volume[tz * resolution.y * resolution.x + ty * resolution.x + tx] - laplacian;
+	const glm::uint volumeIdx = getKernelIdx(tx, ty, tz, resolution);
+	processed[volumeIdx] = filterSize * filterSize * filterSize * volume[volumeIdx] - laplacian;
 }
 
 inline __global__ void LoGFilter(

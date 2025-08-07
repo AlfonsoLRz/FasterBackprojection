@@ -65,5 +65,3 @@
 #include "cuda_fp16.h"
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#include "cuda_texture_types.h"
-#include "texture_fetch_functions.h"

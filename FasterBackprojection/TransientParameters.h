@@ -21,9 +21,9 @@ enum ReconstructionType
 class TransientParameters
 {
 public:
-	ReconstructionType			_reconstructionType = ReconstructionType::FK_MIGRATION;
-	bool						_useFourierFilter = true;
-	bool						_compensateLaserCosDistance = true;
+	ReconstructionType			_reconstructionType = ReconstructionType::BACKPROJECTION;
+	bool						_useFourierFilter = false;
+	bool						_compensateLaserCosDistance = false;
 	bool						_reconstructAABB = true;
 	glm::uint					_numReconstructionDepths = 200;
 	glm::uvec3					_voxelResolution = glm::uvec3(256u);

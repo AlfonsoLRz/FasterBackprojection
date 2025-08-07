@@ -3,13 +3,8 @@
 #include "stdafx.h"
 
 #include <cufft.h>
-
 #include "math.cuh"
 
-inline __forceinline__ __device__ glm::uint getKernelIdx(glm::uint x, glm::uint y, glm::uint t, const glm::uvec3& dataResolution)
-{
-    return t + dataResolution.z * (y + dataResolution.y * x);
-}
 
 inline __global__ void padIntensityFFT_FK(
     const float* __restrict__ H, cufftComplex* __restrict__ H_pad, glm::uvec3 currentResolution, glm::uvec3 newResolution, float divisor)
@@ -57,6 +52,7 @@ inline __global__ void shiftFFT(
     H_aux[getKernelIdx(x, y, z, resolution)] = H[getKernelIdx(shiftedIndices.x, shiftedIndices.y, shiftedIndices.z, resolution)];
 }
 
+//#pragma enable_smem_spilling
 inline __global__ void stoltKernel(
     const cufftComplex* __restrict__ H,
     cufftComplex* __restrict__ result,
@@ -124,7 +120,6 @@ inline __global__ void stoltKernel(
     cufftComplex c1 = complexLerp(c10, c11, dy);
 
     cufftComplex res = complexLerp(c0, c1, dz);
-
 
     getCyclicShiftedIndices(x, y, z, shift, fftResolution);
     result[getKernelIdx(x, y, z, fftResolution)] = complexMulScalar(res, glm::abs(fz) * safeRCP(sqrt_term));

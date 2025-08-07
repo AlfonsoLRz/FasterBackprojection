@@ -22,8 +22,9 @@ void LoG::compute(float*& input, const glm::uvec3& size, const TransientParamete
                   (size.y + blockSize.y - 1) / blockSize.y,
 				  (size.z + blockSize.z - 1) / blockSize.z);
 
-    LoGFilter <<<gridSize, blockSize>>>(input, dOutput, size, dKernel, transientParameters._kernelSize, (transientParameters._kernelSize - 1) / 2);
-    CudaHelper::synchronize("filterLaplacianKernel");
+    LoGFilter<<<gridSize, blockSize>>>(
+        input, dOutput, 
+        size, dKernel, transientParameters._kernelSize, (transientParameters._kernelSize - 1) / 2);
 
 	// Copy the output back to the input reference
 	std::swap(input, dOutput);
@@ -85,13 +86,12 @@ void Laplacian::compute(float*& input, const glm::uvec3& size, const TransientPa
 
     dim3 blockSize = dim3(8, 8, 8);
     dim3 gridSize = dim3(
-        (size.x + blockSize.x - 1) / blockSize.x,
+        (size.z + blockSize.x - 1) / blockSize.x,
         (size.y + blockSize.y - 1) / blockSize.y,
-        (size.z + blockSize.z - 1) / blockSize.z
+        (size.x + blockSize.z - 1) / blockSize.z
     );
 
-    laplacianFilter<<<gridSize, blockSize>>>(input, dOutput, size, transientParameters._kernelSize);
-	CudaHelper::synchronize("laplacianFilter");
+    laplacianFilter<<<gridSize, blockSize>>>(input, dOutput, glm::ivec3(size), transientParameters._kernelSize);
 
     std::swap(input, dOutput);
     CudaHelper::free(dOutput);

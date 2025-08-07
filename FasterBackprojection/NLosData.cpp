@@ -160,6 +160,46 @@ void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuff
 	recInfo._hiddenVolumeVoxelSize = _hiddenGeometry.size() / glm::vec3(recInfo._voxelResolution);
 }
 
+void NLosData::discardDistanceToSensorAndLaser()
+{
+	if (!_discardFirstLastBounces)		// Otherwise the recording process did not record the distance to the sensor and laser
+	{
+		float maxLaserDistance = 0.0f, maxCameraDistance = 0.0f;
+		for (const auto& pos : _laserGridPositions)
+			maxLaserDistance = std::max(maxLaserDistance, glm::length(pos - _laserPosition));
+		for (const auto& pos : _cameraGridPositions)
+			maxCameraDistance = std::max(maxCameraDistance, glm::length(pos - _cameraPosition));
+
+		glm::uint numAdditionalTimeBins = static_cast<glm::uint>(std::ceil((maxLaserDistance + maxCameraDistance) / _deltaT));
+
+		// Move previous data into a new cube
+		const size_t newTimeBins = _dims.back() - numAdditionalTimeBins;
+		std::vector<float> newData(_data.size() / _dims.back() * newTimeBins, .0f);
+
+		// Currently, this only works for confocal data
+		for (size_t x = 0; x < _dims[0]; ++x)
+		{
+			for (size_t y = 0; y < _dims[1]; ++y)
+			{
+				const glm::uint laserTimeBins = static_cast<glm::uint>(std::ceil(glm::length(_laserGridPositions[x * _dims[1] + y] - _laserPosition) / _deltaT));
+				const glm::uint cameraTimeBins = static_cast<glm::uint>(std::ceil(glm::length(_cameraGridPositions[x * _dims[1] + y] - _cameraPosition) / _deltaT));
+				const glm::uint offset = laserTimeBins + cameraTimeBins;
+
+				for (size_t t = offset; t < _dims.back(); ++t)
+				{
+					size_t oldIndex = x * _dims[1] * _dims.back() + y * _dims.back() + t;
+					size_t newIndex = x * _dims[1] * newTimeBins + y * newTimeBins + t - offset;
+					newData[newIndex] = _data[oldIndex];
+				}
+			}
+		}
+
+		_data = std::move(newData);
+		_dims.back() = newTimeBins;
+		_discardFirstLastBounces = true; 
+	}
+}
+
 void NLosData::saveImages(const std::string& outPath)
 {
 	glm::uint sliceSize = static_cast<glm::uint>(_data.size()) / _dims[0];

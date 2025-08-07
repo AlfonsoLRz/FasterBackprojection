@@ -1,7 +1,7 @@
 ﻿#include "stdafx.h"
 #include "LCT.h"
 
-#include <cub/device/device_reduce.cuh>
+#include <cccl/cub/device/device_reduce.cuh>
 
 #include "cusparse.h"
 #include "lct.cuh"

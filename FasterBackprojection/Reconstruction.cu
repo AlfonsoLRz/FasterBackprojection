@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "Reconstruction.h"
 
-#include <cub/device/device_reduce.cuh>
+#include <cccl/cub/device/device_reduce.cuh>
 
 #include "CudaHelper.h"
 #include "FileUtilities.h"

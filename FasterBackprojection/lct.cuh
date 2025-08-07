@@ -3,10 +3,6 @@
 #include "stdafx.h"
 #include "math.cuh"
 
-inline __forceinline__ __device__ glm::uint getKernelIdx(glm::uint x, glm::uint y, glm::uint t, const glm::uvec3& dataResolution)
-{
-	return x * dataResolution.y * dataResolution.z + y * dataResolution.z + t;
-}
 
 inline __global__ void computePSFKernel(float* __restrict__ psf, glm::uvec3 dataResolution, float slope)
 {
