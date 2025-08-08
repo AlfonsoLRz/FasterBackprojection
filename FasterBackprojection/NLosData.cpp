@@ -255,7 +255,6 @@ void NLosData::reduceToConfocal()
 		for (const auto& cameraPos : _cameraGridPositions)
 			maxDistance = std::max(glm::distance(laserPos, cameraPos), maxDistance);
 
-	const size_t timeOffset = static_cast<size_t>(glm::ceil(maxDistance / _deltaT));
 	for (size_t x1 = 0; x1 < _dims[0]; ++x1)
 	{
 		for (size_t y1 = 0; y1 < _dims[1]; ++y1)
@@ -270,25 +269,27 @@ void NLosData::reduceToConfocal()
 
 					const glm::vec3& cameraPos = _cameraGridPositions[x2 * _dims[3] + y2];
 					const glm::vec3 midpoint = (laserPos + cameraPos) / 2.0f;
+
+					// Lateral distance^2 between laser and camera points (Eq. 6 term)
+					float pointDistanceSquared = glm::distance2(cameraPos, laserPos);
+
 					newLaserPositions.push_back(midpoint);
 					newCameraNormals.emplace_back(.0f, 1.0f, .0f);
 
-					float pointDistance = glm::distance(cameraPos, laserPos);
-
 					for (size_t t = 0; t < _dims.back(); ++t)
 					{
-						// new_t^2 = current_t^2 + (distance^2 / v^2)
+						// t_meters = current distance along the light path
+						float t_meters = static_cast<float>(t) * _deltaT;
 
-						float time = static_cast<float>(t) * _deltaT / LIGHT_SPEED; // Convert to time
-						time = time * time - 1.0f / (LIGHT_SPEED * LIGHT_SPEED) * pointDistance;
+						// Eq. (6): t0^2 = t^2 - pointDistanceSquared
+						float t0_meters = std::sqrt(glm::max(t_meters * t_meters - pointDistanceSquared, 0.0f));
 
-						float newTime = std::sqrt(glm::max(time, .0f)) * LIGHT_SPEED; // Convert back to meters
-						size_t newTimeIndex = static_cast<size_t>(std::round(newTime / _deltaT));
+						size_t newTimeIndex = static_cast<size_t>(t0_meters / _deltaT);
 
-						size_t oldIndex = x1 * _dims[1] * _dims[2] * _dims[3] * _dims.back() + 
-										  y1 * _dims[2] * _dims[3] * _dims.back() + 
-										  x2 * _dims[3] * _dims.back() + 
-										  y2 * _dims.back() + t;
+						size_t oldIndex = x1 * _dims[1] * _dims[2] * _dims[3] * _dims.back() +
+							y1 * _dims[2] * _dims[3] * _dims.back() +
+							x2 * _dims[3] * _dims.back() +
+							y2 * _dims.back() + t;
 						if (dataSlice.size() <= newTimeIndex)
 							dataSlice.resize(newTimeIndex + 1, .0f);
 						dataSlice[newTimeIndex] += _data[oldIndex];
@@ -304,11 +305,14 @@ void NLosData::reduceToConfocal()
 	// We don't need to sort the vector, but an index vector that will allow to access the data in the correct order
 	std::vector<size_t> indices(newLaserPositions.size());
 	std::iota(indices.begin(), indices.end(), 0);
-	std::sort(indices.begin(), indices.end(), 
-		[&newLaserPositions](size_t a, size_t b) {
-			return newLaserPositions[a].z > newLaserPositions[b].z || 
-				   (newLaserPositions[a].z == newLaserPositions[b].z && newLaserPositions[a].x > newLaserPositions[b].x);
+	std::sort(indices.begin(), indices.end(),
+		[&](size_t a, size_t b) {
+			if (glm::epsilonEqual(newLaserPositions[a].z, newLaserPositions[b].z, glm::epsilon<float>()))
+				return newLaserPositions[a].x > newLaserPositions[b].x; // descending x
+			return newLaserPositions[a].z > newLaserPositions[b].z;     // descending z
 		});
+
+
 
 	std::vector<glm::vec3> sortedLaserPositions(newLaserPositions.size());
 	std::vector<glm::vec3> sortedCameraNormals(newCameraNormals.size());
@@ -324,16 +328,16 @@ void NLosData::reduceToConfocal()
 		sortedLaserPositions[i] = newLaserPositions[idx];
 		sortedCameraNormals[i] = newCameraNormals[idx];
 		for (size_t t = 0; t < newData[idx].size(); ++t)
-			sortedData[i * newTimeDimension + t] = newData[idx][t];
+			sortedData[i * newTimeDimension + t] += newData[idx][t];
 	}
 
+	size_t sqrtLaserDims = static_cast<size_t>(std::sqrt(sortedLaserPositions.size()));
+	_dims = { sqrtLaserDims, sqrtLaserDims, newTimeDimension };
 	_cameraGridPositions = std::move(sortedLaserPositions);
 	_cameraGridNormals = std::move(sortedCameraNormals);
 	_laserGridPositions = _cameraGridPositions;
 	_laserGridNormals = _cameraGridNormals;
 	_data = std::move(sortedData);
-	size_t sqrtLaserDims = static_cast<size_t>(std::sqrt(_cameraGridPositions.size()));
-	_dims = { sqrtLaserDims, sqrtLaserDims, newTimeDimension };
 	_isConfocal = true;
 }
 
