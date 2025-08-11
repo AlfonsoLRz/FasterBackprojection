@@ -1,94 +1,72 @@
 #include "stdafx.h"
 #include "RawSensorDataReader.h"
-#include "../compile_time_constants.h"
 
-namespace NLOS {
-
-	void RawSensorDataReader::InitCmdLineOptions(cxxopts::Options& options)
+namespace rtnlos
+{
+	RawSensorDataReader::RawSensorDataReader(const std::string& dataPath, RawSensorDataQueue& outgoing)
+		: _dataPath(dataPath),
+		  _outgoingRaw(outgoing)
 	{
-		// add any command line options specific to the data reader here.
-		options.add_options(m_name)
-			("f,file", "read raw data from file", cxxopts::value<std::string>(m_rawDataFileName));
 	}
 
-	// This worker should read T3Rec data from the hardware (or data file)
-	// It should not do any parsing of the data.
-	// It should package it into an array of whatever size it decides
-	// is appropriate (best size can be fine tuned by testing)
-	// The resulting array of records should be pushed to the outgoing queue.
 	void RawSensorDataReader::Work()
 	{
-		if (m_rawDataFileName.size() > 0)
-			ReadFromFile();
+		spdlog::info("Starting RawSensorDataReader worker thread for file '{}'", _dataPath);
+		_workerThread = std::jthread(&RawSensorDataReader::ReadFromFile, this, _dataPath);
+		//ReadFromFile(_dataPath);
 	}
 
-    void RawSensorDataReader::OnStop() {
-        // there may be a push blocking if the queue is full, so tell the queue to abort its operation
-        spdlog::trace("{:<25}: Abort", m_name);
-        m_outgoingRaw.Abort();
-    }
-
-
-	// this function is used to read the input data from a raw log file 
-	// for offline testing purposes.
-	void RawSensorDataReader::ReadFromFile()
+	void RawSensorDataReader::Stop()
 	{
-		// open the file
-		FILE* fp = fopen(m_rawDataFileName.c_str(), "rb");
-		if (fp == NULL) {
-			throw std::logic_error("cannot open file");
-		}
+		_workerThread.join();
+	}
 
-		// how many records does it contain?
+	void RawSensorDataReader::ReadFromFile(const std::string& dataPath) const
+	{
+		FILE* fp = nullptr;
+		fopen_s(&fp, dataPath.c_str(), "rb");
+		if (fp == nullptr) 
+			throw std::logic_error("cannot open file");
+
+		// How many records does it contain?
 		fseek(fp, 0L, SEEK_END);
+
 		int totalRecords = ftell(fp) / sizeof(T3Rec);
 		if (ftell(fp) % sizeof(T3Rec) != 0 || totalRecords == 0)
-			throw std::logic_error("file size is not a multiple of record size");
+			throw std::logic_error("File size is not a multiple of record size.");
+
 		rewind(fp);
 
-		// read all the records into an array
+		// Read all the records into an array
 		std::unique_ptr<T3Rec> recs(new T3Rec[totalRecords]);
 		if (recs == nullptr)
-			throw std::logic_error("allocation error");
-		size_t ret = fread(recs.get(), sizeof(T3Rec), totalRecords, fp);
-		if (ret != totalRecords) {
-			throw std::logic_error("unable to read full file");
-		}
+			throw std::logic_error("Allocation error!");
 
-		// being looping through the file's records forever
+		size_t ret = fread(recs.get(), sizeof(T3Rec), totalRecords, fp);
+		if (ret != totalRecords) 
+			throw std::logic_error("Unable to read full file.");
+
+		// Looping through the file's records forever
 		int curRecord = 0;
-		while (!m_stopRequested) {
+		while (!_stop) 
+		{
 			RawSensorDataPtr chunk(new RawSensorDataType());
 
-			if (curRecord >= totalRecords) { // if we're at the end, reset to beginning of file.
+			if (curRecord >= totalRecords) // If we're at the end, reset to beginning of file.
 				curRecord = 0;
-			}
 
-			if (curRecord == 0) { // if we're at the beginning, notify the next stage that we reset
-				spdlog::trace("{:<25}: File reader resetting to beginning", m_name);
-				chunk->FileReaderWasResetFlag = true;
-			}
+			if (curRecord == 0)  // If we're at the beginning, notify the next stage that we reset
+				chunk->_fileReaderWasResetFlag = true;
 
-			chunk->NumRecords = std::min(RAW_SENSOR_READ_BLOCK_SIZE, totalRecords - curRecord);
-			memcpy(chunk->Records, &(recs.get()[curRecord]), chunk->NumRecords * sizeof(T3Rec));
-			curRecord += chunk->NumRecords;
+			chunk->_numRecords = std::min(RAW_SENSOR_READ_BLOCK_SIZE, totalRecords - curRecord);
+			memcpy(chunk->_records, &(recs.get()[curRecord]), chunk->_numRecords * sizeof(T3Rec));
+			curRecord += chunk->_numRecords;
 
-			//spdlog::trace("{:<25}: filled outgoing buffer with {} records in {} msec. Pushing to queue (sz={})", m_name, chunk->NumRecords, timer.Stop(), m_outgoingRaw.Size());
+			_outgoingRaw.Push(chunk);
 
-			// push onto outgoing queue
-			m_outgoingRaw.Push(chunk);
-
-            // if we are logging raw data, push it into the queue to be logged.
-            if (m_logWriter.LogRawData()) {
-                m_logWriter.PushLog(chunk);
-            }
-
-			if (m_stopRequested) {
-				break;
-			}
-
-			// wait a bit (for demo purposes only)
-			//std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			// Wait a bit (for demo purposes only)
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			spdlog::trace("Pushed {} records to the outgoing queue (incoming queue size={})", chunk->_numRecords, _outgoingRaw.Size());
 		}
 	}
 }

@@ -21,8 +21,10 @@ namespace rtnlos
 		spdlog::set_level(_logLevel);
 
 		_sceneParameters.Initialize(configPath);
+
 		_parser.Initialize(_sceneParameters);
-		_reconstructor.Initialize(_sceneParameters);
+		//for (auto p : _processors)
+		//	p->Initialize(_sceneParameters);
 	}
 
 	template<int NROWS, int NCOLS, int NFREQ>
@@ -33,7 +35,6 @@ namespace rtnlos
 		_isRunning = true;
 		_reader.Work();
 		_parser.DoWork();
-		_reconstructor.DoWork();
 
 		spdlog::info("NLOS Streaming Engine Started");
 	}
@@ -42,10 +43,6 @@ namespace rtnlos
 	void NlosStreamingEngine<NROWS, NCOLS, NFREQ>::Stop()
 	{
 		spdlog::trace("Stopping NLOS Streaming Engine");
-
-		_reconstructor.Stop();
-		_parser.Stop();
-		_reader.Stop();
 
 		spdlog::info("Stopped NLOS Streaming Engine");
 	}

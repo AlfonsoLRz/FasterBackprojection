@@ -2,12 +2,14 @@
 
 #include "AABB.h"
 #include "ApplicationState.h"
+#include "NlosStreamingEngine.h"
 
 class Camera;
 class Model3D;
 
 class SceneContent
 {
+	using ReconstructionEngine = rtnlos::NlosStreamingEngine<NUMBER_OF_ROWS, NUMBER_OF_COLS, NUMBER_OF_FREQUENCIES>;
 public:
 	std::vector<std::unique_ptr<Camera>>	_camera;
 	std::vector<std::unique_ptr<Model3D>>	_model;
@@ -17,6 +19,8 @@ public:
 	glm::uint								_numMeshes;
 	glm::uint								_numTextures;
 	glm::uint								_numTriangles;
+
+	ReconstructionEngine*					_reconstructionEngine;
 
 public:
 	SceneContent();

@@ -6,6 +6,7 @@
 #include "Model3D.h"
 #include "NLosData.h"
 #include "NLosDataVisualizer.h"
+#include "NlosStreamingEngine.h"
 
 // ----------------------------- BUILD YOUR SCENARIO HERE -----------------------------------
 
@@ -15,7 +16,7 @@ void SceneContent::buildScenario()
 
 	// Use real data and reconstruct the shape
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/nlos/z/Z_l[0.00,-1.00,0.00]_r[1.57,0.00,3.14]_v[0.81,0.01,0.81]_s[16]_l[16]_gs[1.00].hdf5");
-	NLosData* transientVoxels = new NLosData("C:/Datasets/transient/nlos/z/Z_l[0.00,-0.50,0.00]_r[1.57,0.00,3.14]_v[0.81,0.01,0.81]_s[256]_l[256]_gs[1.00]_conf.hdf5");
+	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/nlos/z/Z_l[0.00,-0.50,0.00]_r[1.57,0.00,3.14]_v[0.81,0.01,0.81]_s[256]_l[256]_gs[1.00]_conf.hdf5");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/nlos/z/confocal-scene-256.hdf5");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/nlos/gil/confocal-scene-32.hdf5");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/nlos/gil/confocal-scene-256.hdf5");
@@ -32,10 +33,16 @@ void SceneContent::buildScenario()
 
 	//NLosDataVisualizer* nlosVisualizer = new NLosDataVisualizer(transientVoxels);
 	//this->addNewModel(nlosVisualizer);
-	Laser::reconstruct(transientVoxels, transientParameters);
+	//Laser::reconstruct(transientVoxels, transientParameters);
+
+	// Open the streaming engine
+	_reconstructionEngine = new ReconstructionEngine(
+		"C:/Datasets/rt-nlos/data_raw_NGC_nlosbox1.out", "C:/Datasets/rt-nlos/sample_parameters.yml"
+	);
+	_reconstructionEngine->Start();
 }
 
-SceneContent::SceneContent() : _numVertices(0), _numMeshes(0), _numTextures(0), _numTriangles(0)
+SceneContent::SceneContent() : _numVertices(0), _numMeshes(0), _numTextures(0), _numTriangles(0), _reconstructionEngine(nullptr)
 {
 }
 
@@ -43,6 +50,7 @@ SceneContent::~SceneContent()
 {
     _camera.clear();
     _model.clear();
+	delete _reconstructionEngine;
 }
 
 void SceneContent::addNewCamera(ApplicationState* appState)

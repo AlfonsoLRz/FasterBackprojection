@@ -1,48 +1,51 @@
 #include "stdafx.h"
 #include "FastRSDImageReconstructor.h"
 
-namespace NLOS {
-
-
-    template<int NROWS, int NCOLS, int NFREQ>
-    void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::InitCmdLineOptions(cxxopts::Options& options)
-    {
-        options.add_options(m_name)
-            ("no-dda", "do NOT use depth dependent averaging", cxxopts::value<bool>(m_disableDDA));
-    }
-
+namespace rtnlos
+{
     template<int NROWS, int NCOLS, int NFREQ>
     void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::EnableDepthDependentAveraging(bool enable)
     {
         //spdlog::info("Depth Dependent Averaging {}", enable ? "ENABLED" : "DISABLED");
-        m_reconstructor.EnableDepthDependentAveraging(enable);
+        _reconstructor.EnableDepthDependentAveraging(enable);
+    }
+
+    template <int NROWS, int NCOLS, int NFREQ>
+    void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::DoWork()
+    {
+		_workerThread = std::jthread(&FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Work, this);
+    }
+
+    template<int NROWS, int NCOLS, int NFREQ>
+    void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Stop() const
+    {
+        _incomingFrames.Abort();
+        _outgoingImages.Abort();
     }
 
     template<int NROWS, int NCOLS, int NFREQ>
     void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Initialize(const SceneParameters& sceneParameters)
     {
-        m_reconstructor.Initialize(DatasetInfo{
+        _reconstructor.Initialize(DatasetInfo{
             "hidden_scene",
-            sceneParameters.ApertureFullSize[0],
-            sceneParameters.ApertureFullSize[1],
-            sceneParameters.DepthMin,
-            sceneParameters.DepthMax,
-            sceneParameters.DepthDelta,
-            sceneParameters.DepthOffset
+            sceneParameters._apertureFullSize[0],
+            sceneParameters._apertureFullSize[1],
+            sceneParameters._depthMin,
+            sceneParameters._depthMax,
+            sceneParameters._depthDelta,
+            sceneParameters._depthOffset
         });
 
-        EnableDepthDependentAveraging(!m_disableDDA);
-        m_reconstructor.SetNumComponents(sceneParameters.NumComponents);
-        m_reconstructor.SetWeights(sceneParameters.Weights.data());
-        m_reconstructor.SetLambdas(sceneParameters.Lambdas.data());
-        m_reconstructor.SetOmegas(sceneParameters.Omegas.data());
-        m_reconstructor.SetIsSimulated(false);
-        m_reconstructor.SetSamplingSpace(sceneParameters.SamplingSpacing);
-        m_reconstructor.SetAperatureFullsize(sceneParameters.ApertureFullSize.data());
-
-        m_reconstructor.SetImageDimensions(NROWS, NCOLS, NROWS, NCOLS);
-
-        m_reconstructor.PrecalculateRSD();
+        EnableDepthDependentAveraging(!_disableDDA);
+        _reconstructor.SetNumComponents(sceneParameters._numComponents);
+        _reconstructor.SetWeights(sceneParameters._weights.data());
+        _reconstructor.SetLambdas(sceneParameters._lambdas.data());
+        _reconstructor.SetOmegas(sceneParameters._omegas.data());
+        _reconstructor.SetIsSimulated(false);
+        _reconstructor.SetSamplingSpace(sceneParameters._samplingSpacing);
+        _reconstructor.SetApertureFullsize(sceneParameters._apertureFullSize.data());
+        _reconstructor.SetImageDimensions(NROWS, NCOLS, NROWS, NCOLS);
+        _reconstructor.PrecalculateRSD();
     }
 
     // This worker should receive Fourier domain histogram for one frame from the FrameHistogramDataQueue
@@ -52,53 +55,36 @@ namespace NLOS {
     template<int NROWS, int NCOLS, int NFREQ>
     void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Work() {
 
-        m_reconstructor.EnableCubeGeneration(m_logWriter.LogRsdData());
+        _reconstructor.EnableCubeGeneration(false);
 
         FrameHistogramDataPtr histData;
         bool first = true;
-        while (!m_stopRequested) {
+
+        while (!_stop) 
+        {
             // get the next frame of histogram data
-            if (!m_incomingFrames.Pop(histData)) {
-                //spdlog::critical("{:<25}: failed to receive histogram frame data. Exiting.", m_name);
+            if (!_incomingFrames.Pop(histData)) 
                 break;
-            }
-            if (m_stopRequested) {
+  
+            if (_stop)
                 break;
-            }
 
-            // reconstruct the FDH into a 2D Image, pushing to the outgoing queue for display
-            //spdlog::trace("{:<25}: Received histogram for frame {}, reconstructing image", m_name, histData->FrameNumber);
-            auto img = ReconstructedImageDataPtr(new ReconstructedImageDataType(histData->FrameNumber));
+            // Reconstruct the FDH into a 2D Image, pushing to the outgoing queue for display
+            auto img = std::make_shared<ReconstructedImageDataType>(histData->_frameNumber);
 
-            m_reconstructor.SetFFTData(histData->Histogram, NROWS, NCOLS);
-            m_reconstructor.ReconstructImage(img->Image2d);
-            if (first) { // trash first frame
+            _reconstructor.SetFFTData(histData->_histogram, NROWS, NCOLS);
+            _reconstructor.ReconstructImage(img->_image);
+            if (first)  // Trash first frame
+            { 
                 first = false;
                 continue;
             }
 
-            //spdlog::debug(",{:<25},{},{:8.2f} ms to reconstruct image for frame.", m_name, histData->FrameNumber, timer.Stop());
-
-            // Push 2D Imagein into the outgoing queue
-            m_outgoingImages.Push(img);
-
-            // if we are logging rsd cube data, push it into the queue to be logged.
-            if (m_logWriter.LogRsdData()) {
-                //RsdCubeDataPtr cube(new RsdCubeDataType(histData->FrameNumber, m_reconstructor.GetCubeData()));
-                //m_logWriter.PushLog(cube);
-            }
+            // Push a new mage in into the outgoing queue
+            _outgoingImages.Push(img);
         }
-        //spdlog::trace("{:<25}: Exiting worker thread", m_name);
     }
 
-    template<int NROWS, int NCOLS, int NFREQ>
-    void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::OnStop() {
-        // there may be a push blocking if the queue is full, so tell the queue to abort it's operation
-        //spdlog::trace("{:<25}: Abort", m_name);
-        m_incomingFrames.Abort();
-        m_outgoingImages.Abort();
-    }
-
-    // explicit instantiation
+    // Explicit instantiation
     template class FastRSDImageReconstructor<NUMBER_OF_ROWS, NUMBER_OF_COLS, NUMBER_OF_FREQUENCIES>;
 }

@@ -1,37 +1,36 @@
 #pragma once
 
-#include "../types.h"
-#include "../util/DataProcessor.h"
-#include "../util/LogWriter.h"
-#include "../data/RsdCubeData.h"
+#include "data/SceneParameters.h"
+#include "data/SensorData.h"
+#include "NlosDataProcessor.h"
 #include "rsd_reconstructor.h"
 
-namespace NLOS {
-
-    // stage 3: process the Fourier domain histogram into a reconstructed 2D Image using FastRSD.
+namespace rtnlos
+{
+    // Stage 3: process the Fourier domain histogram into a reconstructed 2D Image using FastRSD.
     template<int NROWS, int NCOLS, int NFREQ>
-    class FastRSDImageReconstructor : public DataProcessor {
+	class FastRSDImageReconstructor : public NlosDataProcessor
+	{
     public:
-        FastRSDImageReconstructor(FrameHistogramDataQueue& incoming, ReconstructedImageDataQueue& outgoing, LogWriter& logWriter)
-            : DataProcessor("FastRSDImageReconstructor", logWriter)
-            , m_incomingFrames(incoming)
-            , m_outgoingImages(outgoing)
-            , m_disableDDA(false)
+        FastRSDImageReconstructor(FrameHistogramDataQueue& incoming, ReconstructedImageDataQueue& outgoing)
+            : _disableDDA(false)
+            , _incomingFrames(incoming)
+            , _outgoingImages(outgoing)
         {}
 
         void EnableDepthDependentAveraging(bool enable);
+        void DoWork();
+        void Initialize(const SceneParameters& sceneParameters);
+        void Stop() const;
 
     protected:
-        virtual void InitCmdLineOptions(cxxopts::Options& options);
-        virtual void Initialize(const SceneParameters& sceneParameters);
-        virtual void Work();
-        virtual void OnStop();
+        void Work();
 
     private:
-        bool m_disableDDA; // if true, do NOT use depth-dependent averaging.
-        FrameHistogramDataQueue& m_incomingFrames;
-        ReconstructedImageDataQueue& m_outgoingImages;
+        bool                            _disableDDA;       // If true, do NOT use depth-dependent averaging.
+        FrameHistogramDataQueue&        _incomingFrames;
+        ReconstructedImageDataQueue&    _outgoingImages;
 
-        RSDReconstructor m_reconstructor;
+        RSDReconstructor                _reconstructor;
     };
 }

@@ -4,7 +4,7 @@
 #include <mutex>
 #include <queue>
 
-namespace NLOS {
+namespace rtnlos {
 
     enum class SafeQueuePushBehavior {
         DumpIfFull,

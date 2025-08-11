@@ -1,52 +1,43 @@
 #pragma once
 
-#include "types.h"
 #include "acquisition/RawSensorDataReader.h"
 #include "parsing/RawSensorDataParser.h"
 #include "reconstruction/FastRSDImageReconstructor.h"
-#include "util/cxxopts/cxxopts.hpp"
-#include "util/LogWriter.h"
 #include "data/SceneParameters.h"
 
-namespace NLOS
+namespace rtnlos
 {
 	template<int NROWS, int NCOLS, int NFREQ>
-	class NLOSStreamingEngine {
+	class NlosStreamingEngine
+	{
 		using RawSensorDataParserType = RawSensorDataParser<NROWS, NCOLS>;
 		using FastRSDImageReconstructorType = FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>;
 
-	public:
-		NLOSStreamingEngine(int argc, char* argv[]);
+	private:
+		SceneParameters					_sceneParameters;
 
-		void Initialize(int argc, char* argv[]);
+		// processor for each stage
+		RawSensorDataReader				_reader;
+		RawSensorDataParserType			_parser;
+		FastRSDImageReconstructorType	_reconstructor;
+		spdlog::level::level_enum		_logLevel;
+
+		// queues for transition between each stage
+		RawSensorDataQueue				_rawSensorDataQueue;
+		ParsedSensorDataQueue			_parsedSensorDataQueue;
+		FrameHistogramDataQueue			_frameHistogramDataQueue;
+		ReconstructedImageDataQueue		_reconstructedImageDataQueue;
+
+		std::atomic<bool>				_isRunning;
+
+	private:
+		void Initialize(const std::string& dataPath, const std::string& configPath);
+
+	public:
+		NlosStreamingEngine(const std::string& dataPath, const std::string& configPath);
 
 		void Start();
 		void Stop();
-
-	private:
-		SceneParameters m_sceneParameters;
-
-		// processor for each stage
-		RawSensorDataReader m_reader;
-		RawSensorDataParserType m_parser;
-		FastRSDImageReconstructorType m_reconstructor;
-		LogWriter m_logWriter;
-		spdlog::level::level_enum m_logLevel;
-
-		const std::vector<DataProcessor*> m_processors;
-
-		// queues for transition between each stage
-		RawSensorDataQueue m_rawSensorDataQueue;
-		ParsedSensorDataQueue m_parsedSensorDataQueue;
-		FrameHistogramDataQueue m_frameHistogramDataQueue;
-		ReconstructedImageDataQueue m_reconstructedImageDataQueue;
-		PipelineDataQueue m_logQueue;
-
-		// queue of keyboard input from the opencv window
-		KeyboardInputQueue m_keyboardInputQueue;
-		std::atomic<bool> m_isRunning;
-
-		static std::string s_keyboard_shortcuts;
 	};
 
 }

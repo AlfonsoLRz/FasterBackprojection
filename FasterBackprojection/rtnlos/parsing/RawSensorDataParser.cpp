@@ -1,35 +1,41 @@
 #include "stdafx.h"
 #include "RawSensorDataParser.h"
-#include "../compile_time_constants.h"
 
-namespace NLOS {
-
+namespace rtnlos
+{
     template<int ROWS, int COLS>
     void RawSensorDataParser<ROWS, COLS>::Initialize(const SceneParameters& params)
     {
-        m_ds_multiplier = 1.f / (1 << params.DownsamplingRate);
-        m_skipRate = params.SkipRate;
-        m_numScannedRows = (ROWS - 1) / m_skipRate + 1;
-        m_numScannedIndices = m_numScannedRows * COLS;
-        m_binZeros = params.BinZeros;
-        m_binLength = params.BinLength;
+        _dsMultiplier = 1.f / (1 << params._downsamplingRate);
+        _skipRate = params._skipRate;
+        _numScannedRows = (ROWS - 1) / _skipRate + 1;
+        _numScannedIndices = _numScannedRows * COLS;
+        _binZeros = params._binZeros;
+        _binLength = params._binLength;
 
-        const float ts = params.Resolution * params.Picosecond / m_ds_multiplier;
+        const float ts = params._resolution * params.PICOSECOND / _dsMultiplier;
 
-        m_indices_per_bin = (uint32_t)(params.SyncRate / params.GalvoRate);
-        m_centering_coeff = params.CenteringCoeff;
-        m_offset = m_indices_per_bin * m_centering_coeff;
+        _indicesPerBin = static_cast<uint32_t>(params._syncRate / params._galvoRate);
+        _centeringCoeff = params._centeringCoeff;
+        _offset = _indicesPerBin * _centeringCoeff;
 
-        m_photon_minT = params.Z_Gate * m_ds_multiplier;
-        m_photon_maxT = std::round(2 * params.DepthMax / (ts * params.C_Light));
+        _photonMinTime = params._zGate * _dsMultiplier;
+        _photonMaxTime = std::round(2 * params._depthMax / (ts * params.LIGHT_SPEED));
 
-        m_index_deltas = params.D1;
-        for (auto i = 0; i < params.D4.size(); i++) {
-            m_channel_deltas.emplace_back(std::vector<float>(params.D4[i].size()));
-            for (auto j = 0; j < params.D4[i].size(); j++) {
-                m_channel_deltas[i][j] = -params.D4[i][j] + (params.T0_Gated[i][j] + params.Offset[i][j]) / params.DeltaT;
-            }
+        _indexDeltas = params._d1;
+        for (auto i = 0; i < params._d4.size(); i++) 
+        {
+            _channelDeltas.emplace_back(std::vector<float>(params._d4[i].size()));
+            for (auto j = 0; j < params._d4[i].size(); j++) 
+                _channelDeltas[i][j] = -params._d4[i][j] + (params._t0Gated[i][j] + params._offset[i][j]) / params._deltaT;
         }
+    }
+
+    template <int ROWS, int COLS>
+    void RawSensorDataParser<ROWS, COLS>::DoWork()
+    {
+		spdlog::info("Starting RawSensorDataParser worker thread");
+		_workerThread = std::jthread(&RawSensorDataParser<ROWS, COLS>::Work, this);
     }
 
     // This worker should receive T3Rec data from the incoming queue and
@@ -37,155 +43,144 @@ namespace NLOS {
     // when a full frame has been parsed, the indices and times should be 
     // pushed into the outgoing queue
     template<int ROWS, int COLS>
-    void RawSensorDataParser<ROWS, COLS>::Work()
+    void RawSensorDataParser<ROWS, COLS>::Work() const
     {
         uint32_t frameNumber = 0;
-        uint32_t oflcorrection = 0; // amount of time accumulated by overflows
-        uint32_t startOffset = 0; // the nsync timer when the start marker was received
-        bool isCurFrameLegit = false; // data before the first frame is garbage
-        size_t largestFrame = 0; // to aid in pre-allocation of future frames for performance.
+        uint32_t oflCorrection = 0;             // Amount of time accumulated by overflows
+        uint32_t startOffset = 0;               // The nsync timer when the start marker was received
+        bool isCurrentFrameLegit = false;       // Data before the first frame is garbage
+        size_t largestFrame = 0;                // To aid in pre-allocation of future frames for performance.
 
         ParsedSensorDataPtr pendingFrame(new ParsedSensorData(frameNumber));
         RawSensorDataPtr incomingData;
 
-        int zero_cnt = 0;
-        while (!m_stopRequested)
+        while (!_stop)
         {
-            // get the next chunk of records
-            if (!m_incomingRaw.Pop(incomingData)) {
-                spdlog::critical("{:<25}: failed to receive raw data. Exiting.", m_name);
+            // Get the next chunk of records
+            if (!_incomingRaw.Pop(incomingData)) 
+            {
+                spdlog::critical("Failed to receive raw data. Exiting.");
                 break;
             }
 
-            if (m_stopRequested)
-                break;
-
-            // special case if the provider is a file reader, it will reset. If that happens, we need to zero our overflows and frame numbers
-            if (incomingData->FileReaderWasResetFlag) {
-                spdlog::trace("{:<25}: FileReader was reset for frame {}. idx={}", m_name, frameNumber, pendingFrame->IndexData.size());
-                uint32_t oflcorrection = 0; // amount of time accumulated by overflows
-                uint32_t startOffset = 0; // the nsync timer when the start marker was received
+            // Special case if the provider is a file reader, it will reset. If that happens, we need to zero our overflows and frame numbers
+            if (incomingData->_fileReaderWasResetFlag) 
+            {
+                spdlog::trace("FileReader was reset for frame {}. idx={}", frameNumber, pendingFrame->_indexData.size());
                 pendingFrame->ResetData();
 
-                isCurFrameLegit = false;
+                isCurrentFrameLegit = false;
             }
 
-            for (int i = 0; i < incomingData->NumRecords; i++)
+            for (int i = 0; i < incomingData->_numRecords; i++)
             {
-                T3Rec& rec = incomingData->Records[i];
-                if (rec.bits.special == 1) {
-                    if (rec.bits.channel == 0x3F) { //overflow
-                        oflcorrection += c_overflowSize * rec.bits.nsync;
-                    }
-                    if (rec.bits.channel == 1) { //marker # is stored in the channel number
-                        if (isCurFrameLegit) {
-                            largestFrame = std::max(pendingFrame->IndexData.size(), largestFrame);
+                spdlog::stopwatch sw;
 
-                            //spdlog::trace("{:<25}: {:8.2f} ms Split ({}-{})", m_name, split, frameNumber, timer.Count());
-                            //spdlog::debug(",{:<25},{},{:8.2f} ms to parse frame. Pushing {} records to outgoing queue (incoming queue size={}).", m_name, frameNumber, time, pendingFrame->IndexData.size(), m_incomingRaw.Size());
-                            m_outgoingParsed.Push(pendingFrame);
+                T3Rec& rec = incomingData->_records[i];
+                if (rec.bits.special == 1) 
+                {
+                    if (rec.bits.channel == 0x3F)  // Overflow
+                        oflCorrection += OVERFLOW_SIZE * rec.bits.nsync;
+ 
+                    if (rec.bits.channel == 1) // Marker # is stored in the channel number
+                    { 
+                        if (isCurrentFrameLegit) 
+                        {
+                            largestFrame = std::max(pendingFrame->_indexData.size(), largestFrame);
 
-                            // if we are logging parsed data, push it into the queue to be logged.
-                            if (m_logWriter.LogParsedData()) {
-                                m_logWriter.PushLog(pendingFrame);
-                            }
-
+                            //spdlog::debug(",{},{:8.2f} ms to parse frame. Pushing {} records to outgoing queue (incoming queue size={}).", frameNumber, 0.0f, pendingFrame->_indexData.size(), _incomingRaw.Size());
+                            _outgoingParsed.Push(pendingFrame);
                             pendingFrame.reset(new ParsedSensorData(++frameNumber, largestFrame));
                         }
-                        else {
+                        else 
+                        {
                             pendingFrame->ResetData();
-                            isCurFrameLegit = true; // next frame will be legitimate
+                            isCurrentFrameLegit = true; // next frame will be legitimate
                         }
-                        oflcorrection = 0;
-                        startOffset = static_cast<uint32_t>(rec.bits.nsync);
+
+                        oflCorrection = 0;
+                        startOffset = rec.bits.nsync;
                     }
                 }
-                else {
-                    if (isCurFrameLegit) {
-                        // adjust the nsync time by the number of overflows and the value that nsync was when the start marker was received
-                        uint32_t sync_time = oflcorrection - startOffset + static_cast<uint32_t>(rec.bits.nsync);
+                else 
+                {
+                    if (isCurrentFrameLegit) 
+                    {
+                        // Adjust the nsync time by the number of overflows and the value that nsync was when the start marker was received
+                        uint32_t syncTime = oflCorrection - startOffset + rec.bits.nsync;
 
-                        // uncomment to only bin channel 1
-                        //if (rec.bits.channel != 1 || rec.bits.dtime > 5000)
-                        //	continue;
+                        // Convert the sync_time to the index on the grid
+                        uint32_t gridIdx = SyncTimeToGridIndex(syncTime);
 
-                        // convert the sync_time to the index on the grid
-                        uint32_t grid_idx = SyncTimeToGridIndex(sync_time);
+                        // Make sure we're on the grid
+                        if (gridIdx >= 0 && gridIdx < _numScannedIndices) 
+{
+                            int logicalSpad = -1, time = rec.bits.dtime, spadID, spadOffset;
 
-                        // make sure we're on the grid
-                        if (grid_idx >= 0 && grid_idx < m_numScannedIndices) {
-                            int logicalSpad = -1;
-                            //for (int i = 0; i < m_binZeros.size() - 1; i++) {
-                            //    if (rec.bits.dtime >= m_binZeros[i] && rec.bits.dtime < m_binZeros[i] + m_binLength) {
-                            //        logicalSpad = i;
-                            //        break;
-                            //    }
-                            //}
-                            int tim = rec.bits.dtime;
-                            int SpadID;
-                            int SpadOffset;
-                            if (tim <= 5000) {
+                            if (time <= 5000) 
+                            {
                                 logicalSpad = 0;
-                                SpadID = 0;
-                                SpadOffset = 0;
+                                spadID = 0;
+                                spadOffset = 0;
                             }
-                            else if (tim <= 10000) {
+                            else if (time <= 10000) 
+                            {
                                 logicalSpad = 1;
-                                SpadID = 0;
-                                SpadOffset = 1;
+                                spadID = 0;
+                                spadOffset = 1;
                             }
-                            else if (tim >= 11250 && tim <= 16250) {
+                            else if (time >= 11250 && time <= 16250) 
+                            {
                                 logicalSpad = 2;
-                                SpadID = 1;
-                                SpadOffset = 0;
+                                spadID = 1;
+                                spadOffset = 0;
                             }
-                            else if (tim >= 17500 && tim <= 22500) {
+                            else if (time >= 17500 && time <= 22500) 
+                            {
                                 logicalSpad = 3;
-                                SpadID = 1;
-                                SpadOffset = 1;
+                                spadID = 1;
+                                spadOffset = 1;
                             }
 
-                            if (logicalSpad >= 0) {
-                                int channel = (rec.bits.channel - 1) * 2 + SpadOffset; // 2 logical (SPAD) channels come in on same physical (TCSPC) channel
-                                // uncomment and change sign to pick spad1 or spad2 only.
-                                // (commented => use both SPADs together)
-                                //if (rec.bits.dtime < 10000)
-                                //    continue;
-                                float channel_offset = -(float)(m_binZeros[logicalSpad]);
+                            if (logicalSpad >= 0) 
+                            {
+                                int channel = (rec.bits.channel - 1) * 2 + spadOffset; // 2 logical (SPAD) channels come in on same physical (TCSPC) channel
+                                float channel_offset = -static_cast<float>(_binZeros[logicalSpad]);
 
-                                float adjustment = -m_index_deltas[grid_idx] + m_channel_deltas[SpadID][channel];
+                                float adjustment = -_indexDeltas[gridIdx] + _channelDeltas[spadID][channel];
                                 float dtime = static_cast<float>(rec.bits.dtime) + adjustment + channel_offset;
-                                dtime = dtime * m_ds_multiplier; // downsample (todo: replace with bit-shift once everything is working)
-                                if (dtime > m_photon_minT && dtime < m_photon_maxT) {
-                                    // optionally, shift the index in the x direction to account for the offset off the spads
-                                    int shift_right_by = m_spad_row_shift[channel];
+                                dtime = dtime * _dsMultiplier; // Downsample (todo: replace with bit-shift once everything is working)
+
+                                if (dtime > _photonMinTime && dtime < _photonMaxTime) 
+                                {
+                                    // Optionally, shift the index in the x direction to account for the offset off the spads
+                                    int shift_right_by = _spadRowShift[channel];
                                     // RasterizeIndex() reverses odd numbered rows, and re-indexes for skipped rows
-                                    int idx = RasterizeIndex(grid_idx, shift_right_by);
+                                    int idx = RasterizeIndex(gridIdx, shift_right_by);
 
                                     if (idx < ROWS * COLS) {
-                                        pendingFrame->IndexData.push_back(idx);
-                                        pendingFrame->TimeData.push_back(dtime);
+                                        pendingFrame->_indexData.push_back(idx);
+                                        pendingFrame->_timeData.push_back(dtime);
                                     }
                                 }
                             }
                         }
                     }
                 }
+
+				spdlog::info("Parsed record {} of frame {} in {:8.2f} ms", i, frameNumber, sw.elapsed().count() * 1000.0f);
             }
-            //spdlog::trace("{:<25}: {:8.2f} ms Split ({}-{})", m_name, split, frameNumber, timer.Count());
-            //spdlog::trace("{:<25}: parsed {} recs for frame {} in {} msec. idx={}", m_name, incomingData->NumRecords, frameNumber, split, pendingFrame->IndexData.size());
         }
     }
 
     template<int ROWS, int COLS>
-    void RawSensorDataParser<ROWS, COLS>::OnStop() {
-        // there may be a push blocking if the queue is full, so tell the queue to abort its operation
-        spdlog::trace("{:<25}: Abort", m_name);
-        m_incomingRaw.Abort();
-        m_outgoingParsed.Abort();
+    void RawSensorDataParser<ROWS, COLS>::Stop() const
+    {
+        _incomingRaw.Abort();
+        _outgoingParsed.Abort();
     }
 
-    // explicit instantiation
+    // Explicit instantiation
     template class RawSensorDataParser<NUMBER_OF_ROWS, NUMBER_OF_COLS>;
 }
 

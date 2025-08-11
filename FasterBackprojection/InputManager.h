@@ -5,45 +5,30 @@
 
 class ResizeListener
 {
-protected:
-	~ResizeListener() = default;
-
 public:
 	virtual void resizeEvent(uint16_t width, uint16_t height) = 0;
 };
 
 class KeyListener
 {
-protected:
-	~KeyListener() = default;
-
 public:
 	virtual void keyEvent(int key, bool pressed) = 0;
 };
 
 class MouseButtonListener
 {
-protected:
-	~MouseButtonListener() = default;
-
 public:
 	virtual void mouseButtonEvent() = 0;
 };
 
 class MouseCursorListener
 {
-protected:
-	~MouseCursorListener() = default;
-
 public:
 	virtual void mouseCursorEvent(float x, float y, bool pressed) = 0;
 };
 
 class ScreenshotListener
 {
-protected:
-	~ScreenshotListener() = default;
-
 public:
 	enum ScreenshotType { RGBA };
 
@@ -54,6 +39,12 @@ public:
 
 public:
 	virtual void screenshotEvent(const ScreenshotEvent& event) = 0;
+};
+
+class WindowCloseListener
+{
+public:
+	virtual void windowCloseEvent() = 0;
 };
 
 class InputManager : public Singleton<InputManager>
@@ -91,6 +82,7 @@ private:
 	std::vector<ResizeListener*>						_resizeListeners;
 	std::vector<ScreenshotListener::ScreenshotEvent>	_screenshotEvents;
 	std::vector<ScreenshotListener*>					_screenshotListeners;
+	std::vector<WindowCloseListener*>					_windowCloseListeners;
 
 private:
 	InputManager();
@@ -104,6 +96,7 @@ private:
 	static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 	static void mouseCursorCallback(GLFWwindow* window, double xpos, double ypos);
 	static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+	static void windowCloseCallback(GLFWwindow* window);
 
 public:
 	virtual ~InputManager();
@@ -118,6 +111,7 @@ public:
 	void subscribeMouseCursorEvent(MouseCursorListener* listener);
 	void subscribeResize(ResizeListener* listener);
 	void subscribeScreenshot(ScreenshotListener* listener);
+	void subscribeWindowClose(WindowCloseListener* listener);
 };
 
 

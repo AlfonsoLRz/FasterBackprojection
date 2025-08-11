@@ -1,47 +1,51 @@
 #pragma once
-#include <string>
 
-namespace NLOS {
-	class SceneParameters {
+#include "../stdafx.h"
+
+namespace rtnlos
+{
+	class SceneParameters
+	{
 	public:
-		SceneParameters() { };
-		SceneParameters(const std::string& filename) {
+		SceneParameters() = default;
+		SceneParameters(const std::string& filename)
+		{
 			Initialize(filename);
 		}
 
 		void Initialize(const std::string& filename);
 
-		const float C_Light = 299792458.f;
-		const float Picosecond = 1E-12f;
+		const float LIGHT_SPEED = 299792458.f;
+		const float PICOSECOND = 1e-12f;
 
-		int NumComponents;
-		int AptWidth;
-		int AptHeight;
-		int SkipRate;
-		int SpadIDs;
-		float SyncRate;
-		float GalvoRate;
-		int CenteringCoeff;
-		std::vector<uint32_t> BinZeros;
-		uint32_t BinLength;
-		float DeltaT;
-		int DownsamplingRate;
-		float Z_Gate;
-		float Resolution;
-		float DepthMin;
-		float DepthMax;
-		float DepthDelta;
-		float DepthOffset;
-		float SamplingSpacing;
-		std::vector<float> Weights;
-		std::vector<float> Lambdas;
-		std::vector<float> Omegas;
-		std::vector<float> FreMask;
-		std::vector<float> ApertureFullSize;
-		std::vector<float> D1;
-		std::vector<std::vector<float>> SpadIndex;
-		std::vector<std::vector<float>> Offset;
-		std::vector<std::vector<float>> T0_Gated;
-		std::vector<std::vector<float>> D4;
+		int								_numComponents;
+		int								_apertureWidth;
+		int								_apertureHeight;
+		int								_skipRate;
+		int								_spadIDs;
+		float							_syncRate;
+		float							_galvoRate;
+		int								_centeringCoeff;
+		std::vector<uint32_t>			_binZeros;
+		uint32_t						_binLength;
+		float							_deltaT;
+		int								_downsamplingRate;
+		float							_zGate;
+		float							_resolution;
+		float							_depthMin;
+		float							_depthMax;
+		float							_depthDelta;
+		float							_depthOffset;
+		float							_samplingSpacing;
+		std::vector<float>				_weights;
+		std::vector<float>				_lambdas;
+		std::vector<float>				_omegas;
+		std::vector<float>				_freMask;
+		std::vector<float>				_apertureFullSize;
+		std::vector<float>				_d1;
+		std::vector<std::vector<float>> _spadIndex;
+		std::vector<std::vector<float>> _offset;
+		std::vector<std::vector<float>> _t0Gated;
+		std::vector<std::vector<float>> _d4;
 	};
 }

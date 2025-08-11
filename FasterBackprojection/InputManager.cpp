@@ -185,6 +185,7 @@ void InputManager::init(GLFWwindow* window)
 	glfwSetMouseButtonCallback(window, mouseButtonCallback);
 	glfwSetCursorPosCallback(window, mouseCursorCallback);
 	glfwSetScrollCallback(window, scrollCallback);
+	glfwSetWindowCloseCallback(window, windowCloseCallback);
 }
 
 void InputManager::pushScreenshotEvent(const ScreenshotListener::ScreenshotEvent& event)
@@ -215,6 +216,11 @@ void InputManager::subscribeResize(ResizeListener* listener)
 void InputManager::subscribeScreenshot(ScreenshotListener* listener)
 {
 	_screenshotListeners.push_back(listener);
+}
+
+void InputManager::subscribeWindowClose(WindowCloseListener* listener)
+{
+	_windowCloseListeners.push_back(listener);
 }
 
 void InputManager::framebufferSizeCallback(GLFWwindow* window, int width, int height)
@@ -291,6 +297,14 @@ void InputManager::scrollCallback(GLFWwindow* window, double xoffset, double yof
 	for (MouseButtonListener* listener : inputManager->_mouseButtonListeners)
 	{
 		listener->mouseButtonEvent();
+	}
+}
+
+void InputManager::windowCloseCallback(GLFWwindow* window)
+{
+	for (WindowCloseListener* listener : InputManager::getInstance()->_windowCloseListeners)
+	{
+		listener->windowCloseEvent();
 	}
 }
 

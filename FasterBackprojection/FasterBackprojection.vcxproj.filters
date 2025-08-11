@@ -246,37 +246,16 @@
     <ClInclude Include="rtnlos\reconstruction\rsd_reconstructor.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
-    <ClInclude Include="rtnlos\data\FrameHistogramData.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\data\ParsedSensorData.h">
+    <ClInclude Include="rtnlos\data\SensorData.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
     <ClInclude Include="rtnlos\data\RsdCubeData.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
-    <ClInclude Include="rtnlos\data\ReconstructedImageData.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\util\cxxopts\cxxopts.hpp">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
     <ClInclude Include="rtnlos\util\SafeQueue.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
-    <ClInclude Include="rtnlos\util\ILogContext.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\util\LogWriter.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\util\DataProcessor.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
     <ClInclude Include="rtnlos\reconstruction\rsd_cuda_kernels.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\types.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
     <ClInclude Include="rtnlos\reconstruction\FastRSDImageReconstructor.h">
@@ -285,28 +264,16 @@
     <ClInclude Include="rtnlos\parsing\RawSensorDataParser.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
-    <ClInclude Include="rtnlos\data\T3Rec.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\data\RawSensorData.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\data\RawSensorDataSegment.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
     <ClInclude Include="rtnlos\data\SceneParameters.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
-    <ClInclude Include="rtnlos\compile_time_constants.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\data\PipelineData.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\NLOSStreamingEngine.h">
+    <ClInclude Include="rtnlos\NlosStreamingEngine.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
     <ClInclude Include="rtnlos\acquisition\RawSensorDataReader.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\NlosDataProcessor.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
   </ItemGroup>
@@ -434,9 +401,6 @@
     <ClCompile Include="rtnlos\data\SceneParameters.cpp">
       <Filter>rt-nlos\source</Filter>
     </ClCompile>
-    <ClCompile Include="rtnlos\util\LogWriter.cpp">
-      <Filter>rt-nlos\source</Filter>
-    </ClCompile>
     <ClCompile Include="rtnlos\reconstruction\FastRSDImageReconstructor.cpp">
       <Filter>rt-nlos\source</Filter>
     </ClCompile>
@@ -446,7 +410,10 @@
     <ClCompile Include="rtnlos\acquisition\RawSensorDataReader.cpp">
       <Filter>rt-nlos\source</Filter>
     </ClCompile>
-    <ClCompile Include="rtnlos\NLOSStreamingEngine.cpp">
+    <ClCompile Include="rtnlos\NlosStreamingEngine.cpp">
+      <Filter>rt-nlos\source</Filter>
+    </ClCompile>
+    <ClCompile Include="rtnlos\NlosDataProcessor.cpp">
       <Filter>rt-nlos\source</Filter>
     </ClCompile>
   </ItemGroup>
