@@ -34,6 +34,15 @@
     <Filter Include="resources\cuda">
       <UniqueIdentifier>{a79bd1f4-8d1c-4ad0-a728-e59655c3ae2c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="rt-nlos">
+      <UniqueIdentifier>{7a9c6a69-0f24-4975-b8a8-3328dbc233dc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="rt-nlos\headers">
+      <UniqueIdentifier>{57ad727e-4b52-4705-8e87-c1304c2721f1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="rt-nlos\source">
+      <UniqueIdentifier>{9258f080-3eed-4e69-a553-eb2f2f4c21c0}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Window.h">
@@ -234,6 +243,72 @@
     <ClInclude Include="PcResourceTracker.h">
       <Filter>header</Filter>
     </ClInclude>
+    <ClInclude Include="rtnlos\reconstruction\rsd_reconstructor.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\data\FrameHistogramData.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\data\ParsedSensorData.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\data\RsdCubeData.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\data\ReconstructedImageData.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\util\cxxopts\cxxopts.hpp">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\util\SafeQueue.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\util\ILogContext.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\util\LogWriter.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\util\DataProcessor.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\reconstruction\rsd_cuda_kernels.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\types.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\reconstruction\FastRSDImageReconstructor.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\parsing\RawSensorDataParser.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\data\T3Rec.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\data\RawSensorData.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\data\RawSensorDataSegment.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\data\SceneParameters.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\compile_time_constants.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\data\PipelineData.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\NLOSStreamingEngine.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
+    <ClInclude Include="rtnlos\acquisition\RawSensorDataReader.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Window.cpp">
@@ -356,6 +431,24 @@
     <ClCompile Include="PcResourceTracker.cpp">
       <Filter>source</Filter>
     </ClCompile>
+    <ClCompile Include="rtnlos\data\SceneParameters.cpp">
+      <Filter>rt-nlos\source</Filter>
+    </ClCompile>
+    <ClCompile Include="rtnlos\util\LogWriter.cpp">
+      <Filter>rt-nlos\source</Filter>
+    </ClCompile>
+    <ClCompile Include="rtnlos\reconstruction\FastRSDImageReconstructor.cpp">
+      <Filter>rt-nlos\source</Filter>
+    </ClCompile>
+    <ClCompile Include="rtnlos\parsing\RawSensorDataParser.cpp">
+      <Filter>rt-nlos\source</Filter>
+    </ClCompile>
+    <ClCompile Include="rtnlos\acquisition\RawSensorDataReader.cpp">
+      <Filter>rt-nlos\source</Filter>
+    </ClCompile>
+    <ClCompile Include="rtnlos\NLOSStreamingEngine.cpp">
+      <Filter>rt-nlos\source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="GpuStructs.cu">
@@ -384,6 +477,12 @@
     </CudaCompile>
     <CudaCompile Include="PhasorFields.cu">
       <Filter>source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="rtnlos\reconstruction\rsd_reconstructor.cu">
+      <Filter>rt-nlos\headers</Filter>
+    </CudaCompile>
+    <CudaCompile Include="rtnlos\reconstruction\rsd_cuda_kernels.cu">
+      <Filter>rt-nlos\source</Filter>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>

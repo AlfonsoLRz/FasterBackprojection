@@ -43,20 +43,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>false</VcpkgEnableManifest>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;WIN64;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <LanguageStandard>stdcpp23</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <OpenMPSupport>true</OpenMPSupport>
-      <AdditionalIncludeDirectories>brdf-loader;progressbar/include;vox-writer;C:/ProgramData/NVIDIA Corporation/OptiX SDK 9.0.0/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalOptions>-openmp:llvm %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>brdf-loader;progressbar/include;rtnlos;C:\vcpkg\installed\x64-windows\include\opencv4;vox-writer;C:/ProgramData/NVIDIA Corporation/OptiX SDK 9.0.0/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions> /utf-8 -openmp:llvm %(AdditionalOptions)</AdditionalOptions>
+      <EnableModules>false</EnableModules>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <AdditionalDependencies>cuda.lib;cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;cufft.lib;cusparse.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories);$(CudaToolkitLibDir)</AdditionalLibraryDirectories>
     </Link>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
@@ -74,12 +80,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;WIN64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <OpenMPSupport>true</OpenMPSupport>
-      <LanguageStandard>stdcpp23</LanguageStandard>
-      <AdditionalIncludeDirectories>brdf-loader;progressbar/include;C:/ProgramData/NVIDIA Corporation/OptiX SDK 9.0.0/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalOptions>-openmp:llvm %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalIncludeDirectories>brdf-loader;progressbar/include;rtnlos;C:\vcpkg\installed\x64-windows\include\opencv4;C:/ProgramData/NVIDIA Corporation/OptiX SDK 9.0.0/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions> /utf-8 -openmp:llvm %(AdditionalOptions)</AdditionalOptions>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <EnableModules>false</EnableModules>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -87,6 +94,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <SubSystem>Console</SubSystem>
       <AdditionalDependencies>cuda.lib;cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;cufft.lib;cusparse.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories);$(CudaToolkitLibDir)</AdditionalLibraryDirectories>
     </Link>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
@@ -158,6 +166,28 @@
     <ClInclude Include="Reconstruction.h" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="RenderingShader.h" />
+    <ClInclude Include="rtnlos\acquisition\RawSensorDataReader.h" />
+    <ClInclude Include="rtnlos\compile_time_constants.h" />
+    <ClInclude Include="rtnlos\data\FrameHistogramData.h" />
+    <ClInclude Include="rtnlos\data\ParsedSensorData.h" />
+    <ClInclude Include="rtnlos\data\PipelineData.h" />
+    <ClInclude Include="rtnlos\data\RawSensorData.h" />
+    <ClInclude Include="rtnlos\data\RawSensorDataSegment.h" />
+    <ClInclude Include="rtnlos\data\ReconstructedImageData.h" />
+    <ClInclude Include="rtnlos\data\RsdCubeData.h" />
+    <ClInclude Include="rtnlos\data\SceneParameters.h" />
+    <ClInclude Include="rtnlos\data\T3Rec.h" />
+    <ClInclude Include="rtnlos\NLOSStreamingEngine.h" />
+    <ClInclude Include="rtnlos\parsing\RawSensorDataParser.h" />
+    <ClInclude Include="rtnlos\reconstruction\FastRSDImageReconstructor.h" />
+    <ClInclude Include="rtnlos\reconstruction\rsd_cuda_kernels.h" />
+    <ClInclude Include="rtnlos\reconstruction\rsd_reconstructor.h" />
+    <ClInclude Include="rtnlos\types.h" />
+    <ClInclude Include="rtnlos\util\cxxopts\cxxopts.hpp" />
+    <ClInclude Include="rtnlos\util\DataProcessor.h" />
+    <ClInclude Include="rtnlos\util\ILogContext.h" />
+    <ClInclude Include="rtnlos\util\LogWriter.h" />
+    <ClInclude Include="rtnlos\util\SafeQueue.h" />
     <ClInclude Include="SceneContent.h" />
     <ClInclude Include="ShaderProgram.h" />
     <ClInclude Include="ShaderProgramDB.h" />
@@ -176,6 +206,8 @@
     <ClInclude Include="UnsignedImage.h" />
     <ClInclude Include="Vao.h" />
     <ClInclude Include="Window.h" />
+    <CudaCompile Include="rtnlos\reconstruction\rsd_cuda_kernels.cu" />
+    <CudaCompile Include="rtnlos\reconstruction\rsd_reconstructor.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AABB.cpp">
@@ -275,6 +307,30 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="RenderingShader.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="rtnlos\acquisition\RawSensorDataReader.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="rtnlos\data\SceneParameters.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="rtnlos\NLOSStreamingEngine.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="rtnlos\parsing\RawSensorDataParser.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="rtnlos\reconstruction\FastRSDImageReconstructor.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="rtnlos\util\LogWriter.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>

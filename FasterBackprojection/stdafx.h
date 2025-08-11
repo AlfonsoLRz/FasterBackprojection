@@ -65,3 +65,7 @@
 #include "cuda_fp16.h"
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+
+// Log
+#define FMT_UNICODE 0
+#include "spdlog/spdlog.h"
