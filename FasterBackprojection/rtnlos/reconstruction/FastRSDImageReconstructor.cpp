@@ -13,7 +13,8 @@ namespace rtnlos
     template <int NROWS, int NCOLS, int NFREQ>
     void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::DoWork()
     {
-		_workerThread = std::jthread(&FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Work, this);
+		//_workerThread = std::jthread(&FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Work, this);
+        Work();
     }
 
     template<int NROWS, int NCOLS, int NFREQ>
@@ -81,8 +82,10 @@ namespace rtnlos
             }
 
             // Push a new mage in into the outgoing queue
-            _outgoingImages.Push(img);
+            //_outgoingImages.Push(img);
         }
+
+		spdlog::warn("FastRSDImageReconstructor worker thread stopped");
     }
 
     // Explicit instantiation

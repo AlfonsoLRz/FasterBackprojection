@@ -51,7 +51,7 @@ class RSDReconstructor
 	float					_downsamplingRatio;
 	int						_currentCount;
 
-	// device pointers
+	// Device pointers
 	size_t					_allocatedBytes;
 	double					_precalculateTime;
 	shared_ptr<float>		_imgData;

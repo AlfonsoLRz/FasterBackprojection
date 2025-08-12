@@ -44,6 +44,7 @@ public:
 class WindowCloseListener
 {
 public:
+	virtual ~WindowCloseListener() = default;
 	virtual void windowCloseEvent() = 0;
 };
 

@@ -197,8 +197,6 @@ void RSDReconstructor::AddImage(int idx, cv::Mat& image_re, cv::Mat& image_im)
 	cudaMemcpy(_imgData.get() + idx * 2 * SliceNumPixels(), (float*)u.data, 2 * SliceNumPixels() * sizeof(float), cudaMemcpyHostToDevice);
 }
 
-
-
 void RSDReconstructor::DumpInfo() const
 {
 	// Print values for testing
@@ -255,7 +253,8 @@ void RSDReconstructor::PrecalculateRSD()
 	std::cout << " _info.d_min: " << _info.d_min << std::endl;
 	std::cout << " _info.d_max: " << _info.d_max << std::endl;
 	std::cout << " _info.d_d: " << _info.d_d << std::endl;
-	for (depth = _info.d_min, depth_idx = 0; depth < _info.d_max; depth += _info.d_d, depth_idx++) {
+	for (depth = _info.d_min, depth_idx = 0; depth < _info.d_max; depth += _info.d_d, depth_idx++) 
+	{
 		float t_tmp = (depth + _info.d_offset) / c_speed;
 
 		std::cout << "  i=" << i << " depth_idx=" << depth_idx << " depth=" << depth << std::endl;
@@ -351,12 +350,28 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 
 		// summing
 		// for-loop summing ws faster than parallel reduction kernel (~0.655ms vs ~1.0-1.3ms)
+
+		// Measure the time it takes to sum the wavefronts in cuda
+		cudaEvent_t start, stop;
+		cuda_throw_if(cudaEventCreate(&start), "Error creating cuda event start");
+		cuda_throw_if(cudaEventCreate(&stop), "Error creating cuda event stop");
+		cuda_throw_if(cudaEventRecord(start), "Error recording cuda event start");
+
 		for (int wave_num = 0; wave_num < _numComponents; wave_num++) {
 			AddScale << <_imgHeight, _imgWidth >> > (
 				_uSum.get(),
 				ImgAt(_uOut, wave_num),
 				_weights[wave_num]);
 		}
+
+		cuda_throw_if(cudaEventRecord(stop), "Error recording cuda event stop");
+		cuda_throw_if(cudaEventSynchronize(stop), "Error synchronizing cuda event stop");
+		float elapsedTime;
+		cuda_throw_if(cudaEventElapsedTime(&elapsedTime, start, stop), "Error getting elapsed time for cuda event");
+		cuda_throw_if(cudaEventDestroy(start), "Error destroying cuda event start");
+		cuda_throw_if(cudaEventDestroy(stop), "Error destroying cuda event stop");
+		std::cout << "Wavefront summing took: " << std::fixed << std::setprecision(3) << elapsedTime << " ms" << std::endl;
+
 		// optional parallel reduction version instead (slower...)
 		//AddScaleMany<<<dim3(img_width, img_height), 128>>>(u_sum(0,0), u_out(0,0), d_weights.get(), u_num);
 

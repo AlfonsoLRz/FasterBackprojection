@@ -167,6 +167,7 @@
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="RenderingShader.h" />
     <ClInclude Include="rtnlos\acquisition\RawSensorDataReader.h" />
+    <ClInclude Include="rtnlos\binning\FrameHistogramBuilder.h" />
     <ClInclude Include="rtnlos\data\SensorData.h" />
     <ClInclude Include="rtnlos\data\RsdCubeData.h" />
     <ClInclude Include="rtnlos\data\SceneParameters.h" />
@@ -303,11 +304,11 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="rtnlos\data\SceneParameters.cpp">
+    <ClCompile Include="rtnlos\binning\FrameHistogramBuilder.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="rtnlos\NlosDataProcessor.cpp">
+    <ClCompile Include="rtnlos\data\SceneParameters.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>

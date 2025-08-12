@@ -63,19 +63,20 @@ namespace rtnlos
                 break;
             }
 
+            spdlog::stopwatch sw;
+
             // Special case if the provider is a file reader, it will reset. If that happens, we need to zero our overflows and frame numbers
             if (incomingData->_fileReaderWasResetFlag) 
             {
                 spdlog::trace("FileReader was reset for frame {}. idx={}", frameNumber, pendingFrame->_indexData.size());
                 pendingFrame->ResetData();
+                sw.reset();
 
                 isCurrentFrameLegit = false;
             }
 
             for (int i = 0; i < incomingData->_numRecords; i++)
             {
-                spdlog::stopwatch sw;
-
                 T3Rec& rec = incomingData->_records[i];
                 if (rec.bits.special == 1) 
                 {
@@ -88,7 +89,10 @@ namespace rtnlos
                         {
                             largestFrame = std::max(pendingFrame->_indexData.size(), largestFrame);
 
-                            //spdlog::debug(",{},{:8.2f} ms to parse frame. Pushing {} records to outgoing queue (incoming queue size={}).", frameNumber, 0.0f, pendingFrame->_indexData.size(), _incomingRaw.Size());
+                            double elapsedTime = sw.elapsed().count();
+                            sw.reset();
+
+                            spdlog::debug(",{},{:8.2f} ms to parse frame. Pushing {} records to outgoing queue (incoming queue size={}).", frameNumber, elapsedTime, pendingFrame->_indexData.size(), _incomingRaw.Size());
                             _outgoingParsed.Push(pendingFrame);
                             pendingFrame.reset(new ParsedSensorData(++frameNumber, largestFrame));
                         }
@@ -168,9 +172,11 @@ namespace rtnlos
                     }
                 }
 
-				spdlog::info("Parsed record {} of frame {} in {:8.2f} ms", i, frameNumber, sw.elapsed().count() * 1000.0f);
+				//spdlog::info("Parsed record {} of frame {} in {:8.2f} ms", i, frameNumber, sw.elapsed().count());
             }
         }
+
+        spdlog::warn("RawSensorDataParser worker thread stopped");
     }
 
     template<int ROWS, int COLS>

@@ -276,6 +276,9 @@
     <ClInclude Include="rtnlos\NlosDataProcessor.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
+    <ClInclude Include="rtnlos\binning\FrameHistogramBuilder.h">
+      <Filter>rt-nlos\headers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Window.cpp">
@@ -413,7 +416,7 @@
     <ClCompile Include="rtnlos\NlosStreamingEngine.cpp">
       <Filter>rt-nlos\source</Filter>
     </ClCompile>
-    <ClCompile Include="rtnlos\NlosDataProcessor.cpp">
+    <ClCompile Include="rtnlos\binning\FrameHistogramBuilder.cpp">
       <Filter>rt-nlos\source</Filter>
     </ClCompile>
   </ItemGroup>

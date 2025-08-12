@@ -11,8 +11,9 @@ namespace rtnlos
 		uint32_t							_frameNumber;
 
 	public:
-		RsdCubeData(uint32_t frameNumber, std::unique_ptr<std::vector<float>> &cube): _cube(std::move(cube)), _numDepths(0), _frameNumber(frameNumber)
+		RsdCubeData(uint32_t frameNumber, std::unique_ptr<std::vector<float>> &cube):
+			_cube(std::move(cube)), _numDepths(0), _frameNumber(frameNumber)
 		{
-		};
+		}
 	};
 }

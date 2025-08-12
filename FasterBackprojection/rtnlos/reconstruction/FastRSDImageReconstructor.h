@@ -11,6 +11,13 @@ namespace rtnlos
     template<int NROWS, int NCOLS, int NFREQ>
 	class FastRSDImageReconstructor : public NlosDataProcessor
 	{
+    private:
+        bool                            _disableDDA;       // If true, do NOT use depth-dependent averaging.
+        FrameHistogramDataQueue&        _incomingFrames;
+        ReconstructedImageDataQueue&    _outgoingImages;
+
+        RSDReconstructor                _reconstructor;
+
     public:
         FastRSDImageReconstructor(FrameHistogramDataQueue& incoming, ReconstructedImageDataQueue& outgoing)
             : _disableDDA(false)
@@ -25,12 +32,5 @@ namespace rtnlos
 
     protected:
         void Work();
-
-    private:
-        bool                            _disableDDA;       // If true, do NOT use depth-dependent averaging.
-        FrameHistogramDataQueue&        _incomingFrames;
-        ReconstructedImageDataQueue&    _outgoingImages;
-
-        RSDReconstructor                _reconstructor;
     };
 }

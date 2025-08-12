@@ -6,7 +6,7 @@
 #include "fourier.cuh"
 #include "phasor_fields.cuh"
 
-#include <cub/device/device_reduce.cuh>
+#include <cccl/cub/device/device_reduce.cuh>
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
 #include <omp.h>
