@@ -4,7 +4,7 @@
 namespace rtnlos
 {
 	template<int NROWS, int NCOLS, int NFREQ>
-	NlosStreamingEngine<NROWS, NCOLS, NFREQ>::NlosStreamingEngine(const std::string& dataPath, const std::string& configPath)
+	NlosStreamingEngine<NROWS, NCOLS, NFREQ>::NlosStreamingEngine(const std::string& dataPath, const std::string& configPath, cudaSurfaceObject_t cudaSurface)
 		: _reader(dataPath, _rawSensorDataQueue)
 		, _parser(_rawSensorDataQueue, _parsedSensorDataQueue)
 		, _binner(_parsedSensorDataQueue, _frameHistogramDataQueue)
@@ -33,7 +33,7 @@ namespace rtnlos
 		spdlog::trace("Starting NLOS Streaming Engine");
 
 		_isRunning = true;
-		_reader.Work();
+		_reader.DoWork();
 		_parser.DoWork();
 		_binner.DoWork();
 		_reconstructor.DoWork();
@@ -47,6 +47,7 @@ namespace rtnlos
 		spdlog::trace("Stopping NLOS Streaming Engine");
 
 		_reconstructor.Stop();
+		_binner.Stop();
 		_parser.Stop();
 		_reader.Stop();
 

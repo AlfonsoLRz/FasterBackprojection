@@ -1,11 +1,10 @@
 ﻿#include "stdafx.h"
 #include "LCT.h"
 
-#include <cccl/cub/device/device_reduce.cuh>
-
 #include "cusparse.h"
 #include "lct.cuh"
 
+#include <cccl/cub/device/device_reduce.cuh>
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
 #include <omp.h>

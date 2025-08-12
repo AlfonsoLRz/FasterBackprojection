@@ -5,6 +5,7 @@
 #include "RenderingShader.h"
 #include "SceneContent.h"
 #include "Singleton.h"
+#include "Texture.h"
 
 class Vao;
 
@@ -20,6 +21,7 @@ private:
 	glm::uvec2			_newSize;
 	RenderingShader*	_quadShader;
 	Vao*				_quadVAO;
+	TextureResourceGPU	_currentViewportTexture;
 
 private:
 	static void bindTexture(GLuint textureID, const ShaderProgram* shader, const std::string& uniformName, unsigned offset);

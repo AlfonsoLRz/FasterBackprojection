@@ -2,7 +2,6 @@
 #include "FK.h"
 
 #include "CudaHelper.h"
-
 #include "fk.cuh"
 #include "fourier.cuh"
 #include "transient_postprocessing.cuh"

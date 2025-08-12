@@ -40,7 +40,7 @@ namespace rtnlos
 
 #if USE_FDH_LOOKUP_TABLE
         int _photonMinTime, _photonMaxTime, _numTimes;
-        std::vector<float> _sinLookup, _cosLookup;
+        std::vector<float>  _sinLookup, _cosLookup;
 
         void BuildLookupTables();
 #endif

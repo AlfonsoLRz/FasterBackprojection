@@ -13,7 +13,7 @@ namespace rtnlos
 
     public:
         RawSensorDataReader(const std::string& dataPath, RawSensorDataQueue& outgoing);
-        void Work();
+        void DoWork();
         void Stop();
 
     private:

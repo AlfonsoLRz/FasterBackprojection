@@ -14,7 +14,7 @@ Renderer::Renderer():
 	_cubeShading(nullptr),
 	_newSize(0),
 	_quadShader(nullptr),
-	_quadVAO(nullptr)
+	_quadVAO(nullptr), _currentViewportTexture(0, 0)
 {
 }
 
@@ -35,7 +35,7 @@ void Renderer::createCamera() const
 
 void Renderer::createModels()
 {
-    _content.buildScenario();
+    _content.buildScenario(_currentViewportTexture.getSurfaceObject());
 }
 
 void Renderer::prepareOpenGL(uint16_t width, uint16_t height)
@@ -61,7 +61,6 @@ void Renderer::prepareOpenGL(uint16_t width, uint16_t height)
     glEnable(GL_POLYGON_OFFSET_FILL);
 
     _content._camera.push_back(std::make_unique<Camera>(width, height));
-    this->createModels();
     this->createCamera();
 
     // Observer
@@ -75,7 +74,12 @@ void Renderer::prepareOpenGL(uint16_t width, uint16_t height)
 	_quadShader = new RenderingShader();
     _quadShader->createShaderProgram("assets/shaders/shading/quad");
 
-    // Vao
+    // Texture for compute shader rendering
+    _currentViewportTexture = TextureResourceGPU(_appState._viewportSize.x, _appState._viewportSize.y);
+    _currentViewportTexture.init();
+    _currentViewportTexture.mapPersistently();
+
+    // Surface
     const std::vector<glm::vec2> quadTextCoord{
         glm::vec2(0.0f, 0.0f),
         glm::vec2(1.0f, 0.0f),
@@ -85,10 +89,13 @@ void Renderer::prepareOpenGL(uint16_t width, uint16_t height)
     const std::vector<GLuint> triangleMesh{ 0, 1, 2, 1, 3, 2 };				
 
     _quadVAO = new Vao(false);
-    //_quadVAO->setVBOData(Vao::TEXTURE_COORDS, quadTextCoord.data(), quadTextCoord.size());
-    //_quadVAO->setIBOData(Vao::IBO::TRIANGLE, triangleMesh);
+    _quadVAO->setVBOData(Vao::TEXTURE_COORDS, quadTextCoord.data(), quadTextCoord.size());
+    _quadVAO->setIBOData(Vao::IBO::TRIANGLE, triangleMesh);
 
     this->resizeEvent(_appState._viewportSize.x, _appState._viewportSize.y);
+
+    // Models
+    this->createModels();
 }
 
 void Renderer::render()
@@ -120,10 +127,10 @@ void Renderer::render()
 
     glPolygonOffset(.0f, .0f);
 
-    //_quadShader->use();
-    //_quadShader->applyActiveSubroutines();
+    _quadShader->use();
+    _quadShader->applyActiveSubroutines();
 
-    //_quadVAO->drawObject(Vao::TRIANGLE, GL_TRIANGLES, 6);
+    _quadVAO->drawObject(Vao::TRIANGLE, GL_TRIANGLES, 6);
 }
 
 void Renderer::resizeEvent(uint16_t width, uint16_t height)

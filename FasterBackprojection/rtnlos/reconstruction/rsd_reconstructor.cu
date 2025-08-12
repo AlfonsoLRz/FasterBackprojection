@@ -1,13 +1,14 @@
-﻿#include <iostream>
-#include <stdexcept>
-#include <sstream>
-#include <cassert>
-#include <iomanip>
+﻿#include "../stdafx.h"
 #include "rsd_reconstructor.h"
 #include "rsd_cuda_kernels.h"
 
+#include <cccl/cub/device/device_reduce.cuh>
 #include <cufft.h>
 #include <opencv4/opencv2/imgproc.hpp>
+#include <opencv4/opencv2/highgui.hpp>
+
+#include "../CudaHelper.h"
+#include "../transient_postprocessing.cuh"
 
 using namespace std;
 
@@ -402,6 +403,30 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 			MaxZ<<<_imgHeight, _imgWidth >> > (CubeAt(_cubeImages, idx_prev), _numDepths, _img2D.get());
 		}
 
+		{
+			size_t tempStorageBytes = 0;
+			void* tempStorage = nullptr;
+			int size = _imgWidth * _imgWidth;
+
+			float* maxValue = nullptr;
+			CudaHelper::initializeBuffer(maxValue, 1);
+
+			float* minValue = nullptr;
+			CudaHelper::initializeBuffer(minValue, 1);
+
+			cub::DeviceReduce::Max(tempStorage, tempStorageBytes, _img2D.get(), maxValue, size);
+			cudaMalloc(&tempStorage, tempStorageBytes);
+			cub::DeviceReduce::Max(tempStorage, tempStorageBytes, _img2D.get(), maxValue, size);
+			cub::DeviceReduce::Min(tempStorage, tempStorageBytes, _img2D.get(), minValue, size);
+
+			glm::uint threadsBlock = 512, numBlocks = CudaHelper::getNumBlocks(size, threadsBlock);
+			normalizeReconstruction<<<numBlocks, threadsBlock>>>(_img2D.get(), size, maxValue, minValue);
+
+			CudaHelper::free(tempStorage);
+			CudaHelper::free(maxValue);
+			CudaHelper::free(minValue);
+		}
+
 		// copy back to host
 		cuda_throw_if(cudaMemcpy(img_2d.data, _img2D.get(), SliceNumPixels() * sizeof(float), cudaMemcpyDeviceToHost), "Error copying final image from device to host");
 	}
@@ -410,9 +435,13 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 	FFTShift(img_2d);
 	cv::flip(img_2d, img_2d, 1);
 
+	// visualization
+	img_2d.convertTo(img_2d, CV_8UC1, 255.0, 0);
+
 	// Up sampling
 	float up = 1.0f / _downsamplingRatio;
-	cv::resize(img_2d, img_out, cv::Size(), up, up); // wavefront spatial upsampling for larger image
+	cv::resize(img_2d, img_2d, cv::Size(), up, up); // wavefront spatial upsampling for larger image
+	cv::imwrite("logs/rsd_reconstruction_" + std::to_string(_currentCount) + ".png", img_2d);
 }
 
 void RSDReconstructor::RSDKernelConvolution(const float lambda, const float depth, const float omega, const float t, cufftHandle fft_plan, float* d_ker)

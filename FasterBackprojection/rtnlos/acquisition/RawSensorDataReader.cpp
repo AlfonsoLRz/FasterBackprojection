@@ -9,7 +9,7 @@ namespace rtnlos
 	{
 	}
 
-	void RawSensorDataReader::Work()
+	void RawSensorDataReader::DoWork()
 	{
 		spdlog::info("Starting RawSensorDataReader worker thread for file '{}'", _dataPath);
 		_workerThread = std::jthread(&RawSensorDataReader::ReadFromFile, this, _dataPath);
