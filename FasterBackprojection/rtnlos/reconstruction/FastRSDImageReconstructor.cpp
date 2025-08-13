@@ -42,10 +42,9 @@ namespace rtnlos
         _reconstructor.SetWeights(sceneParameters._weights.data());
         _reconstructor.SetLambdas(sceneParameters._lambdas.data());
         _reconstructor.SetOmegas(sceneParameters._omegas.data());
-        _reconstructor.SetIsSimulated(false);
         _reconstructor.SetSamplingSpace(sceneParameters._samplingSpacing);
         _reconstructor.SetApertureFullsize(sceneParameters._apertureFullSize.data());
-        _reconstructor.SetImageDimensions(NROWS, NCOLS, NROWS, NCOLS);
+        _reconstructor.SetImageDimensions(NROWS, NCOLS);
         _reconstructor.PrecalculateRSD();
     }
 
@@ -71,10 +70,10 @@ namespace rtnlos
                 break;
 
             // Reconstruct the FDH into a 2D Image, pushing to the outgoing queue for display
-            auto img = std::make_shared<ReconstructedImageDataType>(histData->_frameNumber);
+            auto image = std::make_shared<ReconstructedImageDataType>(histData->_frameNumber);
+            _reconstructor.SetFFTData(histData->_histogram);
+            _reconstructor.ReconstructImage(image->_image);
 
-            _reconstructor.SetFFTData(histData->_histogram, NROWS, NCOLS);
-            _reconstructor.ReconstructImage(img->_image);
             if (first)  // Trash first frame
             { 
                 first = false;

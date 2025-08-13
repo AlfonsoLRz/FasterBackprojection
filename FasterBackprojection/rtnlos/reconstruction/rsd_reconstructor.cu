@@ -1,6 +1,6 @@
 ﻿#include "../stdafx.h"
 #include "rsd_reconstructor.h"
-#include "rsd_cuda_kernels.h"
+
 
 #include <cccl/cub/device/device_reduce.cuh>
 #include <cufft.h>
@@ -8,72 +8,60 @@
 #include <opencv4/opencv2/highgui.hpp>
 
 #include "../CudaHelper.h"
-#include "../transient_postprocessing.cuh"
+#include "../../fourier.cuh"
+#include "../../transient_postprocessing.cuh"
+#include "rsd_cuda_kernels.h"
+#include "../../CudaPerf.h"
 
 using namespace std;
 
 extern float* g_histo;
 
-void throw_if(bool test, const char* msg)
-{
-	if (test) throw runtime_error(msg);
-}
-
-void cuda_throw_if(cudaError_t res, const char* msg)
-{
-	if (res != cudaSuccess) {
-		stringstream s;
-		std::string serr = cudaGetErrorString(res);
-		s << msg << " (cuda error=(" << res << ") " << serr <<  ")";
-		throw runtime_error(s.str());
-	}
-}
-
-void cufft_throw_if(cufftResult res, const char* msg)
-{
-	if (res != CUFFT_SUCCESS) {
-		stringstream s;
-		s << msg << " (cufft error=" << res << ")";
-		throw runtime_error(s.str());
-	}
-}
-
 RSDReconstructor::RSDReconstructor()
-	: _numComponents(0)
-	, _apertureFullSize{ 0.0f, 0.0f }
-	, _appertureDst{ 0.0f, 0.0f }
-	, _isSimulated(false)
-	, _samplingSpace(0.0f)
-	, _spadIndex(0)
-	, _imgWidth(0)
-	, _imgHeight(0)
-	, _rawImageWidth(0)
-	, _rawImgHeight(0)
-	, _diffTb(0)
-	, _diffLr(0)
-	, _precalculated(false)
-	, _numDepths(0)
-	, _fftPlan(0)
-	, _downsamplingRatio(1.0)
-	, _allocatedBytes(0)
-	, _precalculateTime(0.0)
-	, _useDDA(true)
+	: _info()
+	  , _useDDA(true)
+	  , _numFrequencies(0)
+	  , _numDepths(0)
+	  , _imgHeight(0)
+	  , _imgWidth(0)
+	  , _apertureFullSize{0.0f, 0.0f}
+	  , _apertureDst{0.0f, 0.0f}
+	  , _samplingSpace(0.0f)
+	  , _diffTopLeft(0), _diffLowerRight(0), _waveSize(0)
+	  , _depthSize(0), _precalculated(false)
+	  , _currentCount(0)
+	  , _imgData(nullptr), _img2D(nullptr), _rsd(nullptr), _uTotalFFTs(nullptr)
+	  , _uOut(nullptr), _uSum(nullptr), _cubeImages(nullptr), _ddaWeights(nullptr), _dWeights(nullptr), _fftPlan2D(0), _fftPlan3D(0)
 {
 }
 
 RSDReconstructor::~RSDReconstructor()
 {
-	if (_fftPlan)
-		cufft_throw_if(cufftDestroy(_fftPlan), "Error destroying cufft plan");
+	CudaHelper::free(_imgData);
+	CudaHelper::free(_img2D);
+	CudaHelper::free(_rsd);
+	CudaHelper::free(_uTotalFFTs);
+	CudaHelper::free(_uOut);
+	CudaHelper::free(_uSum);
+	CudaHelper::free(_cubeImages);
+	CudaHelper::free(_ddaWeights);
+	CudaHelper::free(_dWeights);
+
+	if (_fftPlan3D != 0)
+		CUFFT_CHECK(cufftDestroy(_fftPlan3D));
+
+	if (_fftPlan2D != 0)
+		CUFFT_CHECK(cufftDestroy(_fftPlan2D));
 }
 
-void RSDReconstructor::Initialize(const DatasetInfo info)
+void RSDReconstructor::Initialize(const DatasetInfo& info)
 {
 	_info = info;
-	// for now, aperature_dst is going to be the same as ApertureFullSize
-	_appertureDst[0] = info.apt_dst_width;
-	_appertureDst[1] = info.apt_dst_height;
-	_numDepths = (int)std::round((info.d_max - info.d_min) / info.d_d) + 1;
+
+	// For now, aperature_dst is going to be the same as ApertureFullSize
+	_apertureDst[0] = info.apt_dst_width;
+	_apertureDst[1] = info.apt_dst_height;
+	_numDepths = static_cast<int>(std::round((info.d_max - info.d_min) / info.d_d)) + 1;
 }
 
 void RSDReconstructor::EnableDepthDependentAveraging(bool useDDA)
@@ -83,206 +71,152 @@ void RSDReconstructor::EnableDepthDependentAveraging(bool useDDA)
 
 void RSDReconstructor::SetNumComponents(int n)
 {
-	throw_if(_numComponents, "SetNumComponents() has already been called");
-	throw_if(_precalculated, "PrecalculateRSD() has already been called");
-	_numComponents = n;
+	assert(!_numFrequencies);
+	assert(!_precalculated);
+	_numFrequencies = n;
 }
 
 void RSDReconstructor::SetWeights(const float* weights)
 {
-	throw_if(!_numComponents, "call SetNumComponents() first");
-	throw_if(_precalculated, "PrecalculateRSD() has already been called");
+	assert(_numFrequencies);
+	assert(!_precalculated);
 	_weights.clear();
-	_weights.insert(_weights.end(), weights, weights + _numComponents);
+	_weights.insert(_weights.end(), weights, weights + _numFrequencies);
 }
 
 void RSDReconstructor::SetLambdas(const float* lambdas)
 {
-	throw_if(!_numComponents, "call SetNumComponents() first");
-	throw_if(_precalculated, "PrecalculateRSD() has already been called");
+	assert(_numFrequencies);
+	assert(!_precalculated);
 	_lambdas.clear();
-	_lambdas.insert(_lambdas.end(), lambdas, lambdas + _numComponents);
+	_lambdas.insert(_lambdas.end(), lambdas, lambdas + _numFrequencies);
 }
 
 void RSDReconstructor::SetOmegas(const float* omegas)
 {
-	throw_if(!_numComponents, "call SetNumComponents() first");
-	throw_if(_precalculated, "PrecalculateRSD() has already been called");
+	assert(_numFrequencies);
+	assert(!_precalculated);
 	_omegas.clear();
-	_omegas.insert(_omegas.end(), omegas, omegas + _numComponents);
+	_omegas.insert(_omegas.end(), omegas, omegas + _numFrequencies);
 }
 
 void RSDReconstructor::SetSamplingSpace(const float sampling_space)
 {
-	throw_if(_precalculated, "PrecalculateRSD() has already been called");
+	assert(!_precalculated);
 	_samplingSpace = sampling_space;
-}
-
-void RSDReconstructor::SetSPADIndex(const int spadIndex)
-{
-	throw_if(_precalculated, "PrecalculateRSD() has already been called");
-	_spadIndex = spadIndex;
 }
 
 void RSDReconstructor::SetApertureFullsize(const float* apt)
 {
-	throw_if(_precalculated, "PrecalculateRSD() has already been called");
+	assert(!_precalculated);
 	memcpy(_apertureFullSize, apt, sizeof(float) * 2);
 }
 
-void RSDReconstructor::SetImageDimensions(int raw_width, int raw_height, int resampled_width, int resampled_height)
+void RSDReconstructor::SetImageDimensions(int width, int height)
 {
-	throw_if(!_numComponents, "call SetNumComponents() first");
-	throw_if(_apertureFullSize[0] == 0.0 || _apertureFullSize[1] == 0.0, "call SetApertureFullsize() first");
-	throw_if(_precalculated, "PrecalculateRSD() has already been called");
-	_rawImageWidth = raw_width;
-	_rawImgHeight = raw_height;
+	assert(_numFrequencies);
+	assert(_apertureFullSize[0] > 0.0 && _apertureFullSize[1] > 0.0);
+	assert(!_precalculated);
 
-	// calculate virtual aperature
-	// Calculate the sampling spacing, need for re-calcualted virtual aperture size
-	float dx = (_apertureFullSize[0] / resampled_height); // aperutre sampling spacing
-	// Calcualte the difference between aperture
+	// Calculate virtual aperature
+	// Calculate the sampling spacing, need for re-calculated virtual aperture size
+	float dx = (_apertureFullSize[0] / height); // Aperture sampling spacing
+
+	// Calculate the difference between aperture
 	float diff[2] { _info.apt_dst_width - _apertureFullSize[0], _info.apt_dst_height - _apertureFullSize[1] };
-
-	// Protection if virtual wavefront is smaller
-	//throw_if(diff[0] < 0 || diff[1] < 0, "virtual aperature has to be larget");
 
 	// Zero padding
 	diff[0] = diff[0] / dx; // transfer into pixel block
 	diff[1] = diff[1] / dx; // transfer into pixel block
 
-	_diffTb = (int)round(diff[0] / 2);
-	_diffLr = (int)round(diff[1] / 2);
+	_diffTopLeft = static_cast<int>(round(diff[0] / 2));
+	_diffLowerRight = static_cast<int>(round(diff[1] / 2));
 
-	//_imgWidth = resampled_width + 2 * _diffLr;
-	//_imgHeight = resampled_height + 2 * _diffTb;
-	_imgWidth = _rawImageWidth;
-	_imgHeight = _rawImgHeight;
+	_imgWidth = width;
+	_imgHeight = height;
+
+	_waveSize = _imgHeight * _imgWidth;
+	_depthSize = _numFrequencies * _waveSize;
 
 	// Update the virtual aperture size
-	_appertureDst[0] = _imgHeight * dx;
-	_appertureDst[1] = _imgWidth * dx;
+	_apertureDst[0] = static_cast<float>(_imgHeight) * dx;
+	_apertureDst[1] = static_cast<float>(_imgWidth) * dx;
 
-	// allocate storage on gpu for images data
-	_imgData = CudaAllocImg(1, _numComponents);
+	// Allocate storage on gpu for images data
+	CudaHelper::initializeBuffer(_imgData, SliceNumPixels() * _numFrequencies);
 }
 
-void RSDReconstructor::SetFFTData(const float* data, const int width, const int height)
+void RSDReconstructor::SetFFTData(const cufftComplex* data) const
 {
-	throw_if(!_numComponents, "call SetNumComponents() first");
-	throw_if(_imgWidth == 0 || _imgHeight == 0, "call SetImageDimensions() first");
+	assert(_numFrequencies);
+	assert(_imgWidth != 0 && _imgHeight != 0);
 
-	cudaMemcpy(_imgData.get(), data, _numComponents * 2 * SliceNumPixels() * sizeof(float), cudaMemcpyHostToDevice);
-}
-
-void RSDReconstructor::AddImage(int idx, cv::Mat& image_re, cv::Mat& image_im)
-{
-	throw_if(!_numComponents, "call SetNumComponents() first");
-	throw_if(image_re.size() != image_im.size(), "re and im image sizes don't match");
-
-	cv::Mat u(image_re.size(), CV_32FC2);
-	cv::Mat tmp_channel[2] = { image_re, image_im };
-	merge(tmp_channel, 2, u);
-
-	cv::resize(u, u, cv::Size(), _downsamplingRatio, _downsamplingRatio);
-
-	if (_rawImageWidth == 0) {
-		SetImageDimensions(image_re.size().width, image_re.size().height, u.size().width, u.size().height);
-	}
-
-	cv::copyMakeBorder(u, u, _diffTb, _diffTb, _diffLr, _diffLr, 0);
-
-	throw_if(u.size().width != _imgWidth, "image width doesn't match");
-	throw_if(u.size().height != _imgHeight, "image height doesn't match");
-
-	cudaMemcpy(_imgData.get() + idx * 2 * SliceNumPixels(), (float*)u.data, 2 * SliceNumPixels() * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(_imgData, data, static_cast<size_t>(_numFrequencies) * SliceNumPixels() * sizeof(cufftComplex), cudaMemcpyHostToDevice);
 }
 
 void RSDReconstructor::DumpInfo() const
 {
 	// Print values for testing
 	cout << "name:                 " << _info.name << endl;
-	cout << "number of components: " << _numComponents << endl;
+	cout << "number of components: " << _numFrequencies << endl;
 	cout << "weight:               " << _weights.size() << endl;
 	cout << "lambda_loop:          " << _lambdas.size() << endl;
 	cout << "omega_space:          " << _omegas.size() << endl;
-	cout << "aperturefull size:    [" << _apertureFullSize[0] << ", " << _apertureFullSize[1] << "]" << endl;
+	cout << "aperture full size:    [" << _apertureFullSize[0] << ", " << _apertureFullSize[1] << "]" << endl;
 	cout << "sampling spacing:     " << _samplingSpace << endl;
-	cout << "SPAD index:           " << _spadIndex << endl;
-	cout << "is simu:              " << _isSimulated << endl;
 }
 
-void RSDReconstructor::DumpPrecalcStats() const
-{
-	// Print values for testing
-	size_t sz = 0;
-	if (_fftPlan != 0)
-		cufft_throw_if(cufftGetSize(_fftPlan, &sz), "Unable to get fft plan work size");
-
-	cout << "GPU Buffer Bytes Allocated: " << setw(14) << _allocatedBytes << " bytes" << endl;
-	cout << "GPU FFT Work Space Bytes:   " << setw(14) << sz << " bytes" << endl;
-	cout << "Precalcuating RSD Took:     " << setw(14) << fixed << setprecision(3) << _precalculateTime << " ms" << endl;
-}
-
-// allocates all necessary GPU data for RSD Array and for Reconstruction, and
+// Allocates all necessary GPU data for RSD Array and for reconstruction, and
 // precalculates RSD. Basically sets everything up.
 void RSDReconstructor::PrecalculateRSD()
 {
-	// check that all necessary values have been set
-	throw_if(!_numComponents, "call SetNumComponents() first");
-	throw_if(_weights.size() != _numComponents, "call SetWeights() first");
-	throw_if(_lambdas.size() != _numComponents, "call SetLambdas() first");
-	throw_if(_omegas.size() != _numComponents, "call SetOmegas() first");
-	throw_if(_apertureFullSize[0] == 0.0 || _apertureFullSize[1] == 0.0, "call SetAperature() first");
-	throw_if(_imgWidth == 0 || _imgHeight == 0, "call SetImageDimensions() first");
-	throw_if(_precalculated, "PrecalculateRSD() has already been called");
-
-	const float c_speed = 299792458.0f;
-	
-	// useful values to have around
-	_waveSize = _imgHeight * _imgWidth * 2;
-	_depthSize = _numComponents * _waveSize;
-
 	int i = 0;
-	_rsd = CudaAllocImg(_numDepths, _numComponents);
+	CudaHelper::initializeBuffer(_rsd, SliceNumPixels() * _numDepths * _numFrequencies);
 
-	cufftHandle fft_plan;
-	cufft_throw_if(cufftPlan2d(&fft_plan, _imgHeight, _imgWidth, CUFFT_C2C), "Error creating cufft plan");
+	// Allocate the FFT plans
+	CUFFT_CHECK(cufftPlan2d(&_fftPlan2D, _imgHeight, _imgWidth, CUFFT_C2C));
 
-	int depth_idx;
+	int rank = 3;
+	int n[3] = { static_cast<int>(_imgWidth),
+				 static_cast<int>(_imgHeight),
+				 static_cast<int>(_numFrequencies) };
+	CUFFT_CHECK(cufftPlanMany(&_fftPlan3D, rank, n,
+		NULL, 1, 0,			// idist and odist do not matter when the number of batches is 1
+		NULL, 1, 0,
+		CUFFT_C2C, 1));
+
+	//
+	glm::uint depthIdx;
 	float depth;
-	std::cout << " _info.d_min: " << _info.d_min << std::endl;
-	std::cout << " _info.d_max: " << _info.d_max << std::endl;
-	std::cout << " _info.d_d: " << _info.d_d << std::endl;
-	for (depth = _info.d_min, depth_idx = 0; depth < _info.d_max; depth += _info.d_d, depth_idx++) 
-	{
-		float t_tmp = (depth + _info.d_offset) / c_speed;
 
-		std::cout << "  i=" << i << " depth_idx=" << depth_idx << " depth=" << depth << std::endl;
-		for (int wave_num = 0; wave_num < _numComponents; wave_num++) {
+	for (depth = _info.d_min, depthIdx = 0; depth < _info.d_max; depth += _info.d_d, depthIdx++) 
+	{
+		float time = (depth + _info.d_offset) / LIGHT_SPEED;
+
+		std::cout << "  i=" << i << " depth_idx=" << depthIdx << " depth=" << depth << std::endl;
+		for (int wave_num = 0; wave_num < _numFrequencies; wave_num++) 
+		{
 			float lambda = _lambdas[wave_num];
 			float omega = _omegas[wave_num];
 
-			float* d_ker = ImgAt(_rsd, depth_idx, wave_num);
-			RSDKernelConvolution(lambda, depth, omega, t_tmp, fft_plan, d_ker);
+			cufftComplex* kernelPtr = _rsd + depthIdx * _depthSize + wave_num * _waveSize;
+			RSDKernelConvolution(kernelPtr, _fftPlan2D, lambda, omega, depth, time);
 		}
+
 		i++;
 	}
 	assert(i == _numDepths);
 
-	cufft_throw_if(cufftDestroy(fft_plan), "Error destroying cufft plan");
+	// Now allocate all the storage that the ReconstructImage() function will need
+	CudaHelper::initializeBuffer(_img2D, SliceNumPixels());
+	CudaHelper::initializeBuffer(_dWeights, _weights.size(), _weights.data());
 
-	// now allocate all the storage that the ReconstructImage() function will need
-	_img2D = CudaAllocImg(1, 1, false);
+	// Allocate intermediate storage used for ffts during reconstruction
+	CudaHelper::initializeBuffer(_uTotalFFTs, SliceNumPixels() * _numFrequencies);
+	CudaHelper::initializeBuffer(_uOut, SliceNumPixels() * _numFrequencies);
+	CudaHelper::initializeBuffer(_uSum, SliceNumPixels());
 
-	// allocate intermediate storage used for ffts during reconstruction
-	_uTotalFFTs = CudaAllocImg(1, _numComponents);
-	_uOut = CudaAllocImg(1, _numComponents);
-	_uSum = CudaAllocImg(1, 1);
-
-	// allocate cufft plan for use during reconstruction
-	cufftPlan2d(&_fftPlan, _imgHeight, _imgWidth, CUFFT_C2C);
-
+	// Allocate cufft plan for use during reconstruction
 	EnableCubeGeneration(true);
 	PrecalculateDDAWeights();
 
@@ -294,113 +228,135 @@ void RSDReconstructor::PrecalculateRSD()
 void RSDReconstructor::PrecalculateDDAWeights()
 {
 	std::vector<float> w(_numDepths * 3);
-	// todo: remove assumption that min_depth = 1, and max_depth = 3
-	float min_depth = 1.0f;
-	float max_depth = 3.0f;
 
-	float depth_range = max_depth - min_depth;
+	// TODO: remove assumption that min_depth = 1, and max_depth = 3
+	float minDepth = 1.0f;
+	float maxDepth = 3.0f;
+	float depthRange = maxDepth - minDepth;
 
-	for (int i = 0; i < _numDepths; i++) {
-		float cen = (_numDepths - 1) / (depth_range * i + _numDepths - 1);
+	for (int i = 0; i < _numDepths; i++) 
+	{
+		float cen = (_numDepths - 1) / (depthRange * i + _numDepths - 1);
 		float lr = (1.f - cen) / 2.f; // the 3 values are a partition of unity
 
 		w[_numDepths + i] = cen;
 		w[i] = w[_numDepths * 2 + i] = lr;
 	}
-	_ddaWeights = CudaAllocFloatArr(_numDepths * 3);
-	cuda_throw_if(cudaMemcpy(_ddaWeights.get(), w.data(), _numDepths * 3 * sizeof(float), cudaMemcpyHostToDevice), "Error copying dda weights to gpu");
+
+	CudaHelper::initializeBuffer(_ddaWeights, _numDepths * 3, w.data());
 }
 
 void RSDReconstructor::EnableCubeGeneration(bool enable)
 {
-	_cubeImages = CudaAllocImg(_numDepths, 4, false); // 4 cubes, so we can store 3 reconstructions for dda, plus a temporary one for computation
+	CudaHelper::initializeBuffer(_cubeImages, SliceNumPixels() * _numDepths * 4);
+	// 4 cubes, so we can store 3 reconstructions for dda, plus a temporary one for computation
 }
 
 // call after each time full set of images has been added
 void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 {
-	throw_if(!_precalculated, "Call PrecalculateRSD() first.");
+	assert(_precalculated);
 
 	_currentCount++;
 
-	// compute the ffts of all the images
-	for (int wave_num = 0; wave_num < _numComponents; wave_num++) {
-		cufftResult res = cufftExecC2C(_fftPlan,
-			reinterpret_cast<cufftComplex*>(ImgAt(_imgData, wave_num)),
-			reinterpret_cast<cufftComplex*>(ImgAt(_uTotalFFTs, wave_num)),
-			CUFFT_FORWARD);
-	}
+	for (int wave_num = 0; wave_num < _numFrequencies; wave_num++) 
+		CUFFT_CHECK(cufftExecC2C(_fftPlan2D,
+			_imgData + wave_num * _waveSize,
+			_uTotalFFTs + wave_num * _waveSize,
+			CUFFT_FORWARD));
+	CudaHelper::synchronize("cufftExecC2C");
 
-	int i;
+	// Launch dimensions
+	dim3 blockSize3D(8, 8, 8);
+	dim3 gridSize3D(
+		(_numFrequencies + blockSize3D.x - 1) / blockSize3D.x,
+		(_imgHeight + blockSize3D.y - 1) / blockSize3D.y,
+		(_imgWidth + blockSize3D.z - 1) / blockSize3D.z
+	);
+
+	dim3 blockSize(16, 16);
+	dim3 gridSize(
+		(_imgHeight + blockSize.x - 1) / blockSize.x,
+		(_imgWidth + blockSize.y - 1) / blockSize.y
+	);
+
+	//
+	const glm::uvec3 dataResolution = glm::uvec3(_imgWidth, _imgHeight, _numFrequencies);
+	int depthIndex;
 	float depth;
-	for (depth = _info.d_min, i = 0; depth < _info.d_max; depth += _info.d_d, i++)
+
+	for (depth = _info.d_min, depthIndex = 0; depth < _info.d_max; depth += _info.d_d, depthIndex++)
 	{
 		// Temporal output wavefront at the depth plane
-		//auto ptr_zero_check = DbgInspect(_uSum.get(), 40);
-		cudaMemset(_uSum.get(), 0x00, _waveSize * sizeof(float));
-		//ptr_zero_check = DbgInspect(_uSum.get(), 40);
+		cudaMemset(_uSum, 0x00, _waveSize * sizeof(cufftComplex));
 
-		// all convolutions for this depth
-		int num_threads = 512;
-		int num_blocks = (_imgWidth * _imgHeight + num_threads - 1) / num_threads;
-		MulSpectrumMany<<<dim3(num_blocks, _numComponents), num_threads>>> (
-			_uTotalFFTs.get(),
-			ImgAt(_rsd, i, 0),
-			_uOut.get(),
-			SliceNumPixels());
+		multiplySpectrumMany<<<gridSize3D, blockSize3D>>>(
+			_uTotalFFTs,
+			_rsd + depthIndex * _depthSize,
+			_uOut,
+			dataResolution, _waveSize);
+		CudaHelper::synchronize("multiplySpectrumMany");
 
-		// summing
-		// for-loop summing ws faster than parallel reduction kernel (~0.655ms vs ~1.0-1.3ms)
+		// For-loop summing vs faster than parallel reduction kernel (~0.655ms vs ~1.0-1.3ms)
+		addScale<<<gridSize3D, blockSize3D>>>(
+			_uSum,
+			_uOut,
+			_dWeights,
+			dataResolution, _waveSize);
+		CudaHelper::synchronize("addScale");
 
-		// Measure the time it takes to sum the wavefronts in cuda
-		cudaEvent_t start, stop;
-		cuda_throw_if(cudaEventCreate(&start), "Error creating cuda event start");
-		cuda_throw_if(cudaEventCreate(&stop), "Error creating cuda event stop");
-		cuda_throw_if(cudaEventRecord(start), "Error recording cuda event start");
+		// IFFT after integration
+		CUFFT_CHECK(cufftExecC2C(_fftPlan2D, _uSum, _uSum, CUFFT_INVERSE));
 
-		for (int wave_num = 0; wave_num < _numComponents; wave_num++) {
-			AddScale << <_imgHeight, _imgWidth >> > (
-				_uSum.get(),
-				ImgAt(_uOut, wave_num),
-				_weights[wave_num]);
-		}
+		// Store this slice
+		glm::uint idx = _currentCount % 3;
+		abs<<<gridSize, blockSize>>>(
+				_uSum, 
+				_cubeImages + idx * CubeNumPixels() + depthIndex * SliceNumPixels(), 
+				dataResolution);
 
-		cuda_throw_if(cudaEventRecord(stop), "Error recording cuda event stop");
-		cuda_throw_if(cudaEventSynchronize(stop), "Error synchronizing cuda event stop");
-		float elapsedTime;
-		cuda_throw_if(cudaEventElapsedTime(&elapsedTime, start, stop), "Error getting elapsed time for cuda event");
-		cuda_throw_if(cudaEventDestroy(start), "Error destroying cuda event start");
-		cuda_throw_if(cudaEventDestroy(stop), "Error destroying cuda event stop");
-		std::cout << "Wavefront summing took: " << std::fixed << std::setprecision(3) << elapsedTime << " ms" << std::endl;
-
-		// optional parallel reduction version instead (slower...)
-		//AddScaleMany<<<dim3(img_width, img_height), 128>>>(u_sum(0,0), u_out(0,0), d_weights.get(), u_num);
-
-		// idft after integration
-		cufftResult res = cufftExecC2C(_fftPlan, reinterpret_cast<cufftComplex*>(_uSum.get()),
-			reinterpret_cast<cufftComplex*>(_uSum.get()),
-			CUFFT_INVERSE);
-
-		// store this slice
-		int idx = _currentCount % 3;
-		Abs<<<_imgHeight, _imgWidth>>>(_uSum.get(), 
-			_cubeImages.get()  +  // base addr of 3 cubes
-				idx * CubeNumPixels() + // offset to the proper cube
-				i * SliceNumPixels()); // offset to the proper slice (depth)
+		//std::vector<float> host(50);
+		//CudaHelper::downloadBuffer(_cubeImages, host.data(), 50);
+		//std::cout << std::endl;
 	}
 
 	cv::Mat img_2d(cv::Size(_imgWidth, _imgHeight), CV_32FC1);
-	if (_currentCount > 0) {
-		// we have the next frame, so we can process the previous frame.
-		int idx_prev = (_currentCount - 1) % 3;
-		if (_useDDA) {
+	if (_currentCount > 0) 
+	{
+		// We have the next frame, so we can process the previous frame.
+		glm::uint previousIdx = (_currentCount - 1) % 3;
+		if (_useDDA) 
+		{
+			gridSize3D = dim3(
+				(_numDepths + blockSize3D.x - 1) / blockSize3D.x,
+				(_imgHeight + blockSize3D.y - 1) / blockSize3D.y,
+				(_imgWidth + blockSize3D.z - 1) / blockSize3D.z
+			);
+
 			// perform depth dependent averaging across the 3 stored frames
-			DDA<<<dim3(_imgHeight, _numDepths, 1), _imgWidth>>> (_cubeImages.get(), idx_prev, _ddaWeights.get());
-			MaxZ<<<_imgHeight, _imgWidth >> > (CubeAt(_cubeImages, 3), _numDepths, _img2D.get());
+			DDA<<<gridSize3D, blockSize3D>>>(
+				_cubeImages, previousIdx, _ddaWeights,
+				_imgWidth, _imgHeight, _waveSize, _waveSize * _numDepths, _numDepths);
+			CudaHelper::synchronize("DDA");
+
+			maxZ<<<CudaHelper::getNumBlocks(_waveSize, 512), 512>>>(
+				_cubeImages + 3 * _waveSize * _numDepths, _img2D,
+				_numDepths, _waveSize);
+			CudaHelper::synchronize("maxZ");
+
+			std::vector<float> host(50);
+			CudaHelper::downloadBuffer(_img2D, host.data(), 50);
+
+			std::cout << std::endl;
 		}
-		else {
-			// depth dependent averaging is turned off, just pick the max from the current (previous) single frame.
-			MaxZ<<<_imgHeight, _imgWidth >> > (CubeAt(_cubeImages, idx_prev), _numDepths, _img2D.get());
+		else 
+		{
+			// Depth dependent averaging is turned off, just pick the max from the current (previous) single frame.
+			//maxZ<<<_imgHeight, _imgWidth >> > (CubeAt(_cubeImages, previousIdx), _numDepths, _img2D);
+			maxZ << <CudaHelper::getNumBlocks(_waveSize, 512), 512>>>(
+				_cubeImages + previousIdx * _waveSize * _numDepths, _img2D,
+				_numDepths, _waveSize);
+			CudaHelper::synchronize("maxZ");
 		}
 
 		{
@@ -414,165 +370,84 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 			float* minValue = nullptr;
 			CudaHelper::initializeBuffer(minValue, 1);
 
-			cub::DeviceReduce::Max(tempStorage, tempStorageBytes, _img2D.get(), maxValue, size);
+			cub::DeviceReduce::Max(tempStorage, tempStorageBytes, _img2D, maxValue, size);
 			cudaMalloc(&tempStorage, tempStorageBytes);
-			cub::DeviceReduce::Max(tempStorage, tempStorageBytes, _img2D.get(), maxValue, size);
-			cub::DeviceReduce::Min(tempStorage, tempStorageBytes, _img2D.get(), minValue, size);
+			cub::DeviceReduce::Max(tempStorage, tempStorageBytes, _img2D, maxValue, size);
+			cub::DeviceReduce::Min(tempStorage, tempStorageBytes, _img2D, minValue, size);
 
 			glm::uint threadsBlock = 512, numBlocks = CudaHelper::getNumBlocks(size, threadsBlock);
-			normalizeReconstruction<<<numBlocks, threadsBlock>>>(_img2D.get(), size, maxValue, minValue);
+			normalizeReconstruction<<<numBlocks, threadsBlock>>>(_img2D, size, maxValue, minValue);
 
 			CudaHelper::free(tempStorage);
 			CudaHelper::free(maxValue);
 			CudaHelper::free(minValue);
 		}
 
-		// copy back to host
-		cuda_throw_if(cudaMemcpy(img_2d.data, _img2D.get(), SliceNumPixels() * sizeof(float), cudaMemcpyDeviceToHost), "Error copying final image from device to host");
+		// Copy back to host
+		CudaHelper::checkError(cudaMemcpy(img_2d.data, _img2D, SliceNumPixels() * sizeof(float), cudaMemcpyDeviceToHost));
 	}
 	
-	// shift picture back to center, then flip it
+	// Shift picture back to center, then flip it
 	FFTShift(img_2d);
 	cv::flip(img_2d, img_2d, 1);
 
-	// visualization
+	// Visualization
 	img_2d.convertTo(img_2d, CV_8UC1, 255.0, 0);
-
-	// Up sampling
-	float up = 1.0f / _downsamplingRatio;
-	cv::resize(img_2d, img_2d, cv::Size(), up, up); // wavefront spatial upsampling for larger image
 	cv::imwrite("logs/rsd_reconstruction_" + std::to_string(_currentCount) + ".png", img_2d);
 }
 
-void RSDReconstructor::RSDKernelConvolution(const float lambda, const float depth, const float omega, const float t, cufftHandle fft_plan, float* d_ker)
+void RSDReconstructor::RSDKernelConvolution(
+	cufftComplex* dKernel, cufftHandle fftPlan, 
+	const float lambda, const float omega, 
+	const float depth, const float t) const
 {
-	// get physical aprture size
-	float apt_x;
-	int dim_x, dim_y; // Matrix dimension
+	float apertureX = _apertureDst[0];			// Physical aperture x, unit meter
+	glm::uint dim_x = _imgWidth, dim_y = _imgHeight;
+	float dx = apertureX / static_cast<float>(dim_x - 1);			// Spatial sampling density
 
-	apt_x = _appertureDst[0]; // physical aperture x, unit meter
-	//apt_y = apt.at<float>(0, 1); // physical aperture y, unit meter
-
-	dim_x = _imgHeight; // input wavefront matrix size
-	dim_y = _imgWidth;  // input wavefront matrix size 
-
-	// spatial sampling density
-	float dx = apt_x / (dim_x - 1);
-	//float dy = apt_y / (dim_y - 1);
-
-	// if(dx != dy){cout << "check dimension" << endl; exit(0);};
+	// Dimensions of thread launch
+	dim3 blockSize(16, 16);
+	dim3 gridSize(
+		(dim_y + blockSize.x - 1) / blockSize.x,
+		(dim_x + blockSize.y - 1) / blockSize.y
+	);
 
 	// Apply RSD convolution kernel equation
 	float z_hat = depth / dx;
-	float mul_square = lambda * z_hat / (dim_x * dx);
+	float mulSquare = lambda * z_hat / (static_cast<float>(dim_x) * dx);
+	rsdKernel<<<gridSize, blockSize>>>(dKernel, z_hat * z_hat, mulSquare, dim_x, dim_y);
+	CudaHelper::synchronize("rsdKernel");
 
-	RSD_Kernel<<<dim_y, dim_x>>>(d_ker, z_hat * z_hat, mul_square);
+	// Perform fft on gpu
+	CUFFT_CHECK(cufftExecC2C(fftPlan, dKernel, dKernel, CUFFT_FORWARD));
+	CudaHelper::synchronize("cufftExecC2C");
 
-	// perform fft on gpu
-	cufftResult res = cufftExecC2C(fft_plan, reinterpret_cast<cufftComplex*>(d_ker),
-		reinterpret_cast<cufftComplex*>(d_ker),
-		CUFFT_FORWARD);
-
-	// convolve the two by pointwise multiplication of the spectrums
-	MulSpectrumExpHarmonic<<<dim_y, dim_x>>> (d_ker, omega, t);
+	// Convolve the two by pointwise multiplication of the spectrums
+	multiplySpectrumExpHarmonic<<<gridSize, blockSize>>>(dKernel, omega, t, dim_x, dim_y);
+	CudaHelper::synchronize("multiplySpectrumExpHarmonic");
 }
 
-shared_ptr<float> RSDReconstructor::CudaAllocFloatArr(int n)
-{
-	float* dd;
-	size_t sz = n * sizeof(float);
-	cuda_throw_if(cudaMalloc(&dd, sz), "cudaMalloc failed");
-	shared_ptr<float> ret;
-	ret.reset(dd, cudaFree);
-	_allocatedBytes += sz;
-	return ret;
-}
-
-shared_ptr<float> RSDReconstructor::CudaAllocImg(int depths, int waves, bool complex)
-{
-	int n = _imgHeight * _imgWidth * depths * waves * (complex ? 2 : 1);
-	return CudaAllocFloatArr(n);
-}
-
-float* RSDReconstructor::CubeAt(shared_ptr<float> p, int cube_num)
+float* RSDReconstructor::CubeAt(shared_ptr<float> p, int cube_num) const
 {
 	assert(p);
 	return &(p.get()[cube_num * _imgHeight * _imgWidth * _numDepths]);
 }
 
-float* RSDReconstructor::ImgAt(shared_ptr<float> p, int wave_num)
+cufftComplex* RSDReconstructor::ImageAt(cufftComplex* p, int depth) const
 {
 	assert(p);
-	return &(p.get()[wave_num * _waveSize]);
+	return &(p[depth * _depthSize]);
 }
 
-float* RSDReconstructor::ImgAt(shared_ptr<float> p, int depth, int wave_num)
-{
-	assert(p);
-	return &(p.get()[depth * _depthSize + wave_num * _waveSize]);
-}
-
-std::unique_ptr<std::vector<float>> RSDReconstructor::GetImageData()
-{
-	return DbgInspect(_imgData.get(), _imgWidth * _imgHeight * 2 * _numComponents);
-}
-
-std::unique_ptr<std::vector<float>> RSDReconstructor::GetCubeData()
-{
-	int cur_idx = _currentCount % 3;
-	auto ret = DbgInspect(_cubeImages.get() + cur_idx * _imgWidth * _imgHeight * _numDepths,
-		_imgWidth * _imgHeight * _numDepths);
-	
-	// there's a faster way to do this, but this is only for debug logging...
-	int sz[] = { _imgHeight, _imgWidth };
-	//#pragma omp parallel
-	for (int i = 0; i < _numDepths; i++) {
-		float* p = ret->data() + i * _imgHeight * _imgWidth;
-		cv::Mat sl(2, sz, CV_32FC1, p);
-		FFTShift(sl);
-		cv::flip(sl, sl, 1);
-	}
-	return ret;
-}
-
-unique_ptr<std::vector<float>> RSDReconstructor::DbgInspect(float* devptr, int sz)
-{
-	unique_ptr<std::vector<float>> ret;
-	ret.reset(new std::vector<float>(sz));
-	cuda_throw_if(cudaMemcpy(ret->data(), devptr, sz * sizeof(float), cudaMemcpyDeviceToHost), "cudaMemcpy");
-	return ret;
-}
-
-
-/**
-	mimic fftshift
-
-	@param:
-		Mat &out: input Mat (pointer)
-	@return:
-		Mat &out
-	example:
-		fftshift(A)
-*/
 void RSDReconstructor::FFTShift(cv::Mat& out)
 {
 	cv::Size sz = out.size();
 	cv::Point pt(0, 0);
-	pt.x = (int)floor(sz.width / 2.0);
-	pt.y = (int)floor(sz.height / 2.0);
+	pt.x = static_cast<int>(floor(sz.width / 2.0));
+	pt.y = static_cast<int>(floor(sz.height / 2.0));
 	CircShift(out, pt);
 }
 
-/**
-	mimic circshift
-
-	@param:
-
-	@return:
-
-	example:
-
-*/
 void RSDReconstructor::CircShift(cv::Mat& out, const cv::Point& delta)
 {
 	cv::Size sz = out.size();

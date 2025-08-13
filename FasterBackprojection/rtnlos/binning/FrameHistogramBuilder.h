@@ -35,8 +35,8 @@ namespace rtnlos
             const uint32_t* indexData,
             const float* timeData,
             const float* frequencyData,
-            float* histData,
-            const uint32_t nSamples);
+            cufftComplex* histData,
+            const uint32_t nSamples) const;
 
 #if USE_FDH_LOOKUP_TABLE
         int _photonMinTime, _photonMaxTime, _numTimes;

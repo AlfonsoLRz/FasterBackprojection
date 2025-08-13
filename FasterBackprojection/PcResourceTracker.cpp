@@ -81,8 +81,8 @@ void PcResourceTracker::trackCpuUsage(Measurement& measurement)
 	memcpy(&user, &fuser, sizeof(FILETIME));
 
 	ULONGLONG percent = sys.QuadPart - _lastSysCPU.QuadPart + (user.QuadPart - _lastUserCPU.QuadPart);
-	percent /= now.QuadPart - _lastCPU.QuadPart;
-	percent /= _numProcessors;
+	percent = now.QuadPart - _lastCPU.QuadPart == 0 ? 0 : percent / (now.QuadPart - _lastCPU.QuadPart);
+	percent = _numProcessors > 0 ? percent / _numProcessors : 0;
 
 	_lastCPU = now;
 	_lastUserCPU = user;

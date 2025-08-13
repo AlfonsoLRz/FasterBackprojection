@@ -70,7 +70,7 @@
       <CodeGeneration>compute_89,sm_89</CodeGeneration>
       <InterleaveSourceInPTX>false</InterleaveSourceInPTX>
       <ExtensibleWholeProgramCompilation>false</ExtensibleWholeProgramCompilation>
-      <FastMath>false</FastMath>
+      <FastMath>true</FastMath>
       <AdditionalOptions>--extended-lambda --std=c++17 %(AdditionalOptions)</AdditionalOptions>
       <GenerateLineInfo>true</GenerateLineInfo>
     </CudaCompile>
@@ -102,7 +102,7 @@
       <CodeGeneration>compute_89,sm_89</CodeGeneration>
       <InterleaveSourceInPTX>false</InterleaveSourceInPTX>
       <ExtensibleWholeProgramCompilation>false</ExtensibleWholeProgramCompilation>
-      <FastMath>false</FastMath>
+      <FastMath>true</FastMath>
       <AdditionalOptions>--extended-lambda --std=c++17 %(AdditionalOptions)</AdditionalOptions>
       <GenerateLineInfo>true</GenerateLineInfo>
     </CudaCompile>
@@ -169,7 +169,6 @@
     <ClInclude Include="rtnlos\acquisition\RawSensorDataReader.h" />
     <ClInclude Include="rtnlos\binning\FrameHistogramBuilder.h" />
     <ClInclude Include="rtnlos\data\SensorData.h" />
-    <ClInclude Include="rtnlos\data\RsdCubeData.h" />
     <ClInclude Include="rtnlos\data\SceneParameters.h" />
     <ClInclude Include="rtnlos\NlosDataProcessor.h" />
     <ClInclude Include="rtnlos\NlosStreamingEngine.h" />
@@ -196,7 +195,6 @@
     <ClInclude Include="UnsignedImage.h" />
     <ClInclude Include="Vao.h" />
     <ClInclude Include="Window.h" />
-    <CudaCompile Include="rtnlos\reconstruction\rsd_cuda_kernels.cu" />
     <CudaCompile Include="rtnlos\reconstruction\rsd_reconstructor.cu" />
   </ItemGroup>
   <ItemGroup>

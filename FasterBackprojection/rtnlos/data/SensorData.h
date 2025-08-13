@@ -1,7 +1,7 @@
 #pragma once
 
+#include "cufft.h"
 #include "opencv4/opencv2/core.hpp"
-#include "RsdCubeData.h"
 #include "util/SafeQueue.h"
 
 #define NUMBER_OF_ROWS 190
@@ -14,9 +14,9 @@ namespace rtnlos
 	union T3Rec
 	{
 		uint32_t _allBits;
-		struct {
+		struct
+		{
 			unsigned nsync : 10;
-
 			// last 10 bits, number of sync period
 			// this is 2 things:
 			// a : for an overflow it's how many overflows since last
@@ -25,7 +25,6 @@ namespace rtnlos
 			// | | | | | | | | | | | | | | | | | | | | | | |x|x|x|x|x|x|x|x|x|x|
 
 			unsigned dtime : 15;
-
 			// next 15 bits, delay from last sync in units of chosen resolution
 			// the dtime unit depends on "_resolution" that can be obtained from header
 			// DTime: Arrival time(units) of Photon after last Sync event
@@ -33,12 +32,10 @@ namespace rtnlos
 			// | | | | | | | |x|x|x|x|x|x|x|x|x|x|x|x|x|x|x| | | | | | | | | | |
 
 			unsigned channel : 6;
-
 			// next 6 bits, for photons, channel 0~7, for overflows, channel = 63, for markers, special = 1, channel 1~4
 			//| |x|x|x|x|x|x| | | | | | | | | | | | | | | | | | | | | | | | | |
 
 			unsigned special : 1;
-
 			// first bit: special = 1 indicates marker or overflows
 		} bits;
 	};
@@ -76,8 +73,8 @@ namespace rtnlos
 	class FrameHistogramData
 	{
 	public:
-		float		_histogram[NINDICES * NFREQUENCIES * 2];
-		uint32_t	_frameNumber;
+		cufftComplex	_histogram[NINDICES * NFREQUENCIES * 2];
+		uint32_t		_frameNumber;
 
 	public:
 		FrameHistogramData(uint32_t frameNumber = 0) : _histogram{}, _frameNumber(frameNumber)
@@ -99,13 +96,11 @@ namespace rtnlos
 
 	using RawSensorDataType = RawSensorData<RAW_SENSOR_READ_BLOCK_SIZE>;
 	using FrameHistogramDataType = FrameHistogramData<NUMBER_OF_ROWS* NUMBER_OF_COLS, NUMBER_OF_FREQUENCIES>;
-	using RsdCubeDataType = RsdCubeData<NUMBER_OF_ROWS, NUMBER_OF_COLS>;
 	using ReconstructedImageDataType = ReconstructedImageData<NUMBER_OF_ROWS, NUMBER_OF_COLS>;
 
 	using RawSensorDataPtr = std::shared_ptr<RawSensorDataType>;
 	using ParsedSensorDataPtr = std::shared_ptr<ParsedSensorData>;
 	using FrameHistogramDataPtr = std::shared_ptr<FrameHistogramDataType>;
-	using RsdCubeDataPtr = std::shared_ptr<RsdCubeDataType>;
 	using ReconstructedImageDataPtr = std::shared_ptr<ReconstructedImageDataType>;
 
 	using RawSensorDataQueue = SafeQueue<RawSensorDataPtr, 200>;

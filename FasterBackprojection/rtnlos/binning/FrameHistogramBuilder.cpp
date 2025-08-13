@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "FrameHistogramBuilder.h"
 
+#include "cufft.h"
+
 namespace rtnlos
 {
     template<int NINDICES, int NFREQ>
@@ -113,13 +115,11 @@ namespace rtnlos
         const uint32_t* indexData,
         const float* timeData,
         const float* frequencyData,
-        float* histData,
-        const uint32_t nSamples)
+        cufftComplex* histData,
+        const uint32_t nSamples) const
     {
-        // optimal ordering for cuda rsd input
-        using HistogramArrayType = float(&)[NFREQ][NINDICES][2];
-        HistogramArrayType histogram = reinterpret_cast<HistogramArrayType>(*histData);
-        memset(histData, 0x00, NFREQ * NINDICES * 2 * sizeof(float));
+        // Optimal ordering for cuda rsd input
+		cufftComplex* histogram = histData;
 
         // Note, the -2PI/MaxT coefficient is already in the frequencyData
 #pragma omp parallel for
@@ -128,9 +128,9 @@ namespace rtnlos
             for (uint32_t s = 0; s < nSamples; s++) 
             {
 #if USE_FDH_LOOKUP_TABLE
-                int idx = static_cast<int>((timeData[s] + 0.5f) - _photonMinTime) * NFREQ + f;
-                histogram[f][indexData[s]][0] += _cosLookup[idx]; //std::cos(frequencyData[f] * timeData[s]);
-                histogram[f][indexData[s]][1] += _sinLookup[idx]; //std::sin(frequencyData[f] * timeData[s]);
+                int idx = static_cast<int>(timeData[s] + 0.5f - _photonMinTime) * NFREQ + f;
+                histogram[f * NINDICES + indexData[s]].x += _cosLookup[idx];    // std::cos(frequencyData[f] * timeData[s]);
+                histogram[f * NINDICES + indexData[s]].y += _sinLookup[idx];    // std::sin(frequencyData[f] * timeData[s]);
 #else
                 histogram[f][indexData[s]][0] += std::cos(frequencyData[f] * timeData[s]);
                 histogram[f][indexData[s]][1] += std::sin(frequencyData[f] * timeData[s]);
@@ -139,6 +139,6 @@ namespace rtnlos
         }
     }
 
-    // explicit instantiation
+    // Explicit instantiation
     template class FrameHistogramBuilder<NUMBER_OF_ROWS * NUMBER_OF_COLS, NUMBER_OF_FREQUENCIES>;
 }

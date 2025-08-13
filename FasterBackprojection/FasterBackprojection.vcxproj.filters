@@ -249,9 +249,6 @@
     <ClInclude Include="rtnlos\data\SensorData.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
-    <ClInclude Include="rtnlos\data\RsdCubeData.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
     <ClInclude Include="rtnlos\util\SafeQueue.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
@@ -450,9 +447,6 @@
     </CudaCompile>
     <CudaCompile Include="rtnlos\reconstruction\rsd_reconstructor.cu">
       <Filter>rt-nlos\headers</Filter>
-    </CudaCompile>
-    <CudaCompile Include="rtnlos\reconstruction\rsd_cuda_kernels.cu">
-      <Filter>rt-nlos\source</Filter>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>
