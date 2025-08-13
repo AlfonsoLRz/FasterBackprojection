@@ -86,7 +86,7 @@ void CudaPerf::summarize() const
 			return sum + timing.second / TimeMeasurementDivisor; // ms
 		});
 
-	std::cout << std::setw(30) << std::left << "Total Time" << ": " << std::fixed << std::setprecision(6) << globalElapsedTime << " milliseconds\n";
+	std::cout << std::left << "Total Time" << ": " << globalElapsedTime << " milliseconds\n";
 }
 
 void CudaPerf::write(const std::string& outPath) const

@@ -23,33 +23,37 @@ struct DatasetInfo
 
 class RSDReconstructor
 {
-	DatasetInfo				_info;
-	bool					_useDDA;			// Depth dependent averaging
+	DatasetInfo					_info;
+	bool						_useDDA;			// Depth dependent averaging
 
-	glm::uint				_numFrequencies, _numDepths, _imgHeight, _imgWidth;
+	glm::uint					_numFrequencies, _numDepths, _imgHeight, _imgWidth;
 
-	float					_apertureFullSize[2];
-	float					_apertureDst[2];
-	float					_samplingSpace;
-	int						_diffTopLeft, _diffLowerRight;
-	vector<float>			_weights, _lambdas, _omegas;
-	glm::uint				_waveSize, _depthSize;
-	bool					_precalculated;
-	glm::uint				_currentCount;
+	float						_apertureFullSize[2];
+	float						_apertureDst[2];
+	float						_samplingSpace;
+	int							_diffTopLeft, _diffLowerRight;
+	vector<float>				_weights, _lambdas, _omegas;
+	glm::uint					_sliceSize, _frequencyCubeSize;
+	bool						_precalculated;
+	glm::uint					_currentCount;
 
 	// Device pointers
-	cufftComplex* 			_imgData;
-	float*					_img2D;
-	cufftComplex* 			_rsd;
-	cufftComplex*			_uTotalFFTs;
-	cufftComplex*			_uOut;
-	cufftComplex*			_uSum;
-	float*					_cubeImages;
-	float*					_ddaWeights;
-	float*					_dWeights;
+	cufftComplex* 				_imgData;
+	float*						_img2D;
+	cufftComplex* 				_rsd;
+	cufftComplex*				_uTotalFFTs;
+	cufftComplex*				_uOut;
+	cufftComplex*				_uSum;
+	float*						_cubeImages;
+	float*						_ddaWeights;
+	float*						_dWeights;
 
-	cufftHandle				_fftPlan2D;
-	cufftHandle				_fftPlan3D;
+	cufftHandle					_fftPlan2D;
+	std::vector<cudaStream_t>	_cudaStreams;
+
+	glm::uint					_blockSize1D, _gridSize1D;
+	dim3						_blockSize2D_freq, _blockSize2D_depth;
+	dim3						_gridSize2D_freq, _gridSize2D_depth;
 
 public:
 	RSDReconstructor();
@@ -59,12 +63,12 @@ public:
 
 	// Call all of these before calling PrecalculateRSD()
 	void EnableDepthDependentAveraging(bool useDDA);
-	void SetNumComponents(int n);
+	void SetNumFrequencies(int n);
 	void SetWeights(const float* weights);
 	void SetLambdas(const float* lambdas);
 	void SetOmegas(const float* omegas);
 	void SetSamplingSpace(const float sampling_space);
-	void SetApertureFullsize(const float* apt);
+	void SetApertureFullSize(const float* apt);
 	void SetImageDimensions(int width, int height);
 
 	// Call this once after calling the above methods
@@ -83,8 +87,8 @@ public:
 	void DumpInfo() const;
 
 private:
-	glm::uint SliceNumPixels() const { return _waveSize; }
-	glm::uint CubeNumPixels() const { return _waveSize * _numDepths; }
+	glm::uint SliceNumPixels() const { return _sliceSize; }
+	glm::uint CubeNumPixels() const { return _sliceSize * _numDepths; }
 
 	void RSDKernelConvolution(cufftComplex* dKernel, cufftHandle fftPlan, const float lambda, const float omega, const float depth, const float t) const;
 

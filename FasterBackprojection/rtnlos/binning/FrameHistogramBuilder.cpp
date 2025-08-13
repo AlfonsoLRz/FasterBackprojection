@@ -17,7 +17,6 @@ namespace rtnlos
             throw std::logic_error(fmt::format("Incorrect grid dimension. Try rebuilding exe with NUMBER_OF_ROWS={} and NUMBER_OF_COLS={} in compile_time_constants.h",
                 sceneParameters._apertureWidth, sceneParameters._apertureHeight));
 
-
         const float downsamplingMultiplier = 1.f / (1 << sceneParameters._downsamplingRate);
         const float ts = sceneParameters._resolution * sceneParameters.PICOSECOND / downsamplingMultiplier;
         const float photonMaxTime = std::round(2 * sceneParameters._depthMax / (ts * sceneParameters.LIGHT_SPEED));

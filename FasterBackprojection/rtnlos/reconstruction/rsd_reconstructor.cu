@@ -27,11 +27,11 @@ RSDReconstructor::RSDReconstructor()
 	  , _apertureFullSize{0.0f, 0.0f}
 	  , _apertureDst{0.0f, 0.0f}
 	  , _samplingSpace(0.0f)
-	  , _diffTopLeft(0), _diffLowerRight(0), _waveSize(0)
-	  , _depthSize(0), _precalculated(false)
+	  , _diffTopLeft(0), _diffLowerRight(0), _sliceSize(0)
+	  , _frequencyCubeSize(0), _precalculated(false)
 	  , _currentCount(0)
 	  , _imgData(nullptr), _img2D(nullptr), _rsd(nullptr), _uTotalFFTs(nullptr)
-	  , _uOut(nullptr), _uSum(nullptr), _cubeImages(nullptr), _ddaWeights(nullptr), _dWeights(nullptr), _fftPlan2D(0), _fftPlan3D(0)
+	  , _uOut(nullptr), _uSum(nullptr), _cubeImages(nullptr), _ddaWeights(nullptr), _dWeights(nullptr), _fftPlan2D(0)
 {
 }
 
@@ -47,11 +47,11 @@ RSDReconstructor::~RSDReconstructor()
 	CudaHelper::free(_ddaWeights);
 	CudaHelper::free(_dWeights);
 
-	if (_fftPlan3D != 0)
-		CUFFT_CHECK(cufftDestroy(_fftPlan3D));
-
 	if (_fftPlan2D != 0)
 		CUFFT_CHECK(cufftDestroy(_fftPlan2D));
+
+	for (auto& stream : _cudaStreams)
+		CudaHelper::checkError(cudaStreamDestroy(stream));
 }
 
 void RSDReconstructor::Initialize(const DatasetInfo& info)
@@ -69,7 +69,7 @@ void RSDReconstructor::EnableDepthDependentAveraging(bool useDDA)
 	_useDDA = useDDA;
 }
 
-void RSDReconstructor::SetNumComponents(int n)
+void RSDReconstructor::SetNumFrequencies(int n)
 {
 	assert(!_numFrequencies);
 	assert(!_precalculated);
@@ -106,7 +106,7 @@ void RSDReconstructor::SetSamplingSpace(const float sampling_space)
 	_samplingSpace = sampling_space;
 }
 
-void RSDReconstructor::SetApertureFullsize(const float* apt)
+void RSDReconstructor::SetApertureFullSize(const float* apt)
 {
 	assert(!_precalculated);
 	memcpy(_apertureFullSize, apt, sizeof(float) * 2);
@@ -135,8 +135,8 @@ void RSDReconstructor::SetImageDimensions(int width, int height)
 	_imgWidth = width;
 	_imgHeight = height;
 
-	_waveSize = _imgHeight * _imgWidth;
-	_depthSize = _numFrequencies * _waveSize;
+	_sliceSize = _imgHeight * _imgWidth;
+	_frequencyCubeSize = _numFrequencies * _sliceSize;
 
 	// Update the virtual aperture size
 	_apertureDst[0] = static_cast<float>(_imgHeight) * dx;
@@ -176,15 +176,6 @@ void RSDReconstructor::PrecalculateRSD()
 	// Allocate the FFT plans
 	CUFFT_CHECK(cufftPlan2d(&_fftPlan2D, _imgHeight, _imgWidth, CUFFT_C2C));
 
-	int rank = 3;
-	int n[3] = { static_cast<int>(_imgWidth),
-				 static_cast<int>(_imgHeight),
-				 static_cast<int>(_numFrequencies) };
-	CUFFT_CHECK(cufftPlanMany(&_fftPlan3D, rank, n,
-		NULL, 1, 0,			// idist and odist do not matter when the number of batches is 1
-		NULL, 1, 0,
-		CUFFT_C2C, 1));
-
 	//
 	glm::uint depthIdx;
 	float depth;
@@ -199,7 +190,7 @@ void RSDReconstructor::PrecalculateRSD()
 			float lambda = _lambdas[wave_num];
 			float omega = _omegas[wave_num];
 
-			cufftComplex* kernelPtr = _rsd + depthIdx * _depthSize + wave_num * _waveSize;
+			cufftComplex* kernelPtr = _rsd + depthIdx * _frequencyCubeSize + wave_num * _sliceSize;
 			RSDKernelConvolution(kernelPtr, _fftPlan2D, lambda, omega, depth, time);
 		}
 
@@ -220,9 +211,34 @@ void RSDReconstructor::PrecalculateRSD()
 	EnableCubeGeneration(true);
 	PrecalculateDDAWeights();
 
-	// record how long this took, and flag that we've done it.
+	// Flag that we've done it.
 	_precalculated = true;
-	_currentCount = -1; // we haven't reconstructed any yet.	
+	_currentCount = -1; // we haven't reconstructed any yet.
+
+	// Prepare streams for parallel processing
+	_cudaStreams.resize(_numFrequencies);
+	for (int j = 0; j < _numFrequencies; j++) 
+	{
+		cudaStream_t stream;
+		CudaHelper::checkError(cudaStreamCreate(&stream));
+		_cudaStreams[j] = stream;
+	}
+
+	// Launch dimensions for the kernels
+	_blockSize1D = 512;
+	_gridSize1D = CudaHelper::getNumBlocks(_sliceSize, _blockSize1D);
+
+	_blockSize2D_freq = dim3(64, 8);
+	_gridSize2D_freq = dim3(
+		(_sliceSize + _blockSize2D_freq.x - 1) / _blockSize2D_freq.x,
+		(_numFrequencies + _blockSize2D_freq.y - 1) / _blockSize2D_freq.y
+	);
+
+	_blockSize2D_depth = dim3(64, 8);
+	_gridSize2D_depth = dim3(
+		(_sliceSize + _blockSize2D_depth.x - 1) / _blockSize2D_depth.x,
+		(_numDepths + _blockSize2D_depth.y - 1) / _blockSize2D_depth.y
+	);
 }
 
 void RSDReconstructor::PrecalculateDDAWeights()
@@ -255,69 +271,69 @@ void RSDReconstructor::EnableCubeGeneration(bool enable)
 // call after each time full set of images has been added
 void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 {
+	CudaPerf perf(false);
+	perf.setAlgorithmName("RSDReconstructor::ReconstructImage");
+	perf.tic();
+
 	assert(_precalculated);
 
 	_currentCount++;
 
-	for (int wave_num = 0; wave_num < _numFrequencies; wave_num++) 
+	perf.tic("FFT");
+	for (int frequencyIdx = 0; frequencyIdx < _numFrequencies; frequencyIdx++)
+	{
+		CUFFT_CHECK(cufftSetStream(_fftPlan2D, _cudaStreams[frequencyIdx]));
 		CUFFT_CHECK(cufftExecC2C(_fftPlan2D,
-			_imgData + wave_num * _waveSize,
-			_uTotalFFTs + wave_num * _waveSize,
+			_imgData + frequencyIdx * _sliceSize,
+			_uTotalFFTs + frequencyIdx * _sliceSize,
 			CUFFT_FORWARD));
-	CudaHelper::synchronize("cufftExecC2C");
+	}
 
-	// Launch dimensions
-	dim3 blockSize3D(8, 8, 8);
-	dim3 gridSize3D(
-		(_numFrequencies + blockSize3D.x - 1) / blockSize3D.x,
-		(_imgHeight + blockSize3D.y - 1) / blockSize3D.y,
-		(_imgWidth + blockSize3D.z - 1) / blockSize3D.z
-	);
+	for (int i = 0; i < _numFrequencies; i++)
+		cudaStreamSynchronize(_cudaStreams[i]);
 
-	dim3 blockSize(16, 16);
-	dim3 gridSize(
-		(_imgHeight + blockSize.x - 1) / blockSize.x,
-		(_imgWidth + blockSize.y - 1) / blockSize.y
-	);
+	perf.toc();
 
 	//
-	const glm::uvec3 dataResolution = glm::uvec3(_imgWidth, _imgHeight, _numFrequencies);
 	int depthIndex;
 	float depth;
 
 	for (depth = _info.d_min, depthIndex = 0; depth < _info.d_max; depth += _info.d_d, depthIndex++)
 	{
 		// Temporal output wavefront at the depth plane
-		cudaMemset(_uSum, 0x00, _waveSize * sizeof(cufftComplex));
+		cudaMemset(_uSum, 0, _sliceSize * sizeof(cufftComplex));
 
-		multiplySpectrumMany<<<gridSize3D, blockSize3D>>>(
+		perf.tic("Multiply Spectrum");
+		multiplySpectrumMany<<<_gridSize2D_freq, _blockSize2D_freq>>>(
 			_uTotalFFTs,
-			_rsd + depthIndex * _depthSize,
+			_rsd + depthIndex * _frequencyCubeSize,
 			_uOut,
-			dataResolution, _waveSize);
-		CudaHelper::synchronize("multiplySpectrumMany");
+			_numFrequencies, _sliceSize);
+		perf.toc();
 
 		// For-loop summing vs faster than parallel reduction kernel (~0.655ms vs ~1.0-1.3ms)
-		addScale<<<gridSize3D, blockSize3D>>>(
+		perf.tic("Add Scale");
+		size_t sharedMemSize = _blockSize2D_freq.y * sizeof(cufftComplex);
+		addScale<<<_gridSize2D_freq, _blockSize2D_freq>>>(
 			_uSum,
 			_uOut,
 			_dWeights,
-			dataResolution, _waveSize);
-		CudaHelper::synchronize("addScale");
+			_numFrequencies, _sliceSize);
+		perf.toc();
 
 		// IFFT after integration
+		perf.tic("IFFT");
 		CUFFT_CHECK(cufftExecC2C(_fftPlan2D, _uSum, _uSum, CUFFT_INVERSE));
+		perf.toc();
 
 		// Store this slice
+		perf.tic("Abs");
 		glm::uint idx = _currentCount % 3;
-		abs<<<gridSize, blockSize>>>(
+		abs<<<_gridSize1D, _blockSize1D>>>(
 				_uSum, 
 				_cubeImages + idx * CubeNumPixels() + depthIndex * SliceNumPixels(), 
-				dataResolution);
-
-		//std::vector<float> host(50);
-		//CudaHelper::downloadBuffer(_cubeImages, host.data(), 50);
-		//std::cout << std::endl;
+				_sliceSize);
+		perf.toc();
 	}
 
 	cv::Mat img_2d(cv::Size(_imgWidth, _imgHeight), CV_32FC1);
@@ -327,61 +343,56 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 		glm::uint previousIdx = (_currentCount - 1) % 3;
 		if (_useDDA) 
 		{
-			gridSize3D = dim3(
-				(_numDepths + blockSize3D.x - 1) / blockSize3D.x,
-				(_imgHeight + blockSize3D.y - 1) / blockSize3D.y,
-				(_imgWidth + blockSize3D.z - 1) / blockSize3D.z
-			);
-
 			// perform depth dependent averaging across the 3 stored frames
-			DDA<<<gridSize3D, blockSize3D>>>(
+			perf.tic("DDA");
+			DDA<<<_gridSize2D_depth, _blockSize2D_depth>>>(
 				_cubeImages, previousIdx, _ddaWeights,
-				_imgWidth, _imgHeight, _waveSize, _waveSize * _numDepths, _numDepths);
-			CudaHelper::synchronize("DDA");
+				_sliceSize, _sliceSize * _numDepths, _numDepths);
+			perf.toc();
 
-			maxZ<<<CudaHelper::getNumBlocks(_waveSize, 512), 512>>>(
-				_cubeImages + 3 * _waveSize * _numDepths, _img2D,
-				_numDepths, _waveSize);
-			CudaHelper::synchronize("maxZ");
-
-			std::vector<float> host(50);
-			CudaHelper::downloadBuffer(_img2D, host.data(), 50);
-
-			std::cout << std::endl;
+			perf.tic("Max Z");
+			maxZ<<<_gridSize1D, _blockSize1D>>>(
+				_cubeImages + 3 * _sliceSize * _numDepths, _img2D,
+				_numDepths, _sliceSize);
+			perf.toc();
 		}
 		else 
 		{
 			// Depth dependent averaging is turned off, just pick the max from the current (previous) single frame.
-			//maxZ<<<_imgHeight, _imgWidth >> > (CubeAt(_cubeImages, previousIdx), _numDepths, _img2D);
-			maxZ << <CudaHelper::getNumBlocks(_waveSize, 512), 512>>>(
-				_cubeImages + previousIdx * _waveSize * _numDepths, _img2D,
-				_numDepths, _waveSize);
-			CudaHelper::synchronize("maxZ");
+			perf.tic("Max Z");
+			maxZ<<<_gridSize1D, _blockSize1D>>>(
+				_cubeImages + previousIdx * _sliceSize * _numDepths, _img2D,
+				_numDepths, _sliceSize);
+			perf.toc();
 		}
 
-		{
-			size_t tempStorageBytes = 0;
-			void* tempStorage = nullptr;
-			int size = _imgWidth * _imgWidth;
+		//{
+		//	size_t tempStorageBytes = 0;
+		//	void* tempStorage = nullptr;
+		//	int size = _imgWidth * _imgWidth;
 
-			float* maxValue = nullptr;
-			CudaHelper::initializeBuffer(maxValue, 1);
+		//	float* maxValue = nullptr;
+		//	CudaHelper::initializeBuffer(maxValue, 1);
 
-			float* minValue = nullptr;
-			CudaHelper::initializeBuffer(minValue, 1);
+		//	float* minValue = nullptr;
+		//	CudaHelper::initializeBuffer(minValue, 1);
 
-			cub::DeviceReduce::Max(tempStorage, tempStorageBytes, _img2D, maxValue, size);
-			cudaMalloc(&tempStorage, tempStorageBytes);
-			cub::DeviceReduce::Max(tempStorage, tempStorageBytes, _img2D, maxValue, size);
-			cub::DeviceReduce::Min(tempStorage, tempStorageBytes, _img2D, minValue, size);
+		//	cub::DeviceReduce::Max(tempStorage, tempStorageBytes, _img2D, maxValue, size);
+		//	cudaMalloc(&tempStorage, tempStorageBytes);
+		//	cub::DeviceReduce::Max(tempStorage, tempStorageBytes, _img2D, maxValue, size);
+		//	cub::DeviceReduce::Min(tempStorage, tempStorageBytes, _img2D, minValue, size);
 
-			glm::uint threadsBlock = 512, numBlocks = CudaHelper::getNumBlocks(size, threadsBlock);
-			normalizeReconstruction<<<numBlocks, threadsBlock>>>(_img2D, size, maxValue, minValue);
+		//	glm::uint threadsBlock = 512, numBlocks = CudaHelper::getNumBlocks(size, threadsBlock);
+		//	normalizeReconstruction<<<numBlocks, threadsBlock>>>(_img2D, size, maxValue, minValue);
 
-			CudaHelper::free(tempStorage);
-			CudaHelper::free(maxValue);
-			CudaHelper::free(minValue);
-		}
+		//	CudaHelper::free(tempStorage);
+		//	CudaHelper::free(maxValue);
+		//	CudaHelper::free(minValue);
+		//}
+
+		CudaHelper::synchronize("");
+		perf.toc();
+		perf.summarize();
 
 		// Copy back to host
 		CudaHelper::checkError(cudaMemcpy(img_2d.data, _img2D, SliceNumPixels() * sizeof(float), cudaMemcpyDeviceToHost));
@@ -436,7 +447,7 @@ float* RSDReconstructor::CubeAt(shared_ptr<float> p, int cube_num) const
 cufftComplex* RSDReconstructor::ImageAt(cufftComplex* p, int depth) const
 {
 	assert(p);
-	return &(p[depth * _depthSize]);
+	return &(p[depth * _frequencyCubeSize]);
 }
 
 void RSDReconstructor::FFTShift(cv::Mat& out)

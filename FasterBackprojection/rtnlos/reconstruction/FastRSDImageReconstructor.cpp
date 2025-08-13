@@ -38,12 +38,12 @@ namespace rtnlos
         });
 
         EnableDepthDependentAveraging(!_disableDDA);
-        _reconstructor.SetNumComponents(sceneParameters._numComponents);
+        _reconstructor.SetNumFrequencies(sceneParameters._numComponents);
         _reconstructor.SetWeights(sceneParameters._weights.data());
         _reconstructor.SetLambdas(sceneParameters._lambdas.data());
         _reconstructor.SetOmegas(sceneParameters._omegas.data());
         _reconstructor.SetSamplingSpace(sceneParameters._samplingSpacing);
-        _reconstructor.SetApertureFullsize(sceneParameters._apertureFullSize.data());
+        _reconstructor.SetApertureFullSize(sceneParameters._apertureFullSize.data());
         _reconstructor.SetImageDimensions(NROWS, NCOLS);
         _reconstructor.PrecalculateRSD();
     }
