@@ -6,8 +6,8 @@
 
 #include "../math.cuh"
 
-// rsdKernel, fills kernel with real and imaginary components of RSD kernel multiplied with expontial harmonic
-inline __global__ void rsdKernel(cufftComplex* kernel, float z_hat2, float mulSquare, glm::uint width, glm::uint height)
+// RsdKernel, fills kernel with real and imaginary components of RSD kernel multiplied with expontial harmonic
+inline __global__ void rsdKernel(cufftComplex* __restrict__ kernel, float z_hat2, float mulSquare, glm::uint width, glm::uint height)
 {
 	const glm::uint y = blockIdx.x * blockDim.x + threadIdx.x, x = blockIdx.y * blockDim.y + threadIdx.y;
 	if (x >= width || y >= height)
@@ -25,7 +25,7 @@ inline __global__ void rsdKernel(cufftComplex* kernel, float z_hat2, float mulSq
 }
 
 // MulSpectrum (not used, this operation has been incorporated into rsdKernel)
-inline __global__ void multiplySpectrumExpHarmonic(cufftComplex* ker1, float omega, float t, glm::uint width, glm::uint height)
+inline __global__ void multiplySpectrumExpHarmonic(cufftComplex* __restrict__ ker1, float omega, float t, glm::uint width, glm::uint height)
 {
 	const glm::uint y = blockIdx.x * blockDim.x + threadIdx.x, x = blockIdx.y * blockDim.y + threadIdx.y;
 	if (x >= width || y >= height)
@@ -39,7 +39,7 @@ inline __global__ void multiplySpectrumExpHarmonic(cufftComplex* ker1, float ome
 
 // Performs element-wise multiplication (convolution) on many images all at once
 inline __global__ void multiplySpectrumMany(
-	const cufftComplex* ker1, const cufftComplex* ker2, cufftComplex* dest,
+	const cufftComplex* __restrict__ ker1, const cufftComplex* __restrict__ ker2, cufftComplex* __restrict__ dest, const float* __restrict__ weights,
 	glm::uint numFrequencies, glm::uint sliceSize)
 {
 	const glm::uint xy = blockIdx.x * blockDim.x + threadIdx.x;
@@ -48,48 +48,13 @@ inline __global__ void multiplySpectrumMany(
 		return;
 
 	glm::uint idx = wave * sliceSize + xy;
-	dest[idx] = cuCmulf(ker1[idx], ker2[idx]);
+	cufftComplex mult = cuCmulf(ker1[idx], ker2[idx]);
+	atomicAdd(&dest[xy].x, weights[wave] * mult.x);
+	atomicAdd(&dest[xy].y, weights[wave] * mult.y);
 }
-
-inline __global__ void multiplySpectrumTiled(
-	const cufftComplex* ker1,
-	const cufftComplex* ker2,
-	cufftComplex* dest,
-	glm::uint numFrequencies,
-	glm::uint sliceSize)
-{
-	extern __shared__ cufftComplex smem[];
-
-	const glm::uint xy = blockIdx.x * blockDim.x + threadIdx.x;
-	if (xy >= sliceSize) return;
-
-	cufftComplex accum;
-
-	// Process waves in tiles
-	for (glm::uint waveTileStart = 0; waveTileStart < numFrequencies; waveTileStart += blockDim.y)
-	{
-		glm::uint wave = waveTileStart + threadIdx.y;
-		if (wave < numFrequencies)
-		{
-			// Load to shared memory (optional if needed)
-			smem[threadIdx.y] = ker1[wave * sliceSize + xy];
-		}
-		__syncthreads();
-
-		if (wave < numFrequencies)
-		{
-			cufftComplex a = smem[threadIdx.y];
-			cufftComplex b = ker2[wave * sliceSize + xy];
-			accum = cuCmulf(a, b);
-			dest[wave * sliceSize + xy] = accum;
-		}
-		__syncthreads();
-	}
-}
-
 
 // Absolute value of a grid of complex numbers
-inline __global__ void abs(const cufftComplex* complex, float* abs, glm::uint sliceSize)
+inline __global__ void abs(const cufftComplex* __restrict__ complex, float* __restrict__ abs, glm::uint sliceSize)
 {
 	const glm::uint tid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (tid >= sliceSize)
@@ -99,7 +64,7 @@ inline __global__ void abs(const cufftComplex* complex, float* abs, glm::uint sl
 }
 
 inline __global__ void addScale(
-	cufftComplex* dest, const cufftComplex* src, const float* weights, 
+	cufftComplex* dest, const cufftComplex* __restrict__ src, const float* __restrict__ weights,
 	glm::uint numFrequencies, glm::uint sliceSize)
 {
 	const glm::uint xy = blockIdx.x * blockDim.x + threadIdx.x;
@@ -113,9 +78,9 @@ inline __global__ void addScale(
 }
 
 inline __global__ void addScaleSM(
-	cufftComplex* dest,
-	const cufftComplex* src,
-	const float* weights,
+	cufftComplex* __restrict__ dest,
+	const cufftComplex* __restrict__ src,
+	const float* __restrict__ weights,
 	glm::uint numFrequencies,
 	glm::uint sliceSize)
 {
@@ -158,7 +123,7 @@ inline __global__ void addScaleSM(
 
 // Depth Dependent Averaging for 1 depth
 inline __global__ void DDA(
-	float* cubeImages, int cur, const float* weights, 
+	float* __restrict__ cubeImages, int cur, const float* __restrict__ weights,
 	glm::uint sliceSize, glm::uint cubeSize, glm::uint numDepths)
 {
 	const glm::uint pixelIdx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -179,7 +144,7 @@ inline __global__ void DDA(
 
 // For a given pixel, find the max z value across all depths of that pixel.
 inline __global__ void maxZ(
-	const float* cube, float* image,
+	const float* __restrict__ cube, float* image,
 	glm::uint width, glm::uint height, glm::uint numDepths, glm::uint sliceSize,
 	glm::uvec2 shift)
 {
@@ -194,44 +159,11 @@ inline __global__ void maxZ(
 	const glm::uint pixelID = ys * width + xs;
 
 	float m = cube[pixelID];
+	#pragma unroll 8
 	for (glm::uint i = 1; i < numDepths; i++)
 		m = fmaxf(m, cube[i * sliceSize + pixelID]); 
 
 	image[y * width + x] = m; // Write to original grid location
-}
-
-// MagnitudeMax
-inline __global__ void MagnitudeMax2(float* cmplx, float* re_out)
-{
-	// dest += scale * src * scale
-
-	const int x_id = threadIdx.x;
-	const int y_id = blockIdx.x;
-	const int x_dim = blockDim.x;
-
-	// 1 load/stores per complex component
-	int idx = y_id * x_dim + x_id;
-	float2 cmplx2 = reinterpret_cast<float2*>(cmplx)[idx];
-	float m2 = cmplx2.x * cmplx2.x + cmplx2.y * cmplx2.y;
-	float re = re_out[idx];
-	re_out[idx] = (m2 > re) ? m2 : re;
-
-	// 2 load/stores per complex component
-	//int idx = y_id * x_dim + x_id;
-	//float m2 = cmplx[idx * 2] * cmplx[idx * 2] + cmplx[idx * 2 + 1] * cmplx[idx * 2 + 1];
-	//re_out[idx] = (m2 > re_out[idx]) ? m2 : re_out[idx];
-}
-
-// Sqrt
-inline __global__ void Sqrt(float* m)
-{
-	// m = sqrt(m)
-	const int x_id = threadIdx.x;
-	const int y_id = blockIdx.x;
-	const int x_dim = blockDim.x;
-
-	int idx = y_id * x_dim + x_id;
-	m[idx] = sqrt(m[idx]);
 }
 
 

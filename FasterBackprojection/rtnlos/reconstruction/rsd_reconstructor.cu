@@ -324,13 +324,7 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 		multiplySpectrumMany<<<_gridSize2D_freq, _blockSize2D_freq, 0, _cudaStreams[depthIndex]>>>(
 			_uTotalFFTs,
 			_rsd + depthIndex * _frequencyCubeSize,
-			_uOut + depthIndex * _frequencyCubeSize,
-			_numFrequencies, _sliceSize);
-
-		// For-loop summing vs faster than parallel reduction kernel (~0.655ms vs ~1.0-1.3ms)
-		addScale<<<_gridSize2D_freq, _blockSize2D_freq, 0, _cudaStreams[depthIndex]>>>(
 			_uSum + depthIndex * _sliceSize,
-			_uOut + depthIndex * _frequencyCubeSize,
 			_dWeights,
 			_numFrequencies, _sliceSize);
 
@@ -356,26 +350,20 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 		if (_useDDA) 
 		{
 			// perform depth dependent averaging across the 3 stored frames
-			perf.tic("DDA");
 			DDA<<<_gridSize2D_depth, _blockSize2D_depth>>>(
 				_cubeImages, previousIdx, _ddaWeights,
 				_sliceSize, _sliceSize * _numDepths, _numDepths);
-			perf.toc();
 
-			perf.tic("Max Z");
 			maxZ<<<_gridSize2D_pix, _blockSize2D_pix>>>(
 				_cubeImages + 3 * _sliceSize * _numDepths, _img2D,
 				_imgWidth, _imgHeight, _numDepths, _sliceSize, glm::uvec2(_imgWidth / 2, _imgHeight / 2));
-			perf.toc();
 		}
 		else 
 		{
 			// Depth dependent averaging is turned off, just pick the max from the current (previous) single frame.
-			perf.tic("Max Z");
 			maxZ<<<_gridSize2D_pix, _blockSize2D_pix>>>(
 				_cubeImages + previousIdx * _sliceSize * _numDepths, _img2D,
 				_imgWidth, _imgHeight, _numDepths, _sliceSize, glm::uvec2(_imgWidth / 2, _imgHeight / 2));
-			perf.toc();
 		}
 
 		{
