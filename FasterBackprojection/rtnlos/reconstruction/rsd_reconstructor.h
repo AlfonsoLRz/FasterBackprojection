@@ -47,13 +47,17 @@ class RSDReconstructor
 	float*						_cubeImages;
 	float*						_ddaWeights;
 	float*						_dWeights;
+	float*						_maxValue, * _minValue;
+
+	void*						_tempStorage;		
+	size_t						_tempStorageBytes;
 
 	cufftHandle					_fftPlan2D;
 	std::vector<cudaStream_t>	_cudaStreams;
 
 	glm::uint					_blockSize1D, _gridSize1D;
-	dim3						_blockSize2D_freq, _blockSize2D_depth;
-	dim3						_gridSize2D_freq, _gridSize2D_depth;
+	dim3						_blockSize2D_freq, _blockSize2D_depth, _blockSize2D_pix;
+	dim3						_gridSize2D_freq, _gridSize2D_depth, _gridSize2D_pix;
 
 public:
 	RSDReconstructor();

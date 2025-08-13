@@ -166,36 +166,38 @@ inline __global__ void DDA(
 	if (pixelIdx >= sliceSize || depth >= numDepths)
 		return;
 
-	float* dst = &cubeImages[cubeSize * 3 + sliceSize * depth + pixelIdx];
-
 	// For the current depth slice, fill cubeImages[3] with the weighted sums of cubeImages[0], [1] and [2]
-	*dst = 0.f;
+	float acc = 0.f;
 	for (int i = 0; i < 3; i++) 
 	{
-		int cubeIdx = (cur - 1 + i) % 3;
-		if (cubeIdx < 0)
-			cubeIdx += 3;
-
-		float src = cubeImages[cubeSize * cubeIdx + sliceSize * depth + pixelIdx]; 
-		float wt = weights[numDepths * i + depth];
-		*dst += wt * src;
+		int cubeIdx = (cur - 1 + i + 3) % 3;
+		acc += weights[numDepths * i + depth] * cubeImages[cubeSize * cubeIdx + sliceSize * depth + pixelIdx];
 	}
+
+	cubeImages[cubeSize * 3 + sliceSize * depth + pixelIdx] = acc;
 }
 
 // For a given pixel, find the max z value across all depths of that pixel.
 inline __global__ void maxZ(
 	const float* cube, float* image,
-	glm::uint numDepths, glm::uint sliceSize)
+	glm::uint width, glm::uint height, glm::uint numDepths, glm::uint sliceSize,
+	glm::uvec2 shift)
 {
-	const glm::uint pixelID = blockIdx.x * blockDim.x + threadIdx.x;
-	if (pixelID >= sliceSize) 
+	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x;
+	const glm::uint y = blockIdx.y * blockDim.y + threadIdx.y;
+	if (x >= width || y >= height)
 		return;
+
+	// Circular shift
+	const glm::uint xs = (x + shift.x) % width;
+	const glm::uint ys = (y + shift.y) % height;
+	const glm::uint pixelID = ys * width + xs;
 
 	float m = cube[pixelID];
 	for (glm::uint i = 1; i < numDepths; i++)
-		m = fmaxf(m, cube[i * sliceSize + pixelID]); // fmaxf preferred in CUDA
+		m = fmaxf(m, cube[i * sliceSize + pixelID]); 
 
-	image[pixelID] = m;
+	image[y * width + x] = m; // Write to original grid location
 }
 
 // MagnitudeMax
