@@ -373,18 +373,18 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 			normalizeReconstruction<<<_gridSize1D, _blockSize1D>>>(_img2D, _sliceSize, _maxValue, _minValue);
 		}
 
-		ViewportSurface* surface = ViewportSurface::getInstance();
-		TextureResourceGPU* texture;
-		do
-		{
-			texture = surface->acquireDrawSurface();
-		} while (!texture);
+		//ViewportSurface* surface = ViewportSurface::getInstance();
+		//float4* texture;
+		//do
+		//{
+		//	texture = surface->acquireDrawSurface();
+		//} while (!texture);
 
-		// Write result into cudaSurface
-		writeImage<<<_gridSize1D, _blockSize1D>>>(_img2D, _imgWidth, _sliceSize, texture->getSurfaceObject());
+		//// Write result into cudaSurface
+		//writeImage<<<_gridSize1D, _blockSize1D>>>(_img2D, _sliceSize, texture);
 
-		CudaHelper::synchronize("");
-		surface->present();
+		//CudaHelper::synchronize("");
+		//surface->present();
 
 		perf.toc();
 		perf.summarize();

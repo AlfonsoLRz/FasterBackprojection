@@ -191,3 +191,4 @@ inline __global__ void multiplyTransformTransposeInv(
         mult[getKernelIdx(x, y, t, dataResolution)] = sum;
     }
 }
+

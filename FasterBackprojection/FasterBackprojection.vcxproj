@@ -126,6 +126,7 @@
     <ClInclude Include="CudaContext.h" />
     <ClInclude Include="CudaHelper.h" />
     <ClInclude Include="CudaPerf.h" />
+    <ClInclude Include="CudaRenderer.h" />
     <ClInclude Include="DrawCube.h" />
     <ClInclude Include="DrawEllipsoids.h" />
     <ClInclude Include="DrawPointCloud.h" />
@@ -164,6 +165,7 @@
     <ClInclude Include="RandomUtilities.h" />
     <ClInclude Include="random_kernels.cuh" />
     <ClInclude Include="Reconstruction.h" />
+    <ClInclude Include="renderer.cuh" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="RenderingShader.h" />
     <ClInclude Include="rtnlos\acquisition\RawSensorDataReader.h" />
@@ -228,6 +230,9 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="CudaPerf.cpp" />
+    <CudaCompile Include="CudaRenderer.cu">
+      <FileType>Document</FileType>
+    </CudaCompile>
     <ClCompile Include="DrawCube.cpp" />
     <ClCompile Include="DrawEllipsoids.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
@@ -294,6 +299,7 @@
     <ClCompile Include="Renderer.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+      <FileType>Document</FileType>
     </ClCompile>
     <ClCompile Include="RenderingShader.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>

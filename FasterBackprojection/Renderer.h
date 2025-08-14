@@ -1,12 +1,12 @@
 #pragma once
 
 #include "ApplicationState.h"
-#include "InputManager.h"
-#include "RenderingShader.h"
+#include "CudaRenderer.h"
 #include "SceneContent.h"
 #include "Singleton.h"
 #include "Texture.h"
 
+class RenderingShader;
 class Vao;
 class ViewportSurface;
 
@@ -16,12 +16,11 @@ class Renderer: public Singleton<Renderer>, public ResizeListener, public Screen
 
 private:
 	ApplicationState	_appState;
+	CudaRenderer		_cudaRenderer;
 	bool				_changedWindowSize;
 	SceneContent		_content;
 	RenderingShader*	_cubeShading;
 	glm::uvec2			_newSize;
-	RenderingShader*	_quadShader;
-	Vao*				_quadVAO;
 
 private:
 	static void bindTexture(GLuint textureID, const ShaderProgram* shader, const std::string& uniformName, unsigned offset);

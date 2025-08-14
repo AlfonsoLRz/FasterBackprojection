@@ -279,6 +279,12 @@
     <ClInclude Include="ViewportSurface.h">
       <Filter>header</Filter>
     </ClInclude>
+    <ClInclude Include="renderer.cuh">
+      <Filter>resources\cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="CudaRenderer.h">
+      <Filter>header</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Window.cpp">
@@ -312,9 +318,6 @@
       <Filter>source</Filter>
     </ClCompile>
     <ClCompile Include="RenderingShader.cpp">
-      <Filter>source</Filter>
-    </ClCompile>
-    <ClCompile Include="Renderer.cpp">
       <Filter>source</Filter>
     </ClCompile>
     <ClCompile Include="Model3D.cpp">
@@ -419,6 +422,9 @@
     <ClCompile Include="rtnlos\binning\FrameHistogramBuilder.cpp">
       <Filter>rt-nlos\source</Filter>
     </ClCompile>
+    <ClCompile Include="Renderer.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="GpuStructs.cu">
@@ -450,6 +456,9 @@
     </CudaCompile>
     <CudaCompile Include="rtnlos\reconstruction\rsd_reconstructor.cu">
       <Filter>rt-nlos\headers</Filter>
+    </CudaCompile>
+    <CudaCompile Include="CudaRenderer.cu">
+      <Filter>source</Filter>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>

@@ -43,22 +43,25 @@ public:
     GLuint                  _id = 0;
     cudaGraphicsResource*   _cudaResource = nullptr;
     cudaSurfaceObject_t     _surfaceObj = 0;
-    GLuint                  _width, _height;
+    GLuint                  _width = 0, _height = 0;
     bool                    _isMapped = false;
 
 public:
-    TextureResourceGPU(GLuint width, GLuint height) : _width(width), _height(height) {}
+    TextureResourceGPU() = default;
     ~TextureResourceGPU() { release(); }
 
-    void init(unsigned int flags = cudaGraphicsRegisterFlagsWriteDiscard)
+    void init(GLuint width, GLuint height, cudaGraphicsRegisterFlags flags = cudaGraphicsRegisterFlagsWriteDiscard)
     {
+		_width = width;
+		_height = height;
+
         glGenTextures(1, &_id);
         glBindTexture(GL_TEXTURE_2D, _id);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _width, _height, 0, GL_RGBA, GL_FLOAT, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-        // Direct texture registration (optimal)
+        // Direct texture registration
         CudaHelper::checkError(cudaGraphicsGLRegisterImage(&_cudaResource, _id, GL_TEXTURE_2D, flags | cudaGraphicsRegisterFlagsSurfaceLoadStore));
     }
 
@@ -146,9 +149,7 @@ public:
         if (width == _width && height == _height) return;
 
         release();
-        _width = width;
-        _height = height;
-        init();
+        init(width, height);
     }
 
 private:

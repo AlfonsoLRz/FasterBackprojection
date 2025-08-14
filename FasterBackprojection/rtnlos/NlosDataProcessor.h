@@ -2,7 +2,6 @@
 
 #include "../stdafx.h"
 #include "../InputManager.h"
-#include <typeinfo>
 
 namespace rtnlos
 {
