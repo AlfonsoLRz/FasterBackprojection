@@ -12,7 +12,6 @@
 #include "../../transient_postprocessing.cuh"
 #include "rsd_cuda_kernels.h"
 #include "../../CudaPerf.h"
-#include "../../ViewportSurface.h"
 
 using namespace std;
 
@@ -191,12 +190,12 @@ void RSDReconstructor::PrecalculateRSD()
 		float time = (depth + _info.d_offset) / LIGHT_SPEED;
 
 		std::cout << "  i=" << i << " depth_idx=" << depthIdx << " depth=" << depth << std::endl;
-		for (int waveIdx = 0; waveIdx < _numFrequencies; waveIdx++) 
+		for (int wave_num = 0; wave_num < _numFrequencies; wave_num++) 
 		{
-			float lambda = _lambdas[waveIdx];
-			float omega = _omegas[waveIdx];
+			float lambda = _lambdas[wave_num];
+			float omega = _omegas[wave_num];
 
-			cufftComplex* kernelPtr = _rsd + depthIdx * _frequencyCubeSize + waveIdx * _sliceSize;
+			cufftComplex* kernelPtr = _rsd + depthIdx * _frequencyCubeSize + wave_num * _sliceSize;
 			RSDKernelConvolution(kernelPtr, _fftPlan2D, lambda, omega, depth, time);
 		}
 
@@ -373,19 +372,7 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 			normalizeReconstruction<<<_gridSize1D, _blockSize1D>>>(_img2D, _sliceSize, _maxValue, _minValue);
 		}
 
-		ViewportSurface* surface = ViewportSurface::getInstance();
-		TextureResourceGPU* texture;
-		do
-		{
-			texture = surface->acquireDrawSurface();
-		} while (!texture);
-
-		// Write result into cudaSurface
-		writeImage<<<_gridSize1D, _blockSize1D>>>(_img2D, _imgWidth, _sliceSize, texture->getSurfaceObject());
-
 		CudaHelper::synchronize("");
-		surface->present();
-
 		perf.toc();
 		perf.summarize();
 

@@ -166,14 +166,4 @@ inline __global__ void maxZ(
 	image[y * width + x] = m; // Write to original grid location
 }
 
-inline __global__ void writeImage(const float* __restrict__ image, glm::uint width, glm::uint numPixels, cudaSurfaceObject_t surfaceObj)
-{
-	const glm::uint tid = blockIdx.x * blockDim.x + threadIdx.x;
-	if (tid >= numPixels)
-		return;
 
-	float gray = 1.0f;
-	const glm::uint x = tid % width;
-	const glm::uint y = tid / width;
-	surf2Dwrite(make_float4(gray, gray, gray, 1.0f), surfaceObj, x * sizeof(float4), y);
-}

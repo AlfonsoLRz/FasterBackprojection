@@ -28,5 +28,5 @@ public:
 
 	void addNewCamera(ApplicationState* appState);
 	void addNewModel(Model3D* model);
-	void buildScenario();
+	void buildScenario(cudaSurfaceObject_t cudaSurface);
 };

@@ -276,9 +276,6 @@
     <ClInclude Include="rtnlos\binning\FrameHistogramBuilder.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
-    <ClInclude Include="ViewportSurface.h">
-      <Filter>header</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Window.cpp">

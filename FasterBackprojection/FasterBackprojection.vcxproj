@@ -194,7 +194,6 @@
     <ClInclude Include="TriangleMesh.h" />
     <ClInclude Include="UnsignedImage.h" />
     <ClInclude Include="Vao.h" />
-    <ClInclude Include="ViewportSurface.h" />
     <ClInclude Include="Window.h" />
     <CudaCompile Include="rtnlos\reconstruction\rsd_reconstructor.cu" />
   </ItemGroup>

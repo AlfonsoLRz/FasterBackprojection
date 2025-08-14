@@ -4,7 +4,7 @@
 namespace rtnlos
 {
 	template<int NROWS, int NCOLS, int NFREQ>
-	NlosStreamingEngine<NROWS, NCOLS, NFREQ>::NlosStreamingEngine(const std::string& dataPath, const std::string& configPath)
+	NlosStreamingEngine<NROWS, NCOLS, NFREQ>::NlosStreamingEngine(const std::string& dataPath, const std::string& configPath, cudaSurfaceObject_t cudaSurface)
 		: _reader(dataPath, _rawSensorDataQueue)
 		, _parser(_rawSensorDataQueue, _parsedSensorDataQueue)
 		, _binner(_parsedSensorDataQueue, _frameHistogramDataQueue)
