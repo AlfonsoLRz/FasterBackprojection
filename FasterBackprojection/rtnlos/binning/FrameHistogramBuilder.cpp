@@ -10,11 +10,11 @@ namespace rtnlos
     {
         if (sceneParameters._freMask.size() != NFREQ) 
             throw std::logic_error(
-                fmt::format("Incorrect number of frequencies. Try rebuilding exe with NUMBER_OF_FREQUENCIES = {} in compile_time_constants.h",
+                fmt::format("Incorrect number of frequencies. Try rebuilding exe with NUMBER_OF_SPAD_FREQUENCIES = {} in compile_time_constants.h",
                 sceneParameters._freMask.size()));
 
         if (sceneParameters._apertureWidth * sceneParameters._apertureHeight != NINDICES)
-            throw std::logic_error(fmt::format("Incorrect grid dimension. Try rebuilding exe with NUMBER_OF_ROWS={} and NUMBER_OF_COLS={} in compile_time_constants.h",
+            throw std::logic_error(fmt::format("Incorrect grid dimension. Try rebuilding exe with NUMBER_OF_SPAD_ROWS={} and NUMBER_OF_SPAD_COLS={} in compile_time_constants.h",
                 sceneParameters._apertureWidth, sceneParameters._apertureHeight));
 
         const float downsamplingMultiplier = 1.f / (1 << sceneParameters._downsamplingRate);
@@ -139,5 +139,5 @@ namespace rtnlos
     }
 
     // Explicit instantiation
-    template class FrameHistogramBuilder<NUMBER_OF_ROWS * NUMBER_OF_COLS, NUMBER_OF_FREQUENCIES>;
+    template class FrameHistogramBuilder<NUMBER_OF_SPAD_ROWS * NUMBER_OF_SPAD_COLS, NUMBER_OF_SPAD_FREQUENCIES>;
 }

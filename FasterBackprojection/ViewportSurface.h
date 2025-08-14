@@ -4,20 +4,17 @@
 #include "Singleton.h"
 #include "Texture.h"
 
-class ViewportSurface : public Singleton<ViewportSurface>
+class ViewportSurface 
 {
-	friend class Singleton<ViewportSurface>;
-
 private:
     glm::uint                   _width = 0, _height = 0, _numSurfaces = 0;
     std::vector<float4*>        _surfaces;
     std::queue<glm::uint>       _freeQueue, _presentQueue;
     glm::uint                   _drawIndex = 0, _presentIndex = 0;
 
-private:
+public:
     ViewportSurface() = default;
 
-public:
     ~ViewportSurface()
 	{
         destroySurfaces();

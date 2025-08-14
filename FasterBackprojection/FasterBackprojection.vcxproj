@@ -173,7 +173,7 @@
     <ClInclude Include="rtnlos\data\SensorData.h" />
     <ClInclude Include="rtnlos\data\SceneParameters.h" />
     <ClInclude Include="rtnlos\NlosDataProcessor.h" />
-    <ClInclude Include="rtnlos\NlosStreamingEngine.h" />
+    <ClInclude Include="rtnlos\SPADStreamingEngine.h" />
     <ClInclude Include="rtnlos\parsing\RawSensorDataParser.h" />
     <ClInclude Include="rtnlos\reconstruction\FastRSDImageReconstructor.h" />
     <ClInclude Include="rtnlos\reconstruction\rsd_cuda_kernels.h" />
@@ -185,6 +185,7 @@
     <ClInclude Include="Singleton.h" />
     <ClInclude Include="Sphere.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="StreamingEngine.h" />
     <ClInclude Include="TalHDF5Reader.h" />
     <ClInclude Include="Texture.h" />
     <ClInclude Include="TransientFileReader.h" />
@@ -317,7 +318,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="rtnlos\NlosStreamingEngine.cpp">
+    <ClCompile Include="rtnlos\SPADStreamingEngine.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>

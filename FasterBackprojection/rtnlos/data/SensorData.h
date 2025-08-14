@@ -4,9 +4,9 @@
 #include "opencv4/opencv2/core.hpp"
 #include "util/SafeQueue.h"
 
-#define NUMBER_OF_ROWS 190
-#define NUMBER_OF_COLS 190
-#define NUMBER_OF_FREQUENCIES 208
+#define NUMBER_OF_SPAD_ROWS 190
+#define NUMBER_OF_SPAD_COLS 190
+#define NUMBER_OF_SPAD_FREQUENCIES 208
 #define RAW_SENSOR_READ_BLOCK_SIZE 131072 // copied from TTREADMAX
 
 namespace rtnlos
@@ -95,8 +95,8 @@ namespace rtnlos
 	};
 
 	using RawSensorDataType = RawSensorData<RAW_SENSOR_READ_BLOCK_SIZE>;
-	using FrameHistogramDataType = FrameHistogramData<NUMBER_OF_ROWS* NUMBER_OF_COLS, NUMBER_OF_FREQUENCIES>;
-	using ReconstructedImageDataType = ReconstructedImageData<NUMBER_OF_ROWS, NUMBER_OF_COLS>;
+	using FrameHistogramDataType = FrameHistogramData<NUMBER_OF_SPAD_ROWS* NUMBER_OF_SPAD_COLS, NUMBER_OF_SPAD_FREQUENCIES>;
+	using ReconstructedImageDataType = ReconstructedImageData<NUMBER_OF_SPAD_ROWS, NUMBER_OF_SPAD_COLS>;
 
 	using RawSensorDataPtr = std::shared_ptr<RawSensorDataType>;
 	using ParsedSensorDataPtr = std::shared_ptr<ParsedSensorData>;

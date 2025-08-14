@@ -5,6 +5,8 @@
 #include "NlosDataProcessor.h"
 #include "rsd_reconstructor.h"
 
+class ViewportSurface;
+
 namespace rtnlos
 {
     // Stage 3: process the Fourier domain histogram into a reconstructed 2D Image using FastRSD.
@@ -12,22 +14,21 @@ namespace rtnlos
 	class FastRSDImageReconstructor : public NlosDataProcessor
 	{
     private:
-        bool                            _disableDDA;       // If true, do NOT use depth-dependent averaging.
-        FrameHistogramDataQueue&        _incomingFrames;
-        ReconstructedImageDataQueue&    _outgoingImages;
+        bool                            _enableDDA;        // If true, do NOT use depth-dependent averaging
+        glm::vec2                       _bandpassInterval;
 
+        FrameHistogramDataQueue&        _incomingFrames;
         RSDReconstructor                _reconstructor;
+		ViewportSurface*                _viewportSurface;    // The viewport surface to draw the reconstructed image into
 
     public:
-        FastRSDImageReconstructor(FrameHistogramDataQueue& incoming, ReconstructedImageDataQueue& outgoing)
-            : _disableDDA(false)
-            , _incomingFrames(incoming)
-            , _outgoingImages(outgoing)
-        {}
+        explicit FastRSDImageReconstructor(FrameHistogramDataQueue& incoming)
+	        : _enableDDA(true), _bandpassInterval(0.1f, 0.9f), _incomingFrames(incoming), _viewportSurface(nullptr)
+        {
+        }
 
-        void EnableDepthDependentAveraging(bool enable);
         void DoWork();
-        void Initialize(const SceneParameters& sceneParameters);
+        void Initialize(const SceneParameters& sceneParameters, ViewportSurface* viewportSurface);
         void Stop() const;
 
     protected:

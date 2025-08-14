@@ -31,7 +31,6 @@ public:
 	virtual ~Renderer();
 
 	void createCamera() const;
-	void createModels();
 	void prepareOpenGL(uint16_t width, uint16_t height);
 	void render();
 	void resizeEvent(uint16_t width, uint16_t height) override;

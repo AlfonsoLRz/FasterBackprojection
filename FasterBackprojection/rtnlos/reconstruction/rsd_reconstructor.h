@@ -1,12 +1,10 @@
 ﻿#pragma once
 
-#include <vector>
-#include <memory>
-#include <opencv4/opencv2/core.hpp>
-#include <cuda_runtime.h>
 #include <cufft.h>
+#include <opencv4/opencv2/core.hpp>
 #include <opencv4/opencv2/core/mat.hpp>
 
+class ViewportSurface;
 using namespace std;
 
 // Contains info about a data set
@@ -36,14 +34,14 @@ class RSDReconstructor
 	glm::uint					_sliceSize, _frequencyCubeSize;
 	bool						_precalculated;
 	glm::uint					_currentCount;
+	glm::vec2					_bandpassInterval;
 
 	// Device pointers
-	cufftComplex* 				_imgData;
-	float*						_img2D;
+	cufftComplex* 				_imageData;
+	float*						_image2D;
 	cufftComplex* 				_rsd;
-	cufftComplex*				_uTotalFFTs;
-	cufftComplex*				_uOut;
-	cufftComplex*				_uSum;
+	cufftComplex*				_imageFFTs;
+	cufftComplex*				_imageConvolution;
 	float*						_cubeImages;
 	float*						_ddaWeights;
 	float*						_dWeights;
@@ -74,6 +72,7 @@ public:
 	void SetSamplingSpace(const float sampling_space);
 	void SetApertureFullSize(const float* apt);
 	void SetImageDimensions(int width, int height);
+	void SetBandpassInterval(float min, float max); 
 
 	// Call this once after calling the above methods
 	void PrecalculateRSD(); // Allocates all necessary GPU data, precalculates RSD. Basically sets everything up.
@@ -85,7 +84,7 @@ public:
 	void SetFFTData(const cufftComplex* data) const;
 	
 	// Call after each time full set of images has been added
-	void ReconstructImage(cv::Mat& img_out);
+	void ReconstructImage(ViewportSurface* viewportSurface);
 
 	// Query
 	void DumpInfo() const;
@@ -96,10 +95,5 @@ private:
 
 	void RSDKernelConvolution(cufftComplex* dKernel, cufftHandle fftPlan, const float lambda, const float omega, const float depth, const float t) const;
 
-	float*			CubeAt(shared_ptr<float> p, int cube_num) const; 
-	cufftComplex*	ImageAt(cufftComplex* p, int depth) const;		// Assumes complex
-
-	void		FFTShift(cv::Mat& out);
-	static void	CircShift(cv::Mat& out, const cv::Point& delta);
 	void		PrecalculateDDAWeights();
 };

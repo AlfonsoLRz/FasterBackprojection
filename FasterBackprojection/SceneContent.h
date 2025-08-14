@@ -2,25 +2,18 @@
 
 #include "AABB.h"
 #include "ApplicationState.h"
-#include "NlosStreamingEngine.h"
+#include "SPADStreamingEngine.h"
 
 class Camera;
 class Model3D;
 
 class SceneContent
 {
-	using ReconstructionEngine = rtnlos::NlosStreamingEngine<NUMBER_OF_ROWS, NUMBER_OF_COLS, NUMBER_OF_FREQUENCIES>;
 public:
 	std::vector<std::unique_ptr<Camera>>	_camera;
 	std::vector<std::unique_ptr<Model3D>>	_model;
+	rtnlos::ReconstructionEngine*			_reconstructionEngine;
 	AABB									_sceneAABB;
-
-	glm::uint								_numVertices;
-	glm::uint								_numMeshes;
-	glm::uint								_numTextures;
-	glm::uint								_numTriangles;
-
-	ReconstructionEngine*					_reconstructionEngine;
 
 public:
 	SceneContent();

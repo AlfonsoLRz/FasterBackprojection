@@ -187,6 +187,6 @@ namespace rtnlos
     }
 
     // Explicit instantiation
-    template class RawSensorDataParser<NUMBER_OF_ROWS, NUMBER_OF_COLS>;
+    template class RawSensorDataParser<NUMBER_OF_SPAD_ROWS, NUMBER_OF_SPAD_COLS>;
 }
 

@@ -1,15 +1,10 @@
 #include "stdafx.h"
 #include "FastRSDImageReconstructor.h"
 
+#include "../../ViewportSurface.h"
+
 namespace rtnlos
 {
-    template<int NROWS, int NCOLS, int NFREQ>
-    void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::EnableDepthDependentAveraging(bool enable)
-    {
-        //spdlog::info("Depth Dependent Averaging {}", enable ? "ENABLED" : "DISABLED");
-        _reconstructor.EnableDepthDependentAveraging(enable);
-    }
-
     template <int NROWS, int NCOLS, int NFREQ>
     void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::DoWork()
     {
@@ -20,11 +15,10 @@ namespace rtnlos
     void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Stop() const
     {
         _incomingFrames.Abort();
-        _outgoingImages.Abort();
     }
 
     template<int NROWS, int NCOLS, int NFREQ>
-    void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Initialize(const SceneParameters& sceneParameters)
+    void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Initialize(const SceneParameters& sceneParameters, ViewportSurface* viewportSurface)
     {
         _reconstructor.Initialize(DatasetInfo{
             "hidden_scene",
@@ -36,7 +30,8 @@ namespace rtnlos
             sceneParameters._depthOffset
         });
 
-        EnableDepthDependentAveraging(!_disableDDA);
+        _reconstructor.EnableDepthDependentAveraging(_enableDDA);
+        _reconstructor.SetBandpassInterval(_bandpassInterval.x, _bandpassInterval.y);
         _reconstructor.SetNumFrequencies(sceneParameters._numComponents);
         _reconstructor.SetWeights(sceneParameters._weights.data());
         _reconstructor.SetLambdas(sceneParameters._lambdas.data());
@@ -44,7 +39,8 @@ namespace rtnlos
         _reconstructor.SetSamplingSpace(sceneParameters._samplingSpacing);
         _reconstructor.SetApertureFullSize(sceneParameters._apertureFullSize.data());
         _reconstructor.SetImageDimensions(NROWS, NCOLS);
-        _reconstructor.PrecalculateRSD();
+
+		_viewportSurface = viewportSurface;
     }
 
     // This worker should receive Fourier domain histogram for one frame from the FrameHistogramDataQueue
@@ -54,6 +50,10 @@ namespace rtnlos
     template<int NROWS, int NCOLS, int NFREQ>
     void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Work() {
 
+        cudaSetDevice(0); // or whatever device you're using
+        cudaFree(nullptr);
+
+        _reconstructor.PrecalculateRSD();
         _reconstructor.EnableCubeGeneration(false);
 
         FrameHistogramDataPtr histData;
@@ -77,12 +77,12 @@ namespace rtnlos
             // Reconstruct the FDH into a 2D Image, pushing to the outgoing queue for display
             auto image = std::make_shared<ReconstructedImageDataType>(histData->_frameNumber);
             _reconstructor.SetFFTData(histData->_histogram);
-            _reconstructor.ReconstructImage(image->_image);
+            _reconstructor.ReconstructImage(_viewportSurface);
         }
 
 		spdlog::warn("FastRSDImageReconstructor worker thread stopped");
     }
 
     // Explicit instantiation
-    template class FastRSDImageReconstructor<NUMBER_OF_ROWS, NUMBER_OF_COLS, NUMBER_OF_FREQUENCIES>;
+    template class FastRSDImageReconstructor<NUMBER_OF_SPAD_ROWS, NUMBER_OF_SPAD_COLS, NUMBER_OF_SPAD_FREQUENCIES>;
 }

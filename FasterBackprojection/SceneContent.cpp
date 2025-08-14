@@ -6,7 +6,6 @@
 #include "Model3D.h"
 #include "NLosData.h"
 #include "NLosDataVisualizer.h"
-#include "NlosStreamingEngine.h"
 
 // ----------------------------- BUILD YOUR SCENARIO HERE -----------------------------------
 
@@ -36,13 +35,13 @@ void SceneContent::buildScenario()
 	//Laser::reconstruct(transientVoxels, transientParameters);
 
 	// Open the streaming engine
-	_reconstructionEngine = new ReconstructionEngine(
-		"C:/Datasets/rt-nlos/data_raw_NGC_nlosbox1.out", "C:/Datasets/rt-nlos/sample_parameters.yml"
+	_reconstructionEngine = new rtnlos::ReconstructionEngine(
+		"C:/Datasets/rt-nlos/data_raw_NGC_man.out", "C:/Datasets/rt-nlos/sample_parameters.yml"
 	);
 	_reconstructionEngine->Start();
 }
 
-SceneContent::SceneContent() : _numVertices(0), _numMeshes(0), _numTextures(0), _numTriangles(0), _reconstructionEngine(nullptr)
+SceneContent::SceneContent() : _reconstructionEngine(nullptr)
 {
 }
 

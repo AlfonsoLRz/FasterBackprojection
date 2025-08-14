@@ -31,8 +31,8 @@ RSDReconstructor::RSDReconstructor()
 	  , _diffTopLeft(0), _diffLowerRight(0), _sliceSize(0)
 	  , _frequencyCubeSize(0), _precalculated(false)
 	  , _currentCount(0)
-	  , _imgData(nullptr), _img2D(nullptr), _rsd(nullptr), _uTotalFFTs(nullptr)
-	  , _uOut(nullptr), _uSum(nullptr), _cubeImages(nullptr), _ddaWeights(nullptr), _dWeights(nullptr)
+	  , _imageData(nullptr), _image2D(nullptr), _rsd(nullptr), _imageFFTs(nullptr)
+	  , _imageConvolution(nullptr), _cubeImages(nullptr), _ddaWeights(nullptr), _dWeights(nullptr)
 	  , _maxValue(nullptr), _minValue(nullptr), _tempStorage(nullptr), _tempStorageBytes(0), _fftPlan2D(0)
 	  , _blockSize1D(0), _gridSize1D(0)
 {
@@ -40,12 +40,11 @@ RSDReconstructor::RSDReconstructor()
 
 RSDReconstructor::~RSDReconstructor()
 {
-	CudaHelper::free(_imgData);
-	CudaHelper::free(_img2D);
+	CudaHelper::free(_imageData);
+	CudaHelper::free(_image2D);
 	CudaHelper::free(_rsd);
-	CudaHelper::free(_uTotalFFTs);
-	CudaHelper::free(_uOut);
-	CudaHelper::free(_uSum);
+	CudaHelper::free(_imageFFTs);
+	CudaHelper::free(_imageConvolution);
 	CudaHelper::free(_cubeImages);
 	CudaHelper::free(_ddaWeights);
 	CudaHelper::free(_dWeights);
@@ -149,7 +148,12 @@ void RSDReconstructor::SetImageDimensions(int width, int height)
 	_apertureDst[1] = static_cast<float>(_imgWidth) * dx;
 
 	// Allocate storage on gpu for images data
-	CudaHelper::initializeBuffer(_imgData, SliceNumPixels() * _numFrequencies);
+	CudaHelper::initializeBuffer(_imageData, SliceNumPixels() * _numFrequencies);
+}
+
+void RSDReconstructor::SetBandpassInterval(float min, float max)
+{
+	_bandpassInterval = glm::vec2(min, max);
 }
 
 void RSDReconstructor::SetFFTData(const cufftComplex* data) const
@@ -157,7 +161,7 @@ void RSDReconstructor::SetFFTData(const cufftComplex* data) const
 	assert(_numFrequencies);
 	assert(_imgWidth != 0 && _imgHeight != 0);
 
-	cudaMemcpy(_imgData, data, static_cast<size_t>(_numFrequencies) * SliceNumPixels() * sizeof(cufftComplex), cudaMemcpyHostToDevice);
+	cudaMemcpy(_imageData, data, static_cast<size_t>(_numFrequencies) * SliceNumPixels() * sizeof(cufftComplex), cudaMemcpyHostToDevice);
 }
 
 void RSDReconstructor::DumpInfo() const
@@ -205,18 +209,17 @@ void RSDReconstructor::PrecalculateRSD()
 	assert(i == _numDepths);
 
 	// Now allocate all the storage that the ReconstructImage() function will need
-	CudaHelper::initializeBuffer(_img2D, SliceNumPixels());
+	CudaHelper::initializeBuffer(_image2D, SliceNumPixels());
 	CudaHelper::initializeBuffer(_dWeights, _weights.size(), _weights.data());
 
 	// Allocate intermediate storage used for ffts during reconstruction
-	CudaHelper::initializeBuffer(_uTotalFFTs, SliceNumPixels() * _numFrequencies);
-	CudaHelper::initializeBuffer(_uOut, SliceNumPixels() * _numFrequencies * _numDepths);
-	CudaHelper::initializeBuffer(_uSum, SliceNumPixels() * _numDepths);
+	CudaHelper::initializeBuffer(_imageFFTs, SliceNumPixels() * _numFrequencies);
+	CudaHelper::initializeBuffer(_imageConvolution, SliceNumPixels() * _numDepths);
 	CudaHelper::initializeBuffer(_maxValue, 1);
 	CudaHelper::initializeBuffer(_minValue, 1);
 
 	// Temporary storage for max/min
-	cub::DeviceReduce::Max(_tempStorage, _tempStorageBytes, _img2D, _maxValue, _sliceSize);
+	cub::DeviceReduce::Max(_tempStorage, _tempStorageBytes, _image2D, _maxValue, _sliceSize);
 	CudaHelper::initializeBuffer(_tempStorage, _tempStorageBytes);
 
 	// Allocate cufft plan for use during reconstruction
@@ -268,7 +271,8 @@ void RSDReconstructor::PrecalculateDDAWeights()
 	float maxDepth = 3.0f;
 	float depthRange = maxDepth - minDepth;
 
-	for (int i = 0; i < _numDepths; i++) 
+	#pragma omp parallel for
+	for (glm::uint i = 0; i < _numDepths; ++i) 
 	{
 		float cen = (_numDepths - 1) / (depthRange * i + _numDepths - 1);
 		float lr = (1.f - cen) / 2.f; // the 3 values are a partition of unity
@@ -287,7 +291,7 @@ void RSDReconstructor::EnableCubeGeneration(bool enable)
 }
 
 // call after each time full set of images has been added
-void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
+void RSDReconstructor::ReconstructImage(ViewportSurface* viewportSurface)
 {
 	CudaPerf perf(false);
 	perf.setAlgorithmName("RSDReconstructor::ReconstructImage");
@@ -302,8 +306,8 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 	{
 		CUFFT_CHECK(cufftSetStream(_fftPlan2D, _cudaStreams[frequencyIdx]));
 		CUFFT_CHECK(cufftExecC2C(_fftPlan2D,
-			_imgData + frequencyIdx * _sliceSize,
-			_uTotalFFTs + frequencyIdx * _sliceSize,
+			_imageData + frequencyIdx * _sliceSize,
+			_imageFFTs + frequencyIdx * _sliceSize,
 			CUFFT_FORWARD));
 	}
 
@@ -317,25 +321,27 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 	float depth;
 
 	// Temporal output wavefront at the depth plane
-	cudaMemset(_uSum, 0, _sliceSize * _numDepths * sizeof(cufftComplex));
+	cudaMemset(_imageConvolution, 0, _sliceSize * _numDepths * sizeof(cufftComplex));
 	glm::uint idx = _currentCount % 3;
 
 	for (depth = _info.d_min, depthIndex = 0; depth < _info.d_max; depth += _info.d_d, ++depthIndex)
 	{
-		multiplySpectrumMany<<<_gridSize2D_freq, _blockSize2D_freq, 0, _cudaStreams[depthIndex]>>>(
-			_uTotalFFTs,
+		multiplySpectrumManyAndScale<<<_gridSize2D_freq, _blockSize2D_freq, 0, _cudaStreams[depthIndex]>>>(
+			_imageFFTs,
 			_rsd + depthIndex * _frequencyCubeSize,
-			_uSum + depthIndex * _sliceSize,
+			_imageConvolution + depthIndex * _sliceSize,
 			_dWeights,
 			_numFrequencies, _sliceSize);
 
 		// IFFT after integration
 		CUFFT_CHECK(cufftSetStream(_fftPlan2D, _cudaStreams[depthIndex]));
-		CUFFT_CHECK(cufftExecC2C(_fftPlan2D, _uSum + depthIndex * _sliceSize, _uSum + depthIndex * _sliceSize, CUFFT_INVERSE));
+		CUFFT_CHECK(cufftExecC2C(
+			_fftPlan2D, _imageConvolution + depthIndex * _sliceSize, _imageConvolution + depthIndex * _sliceSize, CUFFT_INVERSE
+		));
 
 		// Store this slice
 		abs<<<_gridSize1D, _blockSize1D, 0, _cudaStreams[depthIndex]>>>(
-				_uSum + depthIndex * _sliceSize,
+				_imageConvolution + depthIndex * _sliceSize,
 				_cubeImages + idx * CubeNumPixels() + depthIndex * SliceNumPixels(), 
 				_sliceSize);
 	}
@@ -356,50 +362,57 @@ void RSDReconstructor::ReconstructImage(cv::Mat& img_out)
 				_sliceSize, _sliceSize * _numDepths, _numDepths);
 
 			maxZ<<<_gridSize2D_pix, _blockSize2D_pix>>>(
-				_cubeImages + 3 * _sliceSize * _numDepths, _img2D,
+				_cubeImages + 3 * _sliceSize * _numDepths, _image2D,
 				_imgWidth, _imgHeight, _numDepths, _sliceSize, glm::uvec2(_imgWidth / 2, _imgHeight / 2));
 		}
 		else 
 		{
 			// Depth dependent averaging is turned off, just pick the max from the current (previous) single frame.
 			maxZ<<<_gridSize2D_pix, _blockSize2D_pix>>>(
-				_cubeImages + previousIdx * _sliceSize * _numDepths, _img2D,
+				_cubeImages + previousIdx * _sliceSize * _numDepths, _image2D,
 				_imgWidth, _imgHeight, _numDepths, _sliceSize, glm::uvec2(_imgWidth / 2, _imgHeight / 2));
 		}
 
+		// Normalize in [0, 1]
 		{
-			cub::DeviceReduce::Max(_tempStorage, _tempStorageBytes, _img2D, _maxValue, _sliceSize);
-			cub::DeviceReduce::Min(_tempStorage, _tempStorageBytes, _img2D, _minValue, _sliceSize);
-			normalizeReconstruction<<<_gridSize1D, _blockSize1D>>>(_img2D, _sliceSize, _maxValue, _minValue);
+			cub::DeviceReduce::Max(_tempStorage, _tempStorageBytes, _image2D, _maxValue, _sliceSize);
+			cub::DeviceReduce::Min(_tempStorage, _tempStorageBytes, _image2D, _minValue, _sliceSize);
+			normalizeReconstruction<<<_gridSize1D, _blockSize1D>>>(_image2D, _sliceSize, _maxValue, _minValue);
 		}
 
-		//ViewportSurface* surface = ViewportSurface::getInstance();
-		//float4* texture;
-		//do
-		//{
-		//	texture = surface->acquireDrawSurface();
-		//} while (!texture);
+		// Bandpass filter if interval is not [0, 1]
+		if (_bandpassInterval.x > 0.0f && _bandpassInterval.y < 1.0f)
+		{
+			float lf = _bandpassInterval.x, hf = _bandpassInterval.y;
+			float scale = 1.0f / (hf - lf);
 
-		//// Write result into cudaSurface
-		//writeImage<<<_gridSize1D, _blockSize1D>>>(_img2D, _sliceSize, texture);
+			bandpassFilter<<<_gridSize1D, _blockSize1D>>>(_image2D, _sliceSize, lf, scale);
+		}
 
-		//CudaHelper::synchronize("");
-		//surface->present();
+		// Write result into cudaSurface
+		float4* texture;
+		do
+		{
+			texture = viewportSurface->acquireDrawSurface();
+		} while (!texture);
+
+		writeImage<<<_gridSize1D, _blockSize1D>>>(_image2D, _sliceSize, texture);
+		viewportSurface->present();
 
 		perf.toc();
 		perf.summarize();
 
 		// Copy back to host
-		CudaHelper::checkError(cudaMemcpy(img_2d.data, _img2D, SliceNumPixels() * sizeof(float), cudaMemcpyDeviceToHost));
+		//CudaHelper::checkError(cudaMemcpy(img_2d.data, _image2D, SliceNumPixels() * sizeof(float), cudaMemcpyDeviceToHost));
 	}
 	
 	// Shift picture back to center, then flip it
 	//FFTShift(img_2d);
-	cv::flip(img_2d, img_2d, 1);
+	//cv::flip(img_2d, img_2d, 1);
 
 	// Visualization
-	img_2d.convertTo(img_2d, CV_8UC1, 255.0, 0);
-	cv::imwrite("logs/rsd_reconstruction_" + std::to_string(_currentCount) + ".png", img_2d);
+	//img_2d.convertTo(img_2d, CV_8UC1, 255.0, 0);
+	//cv::imwrite("logs/rsd_reconstruction_" + std::to_string(_currentCount) + ".png", img_2d);
 }
 
 void RSDReconstructor::RSDKernelConvolution(
@@ -431,79 +444,4 @@ void RSDReconstructor::RSDKernelConvolution(
 	// Convolve the two by pointwise multiplication of the spectrums
 	multiplySpectrumExpHarmonic<<<gridSize, blockSize>>>(dKernel, omega, t, dim_x, dim_y);
 	CudaHelper::synchronize("multiplySpectrumExpHarmonic");
-}
-
-float* RSDReconstructor::CubeAt(shared_ptr<float> p, int cube_num) const
-{
-	assert(p);
-	return &(p.get()[cube_num * _imgHeight * _imgWidth * _numDepths]);
-}
-
-cufftComplex* RSDReconstructor::ImageAt(cufftComplex* p, int depth) const
-{
-	assert(p);
-	return &(p[depth * _frequencyCubeSize]);
-}
-
-void RSDReconstructor::FFTShift(cv::Mat& out)
-{
-	cv::Size sz = out.size();
-	cv::Point pt(0, 0);
-	pt.x = static_cast<int>(floor(sz.width / 2.0));
-	pt.y = static_cast<int>(floor(sz.height / 2.0));
-	CircShift(out, pt);
-}
-
-void RSDReconstructor::CircShift(cv::Mat& out, const cv::Point& delta)
-{
-	cv::Size sz = out.size();
-
-	assert(sz.height > 0 && sz.width > 0);
-
-	if ((sz.height == 1 && sz.width == 1) || (delta.x == 0 && delta.y == 0))
-		return;
-
-	int x = delta.x;
-	int y = delta.y;
-	if (x > 0) x = x % sz.width;
-	if (y > 0) y = y % sz.height;
-	if (x < 0) x = x % sz.width + sz.width;
-	if (y < 0) y = y % sz.height + sz.height;
-
-	vector<cv::Mat> planes;
-	split(out, planes);
-
-	for (size_t i = 0; i < planes.size(); i++)
-	{
-		cv::Mat tmp0, tmp1, tmp2, tmp3;
-		cv::Mat q0(planes[i], cv::Rect(0, 0, sz.width, sz.height - y));
-		cv::Mat q1(planes[i], cv::Rect(0, sz.height - y, sz.width, y));
-		q0.copyTo(tmp0);
-		q1.copyTo(tmp1);
-		tmp0.copyTo(planes[i](cv::Rect(0, y, sz.width, sz.height - y)));
-		tmp1.copyTo(planes[i](cv::Rect(0, 0, sz.width, y)));
-
-		cv::Mat q2(planes[i], cv::Rect(0, 0, sz.width - x, sz.height));
-		cv::Mat q3(planes[i], cv::Rect(sz.width - x, 0, x, sz.height));
-		q2.copyTo(tmp2);
-		q3.copyTo(tmp3);
-		tmp2.copyTo(planes[i](cv::Rect(x, 0, sz.width - x, sz.height)));
-		tmp3.copyTo(planes[i](cv::Rect(0, 0, x, sz.height)));
-	}
-
-	merge(planes, out);
-}
-
-float CompareFloatArray(float* p1, float* p2, size_t sz)
-{
-	if (sz == 0)
-		return 0.f;
-	float maxdiff = std::abs(p1[0] - p2[0]);
-	for (int i = 1; i < sz; i++) {
-		float diff = std::abs(p1[i] - p2[i]);
-		if (diff > 1E-2)
-			std::cout << i << ": " << p1[i] << p2[i] << diff << std::endl;
-		maxdiff = std::max(diff, maxdiff);
-	}
-	return maxdiff;
 }

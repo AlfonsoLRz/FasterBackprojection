@@ -38,7 +38,7 @@ inline __global__ void multiplySpectrumExpHarmonic(cufftComplex* __restrict__ ke
 }
 
 // Performs element-wise multiplication (convolution) on many images all at once
-inline __global__ void multiplySpectrumMany(
+inline __global__ void multiplySpectrumManyAndScale(
 	const cufftComplex* __restrict__ ker1, const cufftComplex* __restrict__ ker2, cufftComplex* __restrict__ dest, const float* __restrict__ weights,
 	glm::uint numFrequencies, glm::uint sliceSize)
 {
@@ -163,7 +163,20 @@ inline __global__ void maxZ(
 	for (glm::uint i = 1; i < numDepths; i++)
 		m = fmaxf(m, cube[i * sliceSize + pixelID]); 
 
-	image[y * width + x] = m; // Write to original grid location
+	image[(width - 1 - x) * height + y] = m; // Flipped 90 degrees in clockwise direction
+}
+
+inline __global__ void bandpassFilter(float* __restrict__ data, glm::uint sliceSize, float lf, float scale)
+{
+	const glm::uint tid = blockIdx.x * blockDim.x + threadIdx.x;
+	if (tid >= sliceSize)
+		return;
+
+	float pixel = data[tid];
+	float vs = fmaxf(pixel - lf, 0.0f);
+	float vd = fminf(vs * scale, 1.0f);
+
+	data[tid] = vd;
 }
 
 inline __global__ void writeImage(const float* __restrict__ image, glm::uint numPixels, float4* texture)

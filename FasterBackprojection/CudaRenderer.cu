@@ -3,8 +3,8 @@
 
 #include "renderer.cuh"
 #include "RenderingShader.h"
+#include "StreamingEngine.h"
 #include "Vao.h"
-#include "ViewportSurface.h"
 
 //
 
@@ -14,16 +14,10 @@ CudaRenderer::~CudaRenderer()
 	delete _quadVAO;
 }
 
-void CudaRenderer::initialize(ApplicationState* applicationState)
+void CudaRenderer::initialize()
 {
-	_applicationState = applicationState;
-
     _quadShader = new RenderingShader();
     _quadShader->createShaderProgram("assets/shaders/shading/quad");
-
-    // Texture for compute shader rendering
-    _viewportTexture.init(applicationState->_viewportSize.x, applicationState->_viewportSize.y);
-    _viewportTexture.mapPersistently();
 
     // Surface
     const std::vector<glm::vec2> quadTextCoord{
@@ -39,27 +33,36 @@ void CudaRenderer::initialize(ApplicationState* applicationState)
     _quadVAO->setIBOData(Vao::IBO::TRIANGLE, triangleMesh);
 }
 
+void CudaRenderer::setStreamingFocus(StreamingEngine* streamingEngine)
+{
+	_streamingEngine = streamingEngine;
+
+    _viewportTexture.init(streamingEngine->getImageWidth(), streamingEngine->getImageHeight());
+    _viewportTexture.mapPersistently();
+}
+
 void CudaRenderer::render()
 {
+	assert(_streamingEngine != nullptr);
+
     // Compute-based rendering
-    ViewportSurface* viewportSurface = ViewportSurface::getInstance();
-    float4* drawTexture = viewportSurface->acquirePresentSurface();
+    ViewportSurface& viewportSurface = _streamingEngine->getViewportSurface();
+    float4* drawTexture = viewportSurface.acquirePresentSurface();
 
     _quadShader->use();
     _quadShader->applyActiveSubroutines();
 
     if (drawTexture)
     {
-		std::cout << "Rendering with compute shader..." << std::endl;
-
-        glm::uvec2 viewportSize = _applicationState->_viewportSize;
-        glm::uint width = viewportSize.x, height = viewportSize.y;
+        glm::uint width = _streamingEngine->getImageWidth(),
+    			  height = _streamingEngine->getImageHeight();
 
         writeImage<<<CudaHelper::getNumBlocks(width * height, 512), 512>>>(
             drawTexture, width, width * height, _viewportTexture.getSurfaceObject()
             );
+
         CudaHelper::synchronize("writeImage");
-        viewportSurface->presented();
+        viewportSurface.presented();
     }
 
     _viewportTexture.bind();

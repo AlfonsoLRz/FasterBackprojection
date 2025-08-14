@@ -32,19 +32,13 @@ void Renderer::createCamera() const
     }
 }
 
-void Renderer::createModels()
-{
-    _content.buildScenario();
-}
-
 void Renderer::prepareOpenGL(uint16_t width, uint16_t height)
 {
     _appState._viewportSize = glm::ivec2(width, height);
 
-    //
+	// OpenGL initialization
     glClearColor(_appState._backgroundColor.x, _appState._backgroundColor.y, _appState._backgroundColor.z, 1.0f);
 
-    //
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
@@ -59,10 +53,11 @@ void Renderer::prepareOpenGL(uint16_t width, uint16_t height)
     glEnable(GL_PROGRAM_POINT_SIZE);
     glEnable(GL_POLYGON_OFFSET_FILL);
 
+    // Camera
     _content._camera.push_back(std::make_unique<Camera>(width, height));
     this->createCamera();
 
-    // Observer
+    // Observer pattern for listening to some events
     InputManager* inputManager = InputManager::getInstance();
     inputManager->subscribeResize(this);
     inputManager->subscribeScreenshot(this);
@@ -70,16 +65,12 @@ void Renderer::prepareOpenGL(uint16_t width, uint16_t height)
 	_cubeShading = new RenderingShader();
 	_cubeShading->createShaderProgram("assets/shaders/shading/cube");
 
-	_cudaRenderer.initialize(&_appState);
-
-    // Surface
-	ViewportSurface* viewportSurface = ViewportSurface::getInstance();
-    viewportSurface->init(_appState._viewportSize.x, _appState._viewportSize.y, 3);
-
     this->resizeEvent(_appState._viewportSize.x, _appState._viewportSize.y);
 
     // Models
-    this->createModels();
+    _content.buildScenario();
+    _cudaRenderer.initialize();
+	_cudaRenderer.setStreamingFocus(_content._reconstructionEngine);
 }
 
 void Renderer::render()
