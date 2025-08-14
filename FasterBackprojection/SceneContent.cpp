@@ -10,7 +10,7 @@
 
 // ----------------------------- BUILD YOUR SCENARIO HERE -----------------------------------
 
-void SceneContent::buildScenario(cudaSurfaceObject_t cudaSurface)
+void SceneContent::buildScenario()
 {
 	TransientParameters transientParameters;
 
@@ -37,8 +37,7 @@ void SceneContent::buildScenario(cudaSurfaceObject_t cudaSurface)
 
 	// Open the streaming engine
 	_reconstructionEngine = new ReconstructionEngine(
-		"C:/Datasets/rt-nlos/data_raw_NGC_nlosbox1.out", "C:/Datasets/rt-nlos/sample_parameters.yml",
-		cudaSurface
+		"C:/Datasets/rt-nlos/data_raw_NGC_nlosbox1.out", "C:/Datasets/rt-nlos/sample_parameters.yml"
 	);
 	_reconstructionEngine->Start();
 }

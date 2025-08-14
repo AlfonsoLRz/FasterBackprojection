@@ -13,8 +13,7 @@ namespace rtnlos
     template <int NROWS, int NCOLS, int NFREQ>
     void FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::DoWork()
     {
-		//_workerThread = std::jthread(&FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Work, this);
-        Work();
+		_workerThread = std::jthread(&FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>::Work, this);
     }
 
     template<int NROWS, int NCOLS, int NFREQ>
@@ -69,19 +68,16 @@ namespace rtnlos
             if (_stop)
                 break;
 
+            if (first)
+            {
+	            first = false;
+                continue;
+            }
+
             // Reconstruct the FDH into a 2D Image, pushing to the outgoing queue for display
             auto image = std::make_shared<ReconstructedImageDataType>(histData->_frameNumber);
             _reconstructor.SetFFTData(histData->_histogram);
             _reconstructor.ReconstructImage(image->_image);
-
-            if (first)  // Trash first frame
-            { 
-                first = false;
-                continue;
-            }
-
-            // Push a new mage in into the outgoing queue
-            //_outgoingImages.Push(img);
         }
 
 		spdlog::warn("FastRSDImageReconstructor worker thread stopped");

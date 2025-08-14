@@ -37,7 +37,7 @@ namespace rtnlos
 		void Initialize(const std::string& configPath);
 
 	public:
-		NlosStreamingEngine(const std::string& dataPath, const std::string& configPath, cudaSurfaceObject_t cudaSurface);
+		NlosStreamingEngine(const std::string& dataPath, const std::string& configPath);
 
 		void Start();
 		void Stop();

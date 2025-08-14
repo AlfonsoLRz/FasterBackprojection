@@ -41,7 +41,7 @@ class TextureResourceGPU
 {
 public:
     GLuint                  _id = 0;
-    cudaGraphicsResource* _cudaResource = nullptr;
+    cudaGraphicsResource*   _cudaResource = nullptr;
     cudaSurfaceObject_t     _surfaceObj = 0;
     GLuint                  _width, _height;
     bool                    _isMapped = false;
@@ -83,7 +83,8 @@ public:
     }
 
     // For backward compatibility
-    float4* mapCudaPointer() {
+    float4* mapCudaPointer()
+	{
         if (!_isMapped)
             mapPersistently();
 

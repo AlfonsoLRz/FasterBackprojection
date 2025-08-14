@@ -8,6 +8,7 @@
 #include "Texture.h"
 
 class Vao;
+class ViewportSurface;
 
 class Renderer: public Singleton<Renderer>, public ResizeListener, public ScreenshotListener
 {
@@ -21,7 +22,6 @@ private:
 	glm::uvec2			_newSize;
 	RenderingShader*	_quadShader;
 	Vao*				_quadVAO;
-	TextureResourceGPU	_currentViewportTexture;
 
 private:
 	static void bindTexture(GLuint textureID, const ShaderProgram* shader, const std::string& uniformName, unsigned offset);

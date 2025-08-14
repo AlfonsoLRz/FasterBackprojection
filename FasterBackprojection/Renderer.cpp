@@ -6,6 +6,7 @@
 #include "Camera.h"
 #include "Model3D.h"
 #include "Vao.h"
+#include "ViewportSurface.h"
 
 //
 
@@ -14,7 +15,7 @@ Renderer::Renderer():
 	_cubeShading(nullptr),
 	_newSize(0),
 	_quadShader(nullptr),
-	_quadVAO(nullptr), _currentViewportTexture(0, 0)
+	_quadVAO(nullptr)
 {
 }
 
@@ -35,7 +36,7 @@ void Renderer::createCamera() const
 
 void Renderer::createModels()
 {
-    _content.buildScenario(_currentViewportTexture.getSurfaceObject());
+    _content.buildScenario();
 }
 
 void Renderer::prepareOpenGL(uint16_t width, uint16_t height)
@@ -75,9 +76,8 @@ void Renderer::prepareOpenGL(uint16_t width, uint16_t height)
     _quadShader->createShaderProgram("assets/shaders/shading/quad");
 
     // Texture for compute shader rendering
-    _currentViewportTexture = TextureResourceGPU(_appState._viewportSize.x, _appState._viewportSize.y);
-    _currentViewportTexture.init();
-    _currentViewportTexture.mapPersistently();
+	ViewportSurface* viewportSurface = ViewportSurface::getInstance();
+    viewportSurface->init(_appState._viewportSize.x, _appState._viewportSize.y, 3);
 
     // Surface
     const std::vector<glm::vec2> quadTextCoord{
@@ -107,30 +107,37 @@ void Renderer::render()
         _changedWindowSize = false;
     }
 
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glClearColor(_appState._backgroundColor.x, _appState._backgroundColor.y, _appState._backgroundColor.z, 1.0f);
-
-    glPolygonOffset(1.0f, 1.0f);
-
-    Model3D::MatrixRenderInformation matrixInformation;
-    matrixInformation.setMatrix(Model3D::MatrixRenderInformation::MODEL, 
-        glm::rotate(glm::mat4(1.0f), glm::pi<float>() / 2.0f, glm::vec3(.0f, .0f, 1.0f)) * 
-        glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)));
-    matrixInformation.setMatrix(Model3D::MatrixRenderInformation::MODEL, glm::scale(glm::mat4(1.0f), glm::vec3(10.0f)));
-    matrixInformation.setMatrix(Model3D::MatrixRenderInformation::VIEW, _content._camera.front()->getViewMatrix());
-    matrixInformation.setMatrix(Model3D::MatrixRenderInformation::VIEW_PROJECTION, _content._camera.front()->getViewProjectionMatrix());
-
-    for (auto& model : _content._model)
+	// Compute-based rendering
+    ViewportSurface* viewportSurface = ViewportSurface::getInstance();
+    if (TextureResourceGPU* drawTexture = viewportSurface->acquirePresentSurface())
     {
-        model->draw(&matrixInformation, &_appState);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClearColor(_appState._backgroundColor.x, _appState._backgroundColor.y, _appState._backgroundColor.z, 1.0f);
+
+        // Conventional rendering [deprecated]
+        /*glPolygonOffset(1.0f, 1.0f);
+
+        Model3D::MatrixRenderInformation matrixInformation;
+        matrixInformation.setMatrix(Model3D::MatrixRenderInformation::MODEL,
+            glm::rotate(glm::mat4(1.0f), glm::pi<float>() / 2.0f, glm::vec3(.0f, .0f, 1.0f)) *
+            glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)));
+        matrixInformation.setMatrix(Model3D::MatrixRenderInformation::MODEL, glm::scale(glm::mat4(1.0f), glm::vec3(10.0f)));
+        matrixInformation.setMatrix(Model3D::MatrixRenderInformation::VIEW, _content._camera.front()->getViewMatrix());
+        matrixInformation.setMatrix(Model3D::MatrixRenderInformation::VIEW_PROJECTION, _content._camera.front()->getViewProjectionMatrix());
+
+        for (auto& model : _content._model)
+        {
+            model->draw(&matrixInformation, &_appState);
+        }
+
+        glPolygonOffset(.0f, .0f);*/
+
+        _quadShader->use();
+        _quadShader->applyActiveSubroutines();
+
+        drawTexture->bind();
+        _quadVAO->drawObject(Vao::TRIANGLE, GL_TRIANGLES, 6);
     }
-
-    glPolygonOffset(.0f, .0f);
-
-    _quadShader->use();
-    _quadShader->applyActiveSubroutines();
-
-    _quadVAO->drawObject(Vao::TRIANGLE, GL_TRIANGLES, 6);
 }
 
 void Renderer::resizeEvent(uint16_t width, uint16_t height)
