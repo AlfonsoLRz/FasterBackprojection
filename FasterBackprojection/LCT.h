@@ -6,13 +6,6 @@
 class LCT : public Reconstruction
 {
 protected:
-	std::vector<float*>			_deleteFloatQueue;
-	std::vector<void*>			_deleteVoidQueue;
-	std::vector<cufftHandle>	_deleteCufftHandles;
-
-	void emptyQueue();
-
-protected:
 	void reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
 	static void reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo);
 

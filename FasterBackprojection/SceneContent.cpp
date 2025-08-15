@@ -36,7 +36,7 @@ void SceneContent::buildScenario()
 
 	// Open the streaming engine
 	_reconstructionEngine = new rtnlos::ReconstructionEngine(
-		"C:/Datasets/rt-nlos/data_raw_NGC_man.out", "C:/Datasets/rt-nlos/sample_parameters.yml"
+		"C:/Datasets/rt-nlos/data_raw_NGC_newmovement3.out", "C:/Datasets/rt-nlos/sample_parameters.yml"
 	);
 	_reconstructionEngine->Start();
 }

@@ -20,7 +20,12 @@ public:
 	static void downloadBuffer(T*& bufferPointer, T* buffer, size_t size, size_t offset = 0);
 
 	template<typename T>
-	static void free(T*& bufferPointer);
+	std::unique_ptr<std::vector<T>> downloadBuffer(T*& bufferPointer, size_t size, size_t offset = 0);
+
+	template<typename T>
+	static void free(T* bufferPointer);
+	template<typename T>
+	static void reset(T*& bufferPointer);
 	template<typename T>
 	static void freeHost(T*& bufferPointer);
 
@@ -40,7 +45,6 @@ public:
 	static void synchronize(const std::string& kernelName = "");
 
 	static void startTimer(cudaEvent_t& startEvent, cudaEvent_t& stopEvent);
-
 	static float stopTimer(const cudaEvent_t& startEvent, const cudaEvent_t& stopEvent);
 };
 
@@ -57,8 +61,20 @@ void CudaHelper::downloadBuffer(T*& bufferPointer, T* buffer, size_t size, size_
 }
 
 template <typename T>
-void CudaHelper::free(T*& bufferPointer)
+std::unique_ptr<std::vector<T>> CudaHelper::downloadBuffer(T*& bufferPointer, size_t size, size_t offset)
 {
+	std::unique_ptr<std::vector<float>> buffer;
+	buffer.reset(new std::vector<float>(size - offset));
+
+	CudaHelper::checkError(cudaMemcpy(buffer->data(), bufferPointer + offset, sizeof(T) * size, cudaMemcpyDeviceToHost));
+
+	return buffer;
+}
+
+template <typename T>
+void CudaHelper::free(T* bufferPointer)
+{
+	if (!bufferPointer) return;
 	cudaFree(bufferPointer);
 
 	const auto it = _allocatedPointers.find(bufferPointer);
@@ -67,6 +83,22 @@ void CudaHelper::free(T*& bufferPointer)
 		_allocatedMemory -= it->second;
 		_allocatedPointers.erase(it);
 	}
+}
+
+template <typename T>
+void CudaHelper::reset(T*& bufferPointer)
+{
+	if (!bufferPointer) return;
+
+	cudaFree(bufferPointer);
+	const auto it = _allocatedPointers.find(bufferPointer);
+	if (it != _allocatedPointers.end())
+	{
+		_allocatedMemory -= it->second;
+		_allocatedPointers.erase(it);
+	}
+
+	bufferPointer = nullptr;
 }
 
 template <typename T>

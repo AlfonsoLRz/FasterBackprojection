@@ -61,30 +61,6 @@ void PhasorFields::reconstructVolume(
 
 //
 
-void PhasorFields::emptyQueue()
-{
-	for (auto& ptr : _deleteFloatQueue)
-	{
-		if (ptr != nullptr)
-			CudaHelper::free(ptr);
-	}
-
-	_deleteFloatQueue.clear();
-	for (auto& ptr : _deleteVoidQueue)
-	{
-		if (ptr != nullptr)
-			CudaHelper::free(ptr);
-	}
-
-	_deleteVoidQueue.clear();
-	for (auto& handle : _deleteCufftHandles)
-	{
-		if (handle != 0)
-			CUFFT_CHECK(cufftDestroy(handle));
-	}
-	_deleteCufftHandles.clear();
-}
-
 void PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, float slope, cufftComplex*& rolledPsf, cudaStream_t stream)
 {
 	glm::uvec3 totalRes = dataResolution * 2u; // Assuming the PSF kernel is twice the resolution in each dimension
@@ -171,10 +147,13 @@ void PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, float slope
 		extractConjugate_pf<<<gridSize, blockSize, 0, stream>>>(rolledPsf, totalRes);
 	}
 
-	_deleteFloatQueue.push_back(psf);
-	_deleteFloatQueue.push_back(singleFloat);
-	_deleteVoidQueue.push_back(tempStorage);
-	_deleteCufftHandles.push_back(fftPlan);
+	_cleanupQueue.push_back([psf, singleFloat, tempStorage, fftPlan]
+	{
+		CudaHelper::free(psf);
+		CudaHelper::free(singleFloat);
+		CudaHelper::free(tempStorage);
+		cufftDestroy(fftPlan);
+	});
 }
 
 void PhasorFields::defineTransformOperator(glm::uint M, float*& d_mtx)
@@ -440,7 +419,7 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 
 	cuStreamSynchronize(stream1);
 	cuStreamSynchronize(stream2);
-	emptyQueue();
+	emptyCleanupQueue();
 
 	_perf.toc();
 

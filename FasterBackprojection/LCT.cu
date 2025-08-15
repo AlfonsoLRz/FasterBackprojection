@@ -49,7 +49,7 @@ void LCT::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& rec
 
 	cuStreamSynchronize(stream1);
 	cuStreamSynchronize(stream2);
-	emptyQueue();
+	emptyCleanupQueue();
 
 	_perf.toc();
 
@@ -63,7 +63,7 @@ void LCT::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& rec
 	inverseTransformData(transformedData, intensityGpu, volumeResolution, mtx);
 	_perf.toc();
 
-	emptyQueue();
+	emptyCleanupQueue();
 	CudaHelper::free(transformedData);
 	CudaHelper::free(psfKernel);
 	CudaHelper::free(mtx);
@@ -162,10 +162,13 @@ cufftComplex* LCT::definePSFKernel(const glm::uvec3& dataResolution, float slope
 		wienerFilterPsf<<<gridSize, blockSize, 0, stream>>>(rolledPsf, totalRes, 8e-1);
 	}
 
-	_deleteFloatQueue.push_back(psf);
-	_deleteFloatQueue.push_back(singleFloat);
-	_deleteVoidQueue.push_back(tempStorage);
-	_deleteCufftHandles.push_back(fftPlan);
+	_cleanupQueue.push_back([psf, singleFloat, tempStorage, fftPlan]
+	{
+		CudaHelper::free(psf);
+		CudaHelper::free(singleFloat);
+		CudaHelper::free(tempStorage);
+		cufftDestroy(fftPlan);
+	});
 
 	return rolledPsf;
 }
@@ -325,7 +328,7 @@ void LCT::multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const
 
 	// Inverse FFT
 	CUFFT_CHECK(cufftExecC2C(planH, d_H, d_H, CUFFT_INVERSE));
-	_deleteCufftHandles.push_back(planH);
+	_cleanupQueue.push_back([planH] { cufftDestroy(planH); });
 
 	// IFFT requires normalization, but it also produces very small values, so we avoid this and produce valid results by normalizing later
 	//normalizeIFFT<<<CudaHelper::getNumBlocks(newDimProduct, 512), 512>>>(d_H, newDimProduct, 1.0f / newDimProduct);
@@ -414,30 +417,4 @@ void LCT::reconstructVolume(
 			volumeGpu,
 			volumeResolution,
 			false);
-}
-
-//
-
-void LCT::emptyQueue()
-{
-	for (auto& ptr : _deleteFloatQueue)
-	{
-		if (ptr != nullptr)
-			CudaHelper::free(ptr);
-	}
-
-	_deleteFloatQueue.clear();
-	for (auto& ptr : _deleteVoidQueue)
-	{
-		if (ptr != nullptr)
-			CudaHelper::free(ptr);
-	}
-
-	_deleteVoidQueue.clear();
-	for (auto& handle : _deleteCufftHandles)
-	{
-		if (handle != 0)
-			CUFFT_CHECK(cufftDestroy(handle));
-	}
-	_deleteCufftHandles.clear();
 }

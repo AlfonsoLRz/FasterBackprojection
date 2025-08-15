@@ -22,13 +22,24 @@ FastRSDReconstruction::FastRSDReconstruction()
 
 FastRSDReconstruction::~FastRSDReconstruction()
 {
-	CudaHelper::free(_rsd);
-	CudaHelper::free(_imageConvolution);
-	CudaHelper::free(_cubeImages);
-	CudaHelper::free(_dWeights);
+	FastReconstructionAlgorithm::destroyResources();
+	FastRSDReconstruction::destroyResources();
+}
+
+void FastRSDReconstruction::destroyResources()
+{
+	FastReconstructionAlgorithm::destroyResources();
+
+	CudaHelper::reset(_rsd);
+	CudaHelper::reset(_imageConvolution);
+	CudaHelper::reset(_cubeImages);
+	CudaHelper::reset(_dWeights);
 
 	if (_fftPlan2D != 0)
+	{
 		CUFFT_CHECK(cufftDestroy(_fftPlan2D));
+		_fftPlan2D = 0;
+	}
 }
 
 void FastRSDReconstruction::precalculate()
@@ -58,7 +69,7 @@ void FastRSDReconstruction::precalculate()
 	);
 
 	// RSD
-	CudaHelper::initializeBuffer(_rsd, sliceNumPixels() * _numDepths * _numFrequencies, (cufftComplex*)nullptr, false);
+	CudaHelper::initializeBuffer(_rsd, sliceNumPixels() * _numDepths * _numFrequencies);
 	CUFFT_CHECK(cufftPlan2d(&_fftPlan2D, _imageHeight, _imageWidth, CUFFT_C2C));
 
 	//

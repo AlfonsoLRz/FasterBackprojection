@@ -5,13 +5,6 @@
 class PhasorFields : public Reconstruction
 {
 protected:
-	std::vector<float*>			_deleteFloatQueue;
-	std::vector<void*>			_deleteVoidQueue;
-	std::vector<cufftHandle>	_deleteCufftHandles;
-
-	void emptyQueue();
-
-protected:
 	//
 	void definePSFKernel(const glm::uvec3& dataResolution, float slope, cufftComplex*& rolledPsf, cudaStream_t stream);
 

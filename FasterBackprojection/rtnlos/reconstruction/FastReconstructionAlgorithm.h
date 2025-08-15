@@ -40,6 +40,7 @@ namespace rtnlos
 		virtual ~FastReconstructionAlgorithm();
 
 		virtual void initialize(const rtnlos::DatasetInfo& info);
+		virtual void destroyResources();
 
 		// Call this before reconstructing images
 		// Allocates all necessary GPU data, precalculates RSD. Basically sets everything up

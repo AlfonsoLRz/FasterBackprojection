@@ -24,6 +24,8 @@ public:
 	FastRSDReconstruction();
 	~FastRSDReconstruction() override;
 
+	void destroyResources() override;
+
 	// Allocates all necessary GPU data, precalculates RSD. Basically sets everything up.
 	void precalculate() override; 
 

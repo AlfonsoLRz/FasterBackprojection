@@ -37,6 +37,9 @@ protected:
 	void saveMaxImage(const std::string& filename, const float* volumeGpu, const glm::uvec3& volumeResolution, bool flip = true);
 	static bool saveReconstructedAABB(const std::string& filename, float* voxels, glm::uint numVoxels);
 
+	//
+	void emptyCleanupQueue();
+
 public:
 	virtual ~Reconstruction() = default;
 

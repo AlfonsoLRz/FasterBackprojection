@@ -24,14 +24,7 @@ namespace rtnlos
 
 	FastReconstructionAlgorithm::~FastReconstructionAlgorithm()
 	{
-		CudaHelper::free(_imageData);
-		CudaHelper::free(_imageResult);
-		CudaHelper::free(_ddaWeights);
-		CudaHelper::free(_maxValue);
-		CudaHelper::free(_minValue);
-		CudaHelper::free(_tempStorage);
-
-		destroyStreams();
+		FastReconstructionAlgorithm::destroyResources();
 	}
 
 	void FastReconstructionAlgorithm::initialize(const rtnlos::DatasetInfo& info)
@@ -42,6 +35,18 @@ namespace rtnlos
 		_apertureDst[0] = info._apertureDstWidth;
 		_apertureDst[1] = info._apertureDstHeight;
 		_numDepths = static_cast<int>(std::round((info._maxDistance - info._minDistance) / info._deltaDistance)) + 1;
+	}
+
+	void FastReconstructionAlgorithm::destroyResources()
+	{
+		CudaHelper::free(_imageData);
+		CudaHelper::free(_imageResult);
+		CudaHelper::free(_ddaWeights);
+		CudaHelper::free(_maxValue);
+		CudaHelper::free(_minValue);
+		CudaHelper::free(_tempStorage);
+
+		destroyStreams();
 	}
 
 	void FastReconstructionAlgorithm::precalculate()

@@ -255,3 +255,11 @@ bool Reconstruction::saveReconstructedAABB(const std::string& filename, float* v
 
 	return FileUtilities::write<float>(filename, voxelsCpu);
 }
+
+void Reconstruction::emptyCleanupQueue()
+{
+	for (auto& func : _cleanupQueue)
+		func();
+
+	_cleanupQueue.clear();
+}
