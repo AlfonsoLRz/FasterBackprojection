@@ -3,6 +3,27 @@
 
 namespace rtnlos
 {
+	template <int NROWS, int NCOLS, int NFREQ>
+	FastImageReconstructor<NROWS, NCOLS, NFREQ>::FastImageReconstructor(FrameHistogramDataQueue& incoming)
+        : _enableDDA(true), _bandpassInterval(0.1f, 0.9f)
+		, _incomingFrames(incoming), _viewportSurface(nullptr)
+		, _reconstructionAlgorithm(FastReconstructionType::RSD)
+    {
+    }
+
+	template <int NROWS, int NCOLS, int NFREQ>
+	FastImageReconstructor<NROWS, NCOLS, NFREQ>::~FastImageReconstructor()
+	{
+        for (auto& reconstructor : _reconstructor)
+        {
+            if (reconstructor)
+            {
+                delete reconstructor;
+                reconstructor = nullptr;
+            }
+        }
+	}
+
     template <int NROWS, int NCOLS, int NFREQ>
     void FastImageReconstructor<NROWS, NCOLS, NFREQ>::DoWork()
     {
@@ -15,10 +36,16 @@ namespace rtnlos
         _incomingFrames.Abort();
     }
 
+    template <int NROWS, int NCOLS, int NFREQ>
+    void FastImageReconstructor<NROWS, NCOLS, NFREQ>::SetReconstructionAlgorithm(FastReconstructionType algorithm)
+    {
+        _reconstructionAlgorithm = algorithm;
+    }
+
     template<int NROWS, int NCOLS, int NFREQ>
     void FastImageReconstructor<NROWS, NCOLS, NFREQ>::Initialize(const SceneParameters& sceneParameters, ViewportSurface* viewportSurface)
     {
-        _reconstructor.initialize(DatasetInfo{
+        _reconstructor[_reconstructionAlgorithm]->initialize(DatasetInfo{
             "hidden_scene",
             sceneParameters._apertureFullSize[0],
             sceneParameters._apertureFullSize[1],
@@ -28,15 +55,15 @@ namespace rtnlos
             sceneParameters._depthOffset
         });
 
-        _reconstructor.enableDepthDependentAveraging(_enableDDA);
-        _reconstructor.setBandpassInterval(_bandpassInterval.x, _bandpassInterval.y);
-        _reconstructor.setNumFrequencies(sceneParameters._numComponents);
-        _reconstructor.setWeights(sceneParameters._weights.data());
-        _reconstructor.setLambdas(sceneParameters._lambdas.data());
-        _reconstructor.setOmegas(sceneParameters._omegas.data());
-        _reconstructor.setSamplingSpace(sceneParameters._samplingSpacing);
-        _reconstructor.setApertureFullSize(sceneParameters._apertureFullSize.data());
-        _reconstructor.setImageDimensions(NROWS, NCOLS);
+        _reconstructor[_reconstructionAlgorithm]->enableDepthDependentAveraging(_enableDDA);
+        _reconstructor[_reconstructionAlgorithm]->setBandpassInterval(_bandpassInterval.x, _bandpassInterval.y);
+        _reconstructor[_reconstructionAlgorithm]->setNumFrequencies(sceneParameters._numComponents);
+        _reconstructor[_reconstructionAlgorithm]->setWeights(sceneParameters._weights.data());
+        _reconstructor[_reconstructionAlgorithm]->setLambdas(sceneParameters._lambdas.data());
+        _reconstructor[_reconstructionAlgorithm]->setOmegas(sceneParameters._omegas.data());
+        _reconstructor[_reconstructionAlgorithm]->setSamplingSpace(sceneParameters._samplingSpacing);
+        _reconstructor[_reconstructionAlgorithm]->setApertureFullSize(sceneParameters._apertureFullSize.data());
+        _reconstructor[_reconstructionAlgorithm]->setImageDimensions(NROWS, NCOLS);
 
 		_viewportSurface = viewportSurface;
     }
@@ -51,7 +78,7 @@ namespace rtnlos
         cudaSetDevice(0);
         cudaFree(nullptr);
 
-        _reconstructor.precalculate();
+        _reconstructor[_reconstructionAlgorithm]->precalculate();
 
         FrameHistogramDataPtr histData;
         bool first = true;
@@ -72,8 +99,8 @@ namespace rtnlos
             }
 
             // Reconstruct the FDH into a 2D Image, pushing to the outgoing queue for display
-            _reconstructor.setFFTData(histData->_histogram);
-            _reconstructor.reconstructImage(_viewportSurface);
+            _reconstructor[_reconstructionAlgorithm]->setFFTData(histData->_histogram);
+            _reconstructor[_reconstructionAlgorithm]->reconstructImage(_viewportSurface);
         }
 
 		spdlog::warn("FastImageReconstructor worker thread stopped");

@@ -17,7 +17,7 @@ namespace rtnlos
 		  , _bandpassInterval(0.0f, 1.0f)
 		  , _numFrequencies(0), _numDepths(0), _imageHeight(0), _imageWidth(0), _sliceSize(0), _frequencyCubeSize(0)
 	      , _apertureFullSize{ 0.0f, 0.0f }, _apertureDst{ 0.0f, 0.0f }, _samplingSpace(0.0f)
-		  , _imageData(nullptr), _imageResult(nullptr), _ddaWeights(nullptr)
+		  , _spadData(nullptr), _imageResult(nullptr), _ddaWeights(nullptr)
 		  , _maxValue(nullptr), _minValue(nullptr), _tempStorage(nullptr), _tempStorageBytes(0)
 	{
 	}
@@ -39,7 +39,7 @@ namespace rtnlos
 
 	void FastReconstructionAlgorithm::destroyResources()
 	{
-		CudaHelper::free(_imageData);
+		CudaHelper::free(_spadData);
 		CudaHelper::free(_imageResult);
 		CudaHelper::free(_ddaWeights);
 		CudaHelper::free(_maxValue);
@@ -53,7 +53,7 @@ namespace rtnlos
 	{
 		// Now allocate all the storage that the ReconstructImage() function will need
 		CudaHelper::initializeBuffer(_imageResult, sliceNumPixels());
-		CudaHelper::initializeBuffer(_imageData, sliceNumPixels() * _numFrequencies);
+		CudaHelper::initializeBuffer(_spadData, sliceNumPixels() * _numFrequencies);
 		precalculateDDAWeights();
 
 		// Allocate intermediate storage used for ffts during reconstruction
@@ -77,7 +77,7 @@ namespace rtnlos
 		assert(_numFrequencies);
 		assert(_imgWidth != 0 && _imgHeight != 0);
 
-		cudaMemcpyAsync(_imageData, data, static_cast<size_t>(_numFrequencies) * sliceNumPixels() * sizeof(cufftComplex), cudaMemcpyHostToDevice);
+		cudaMemcpyAsync(_spadData, data, static_cast<size_t>(_numFrequencies) * sliceNumPixels() * sizeof(cufftComplex), cudaMemcpyHostToDevice);
 	}
 
 	void FastReconstructionAlgorithm::enableDepthDependentAveraging(bool useDDA)

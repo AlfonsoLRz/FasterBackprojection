@@ -13,7 +13,7 @@ namespace rtnlos
 		rtnlos::DatasetInfo			_info;
 		bool						_useDDA;			// Depth dependent averaging
 		bool						_precalculated;
-		glm::uint					_currentCount;
+		int							_currentCount;
 		glm::vec2					_bandpassInterval;
 
 		// Inferred data
@@ -25,7 +25,7 @@ namespace rtnlos
 		std::vector<float>			_weights, _lambdas, _omegas;
 
 		// Device pointers and Cuda resources
-		cufftComplex*				_imageData;
+		cufftComplex*				_spadData;
 		float*						_imageResult;
 		float*						_ddaWeights;
 		float*						_maxValue, * _minValue;

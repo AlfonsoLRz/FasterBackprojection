@@ -112,8 +112,8 @@ void FastRSDReconstruction::reconstructImage(ViewportSurface* viewportSurface)
 	{
 		CUFFT_CHECK(cufftSetStream(_fftPlan2D, _cudaStreams[frequencyIdx]));
 		CUFFT_CHECK(cufftExecC2C(_fftPlan2D,
-			_imageData + frequencyIdx * _sliceSize,
-			_imageData + frequencyIdx * _sliceSize,
+			_spadData + frequencyIdx * _sliceSize,
+			_spadData + frequencyIdx * _sliceSize,
 			CUFFT_FORWARD));
 	}
 	synchronizeStreams(_numFrequencies);
@@ -129,7 +129,7 @@ void FastRSDReconstruction::reconstructImage(ViewportSurface* viewportSurface)
 	for (depth = _info._minDistance, depthIndex = 0; depth < _info._maxDistance; depth += _info._deltaDistance, ++depthIndex)
 	{
 		multiplySpectrumManyAndScale<<<_gridSize2D_freq, _blockSize2D_freq, 0, _cudaStreams[depthIndex]>>>(
-			_imageData,
+			_spadData,
 			_rsd + depthIndex * _frequencyCubeSize,
 			_imageConvolution + depthIndex * _sliceSize,
 			_dWeights,
@@ -196,6 +196,8 @@ void FastRSDReconstruction::reconstructImage(ViewportSurface* viewportSurface)
 		} while (!texture);
 
 		writeImage<<<_gridSize1D, _blockSize1D>>>(_imageResult, _sliceSize, texture);
+
+		CudaHelper::synchronize();
 		viewportSurface->present();
 	}
 }

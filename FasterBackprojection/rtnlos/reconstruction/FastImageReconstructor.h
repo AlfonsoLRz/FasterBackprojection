@@ -14,23 +14,37 @@ namespace rtnlos
     template<int NROWS, int NCOLS, int NFREQ>
 	class FastImageReconstructor : public NlosDataProcessor
 	{
-    private:
-        bool                            _enableDDA;        // If true, do NOT use depth-dependent averaging
-        glm::vec2                       _bandpassInterval;
+    public:
+		enum FastReconstructionType : uint8_t
+        {
+	        RSD,
+            LCT,
+			NUM_ALGORITHMS
+        };
 
-        FrameHistogramDataQueue&        _incomingFrames;
-        FastRSDReconstruction           _reconstructor;
-		ViewportSurface*                _viewportSurface;    // The viewport surface to draw the reconstructed image into
+    private:
+        inline static FastReconstructionAlgorithm* _reconstructor[FastReconstructionType::NUM_ALGORITHMS] = {
+            new FastRSDReconstruction,
+			nullptr
+		};
+
+        bool                                    _enableDDA;             // If true, do NOT use depth-dependent averaging
+        glm::vec2                               _bandpassInterval;
+
+        FrameHistogramDataQueue&                _incomingFrames;
+		ViewportSurface*                        _viewportSurface;       // The viewport surface to draw the reconstructed image into
+
+        FastReconstructionType                  _reconstructionAlgorithm;
 
     public:
-        explicit FastImageReconstructor(FrameHistogramDataQueue& incoming)
-	        : _enableDDA(true), _bandpassInterval(0.1f, 0.9f), _incomingFrames(incoming), _viewportSurface(nullptr)
-        {
-        }
+        explicit FastImageReconstructor(FrameHistogramDataQueue& incoming);
+    	virtual ~FastImageReconstructor();
 
         void DoWork();
         void Initialize(const SceneParameters& sceneParameters, ViewportSurface* viewportSurface);
         void Stop() const;
+
+        void SetReconstructionAlgorithm(FastReconstructionType algorithm);
 
     protected:
         void Work();

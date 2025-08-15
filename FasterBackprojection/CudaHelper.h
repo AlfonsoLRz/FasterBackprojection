@@ -29,23 +29,25 @@ public:
 	template<typename T>
 	static void freeHost(T*& bufferPointer);
 
-	static glm::uint getMaxThreadsBlock();
-	static glm::ivec3 getMaxBlockDimensions();
-	static glm::ivec3 getMaxGridSize();
-	static glm::uint getNumBlocks(glm::uint size, glm::uint blockThreads) { return (size + blockThreads) / blockThreads; }
-	static size_t getAllocatedMemory() { return _allocatedMemory; }
-	static size_t getMaxAllocatableMemory();
+	static glm::uint	getMaxThreadsBlock();
+	static glm::ivec3	getMaxBlockDimensions();
+	static glm::ivec3	getMaxGridSize();
+	static glm::uint	getNumBlocks(glm::uint size, glm::uint blockThreads) { return (size + blockThreads) / blockThreads; }
+	static size_t		getAllocatedMemory() { return _allocatedMemory; }
+	static size_t		getMaxAllocatableMemory();
 
 	template<typename T>
 	static void initializeBuffer(T*& bufferPointer, size_t size, T* buffer = nullptr, bool trackMemory = true);
+	static void initializeBuffer(void*& bufferPointer, size_t size, bool trackMemory = true);
+	template<typename T>
+	static void initializeHostBuffer(T*& bufferPointer, size_t size, T* buffer = nullptr, bool trackMemory = true);
 	template<typename T>
 	static void initializeZeroBuffer(T*& bufferPointer, size_t size, bool trackMemory = true);
-	static void initializeBuffer(void*& bufferPointer, size_t size, bool trackMemory = true);
 
 	static void synchronize(const std::string& kernelName = "");
 
-	static void startTimer(cudaEvent_t& startEvent, cudaEvent_t& stopEvent);
-	static float stopTimer(const cudaEvent_t& startEvent, const cudaEvent_t& stopEvent);
+	static void		startTimer(cudaEvent_t& startEvent, cudaEvent_t& stopEvent);
+	static float	stopTimer(const cudaEvent_t& startEvent, const cudaEvent_t& stopEvent);
 };
 
 template <typename T>
@@ -118,6 +120,20 @@ template<typename T>
 void CudaHelper::initializeBuffer(T*& bufferPointer, size_t size, T* buffer, bool trackMemory)
 {
 	CudaHelper::checkError(cudaMalloc((void**)(&bufferPointer), size * sizeof(T)));
+	if (buffer)
+		CudaHelper::checkError(cudaMemcpy(bufferPointer, buffer, size * sizeof(T), cudaMemcpyHostToDevice));
+
+	if (trackMemory)
+	{
+		_allocatedMemory += size * sizeof(T);
+		_allocatedPointers[bufferPointer] = size * sizeof(T);
+	}
+}
+
+template <typename T>
+void CudaHelper::initializeHostBuffer(T*& bufferPointer, size_t size, T* buffer, bool trackMemory)
+{
+	CudaHelper::checkError(cudaHostAlloc((void**)(&bufferPointer), size * sizeof(T), cudaHostAllocDefault));
 	if (buffer)
 		CudaHelper::checkError(cudaMemcpy(bufferPointer, buffer, size * sizeof(T), cudaMemcpyHostToDevice));
 
