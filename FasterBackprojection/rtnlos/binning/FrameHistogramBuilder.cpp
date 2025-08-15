@@ -66,8 +66,8 @@ namespace rtnlos
     // Once an entire frame is recieved and binned, the histogram for that frame
     // should be packaged and pushed to the outgoing queue.
     template<int NINDICES, int NFREQ>
-    void FrameHistogramBuilder<NINDICES, NFREQ>::Work()
-	{
+    void FrameHistogramBuilder<NINDICES, NFREQ>::Work() const
+    {
 		rtnlos::ParsedSensorDataPtr parsedData;
 
         while (!_stop) 
@@ -86,7 +86,7 @@ namespace rtnlos
             rtnlos::FrameHistogramDataPtr fhd(new rtnlos::FrameHistogramDataType(parsedData->_frameNumber));
 
             // Binning
-            BuildHistogram_OMP(
+            BuildHistogram(
                 parsedData->_indexData.data(), parsedData->_timeData.data(), _frequencies, 
                 fhd->_histogram, 
                 static_cast<uint32_t>(parsedData->_indexData.size()));
@@ -110,7 +110,7 @@ namespace rtnlos
     }
 
     template<int NINDICES, int NFREQ>
-    void FrameHistogramBuilder<NINDICES, NFREQ>::BuildHistogram_OMP(
+    void FrameHistogramBuilder<NINDICES, NFREQ>::BuildHistogram(
         const uint32_t* indexData,
         const float* timeData,
         const float* frequencyData,
@@ -131,8 +131,8 @@ namespace rtnlos
                 histogram[f * NINDICES + indexData[s]].x += _cosLookup[idx];    // std::cos(frequencyData[f] * timeData[s]);
                 histogram[f * NINDICES + indexData[s]].y += _sinLookup[idx];    // std::sin(frequencyData[f] * timeData[s]);
 #else
-                histogram[f][indexData[s]][0] += std::cos(frequencyData[f] * timeData[s]);
-                histogram[f][indexData[s]][1] += std::sin(frequencyData[f] * timeData[s]);
+                histogram[f * NINDICES + indexData[s]].x += std::cos(frequencyData[f] * timeData[s]);
+                histogram[f * NINDICES + indexData[s]].y += std::sin(frequencyData[f] * timeData[s]);
 #endif
             }
         }

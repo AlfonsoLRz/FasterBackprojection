@@ -6,7 +6,7 @@
 #include "binning/FrameHistogramBuilder.h"
 #include "data/SceneParameters.h"
 #include "parsing/RawSensorDataParser.h"
-#include "reconstruction/FastRSDImageReconstructor.h"
+#include "reconstruction/FastImageReconstructor.h"
 
 namespace rtnlos
 {
@@ -15,7 +15,7 @@ namespace rtnlos
 	{
 		using RawSensorDataParserType = RawSensorDataParser<NROWS, NCOLS>;
 		using FrameHistogramBuilderType = FrameHistogramBuilder<NROWS* NCOLS, NFREQ>;
-		using FastRSDImageReconstructorType = FastRSDImageReconstructor<NROWS, NCOLS, NFREQ>;
+		using FastRSDImageReconstructorType = FastImageReconstructor<NROWS, NCOLS, NFREQ>;
 
 	private:
 		SceneParameters					_sceneParameters;

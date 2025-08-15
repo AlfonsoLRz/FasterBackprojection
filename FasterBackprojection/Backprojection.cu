@@ -2,7 +2,7 @@
 #include "stdafx.h"
 #include "Backprojection.h"
 
-#include <cub/device/device_scan.cuh>
+#include <cccl/cub/device/device_scan.cuh>
 
 #include "backprojection.cuh"
 #include "ComputeShader.h"

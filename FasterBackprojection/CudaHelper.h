@@ -32,10 +32,10 @@ public:
 	static size_t getMaxAllocatableMemory();
 
 	template<typename T>
-	static void initializeBuffer(T*& bufferPointer, size_t size, T* buffer = nullptr);
+	static void initializeBuffer(T*& bufferPointer, size_t size, T* buffer = nullptr, bool trackMemory = true);
 	template<typename T>
-	static void initializeZeroBuffer(T*& bufferPointer, size_t size);
-	static void initializeBuffer(void*& bufferPointer, size_t size);
+	static void initializeZeroBuffer(T*& bufferPointer, size_t size, bool trackMemory = true);
+	static void initializeBuffer(void*& bufferPointer, size_t size, bool trackMemory = true);
 
 	static void synchronize(const std::string& kernelName = "");
 
@@ -83,22 +83,28 @@ void CudaHelper::freeHost(T*& bufferPointer)
 }
 
 template<typename T>
-void CudaHelper::initializeBuffer(T*& bufferPointer, size_t size, T* buffer)
+void CudaHelper::initializeBuffer(T*& bufferPointer, size_t size, T* buffer, bool trackMemory)
 {
 	CudaHelper::checkError(cudaMalloc((void**)(&bufferPointer), size * sizeof(T)));
 	if (buffer)
 		CudaHelper::checkError(cudaMemcpy(bufferPointer, buffer, size * sizeof(T), cudaMemcpyHostToDevice));
 
-	_allocatedMemory += size * sizeof(T);
-	_allocatedPointers[bufferPointer] = size * sizeof(T);
+	if (trackMemory)
+	{
+		_allocatedMemory += size * sizeof(T);
+		_allocatedPointers[bufferPointer] = size * sizeof(T);
+	}
 }
 
 template <typename T>
-void CudaHelper::initializeZeroBuffer(T*& bufferPointer, size_t size)
+void CudaHelper::initializeZeroBuffer(T*& bufferPointer, size_t size, bool trackMemory)
 {
 	CudaHelper::checkError(cudaMalloc((void**)(&bufferPointer), size * sizeof(T)));
 	CudaHelper::checkError(cudaMemset(bufferPointer, 0, size * sizeof(T)));
 
-	_allocatedMemory += size * sizeof(T);
-	_allocatedPointers[bufferPointer] = size * sizeof(T);
+	if (trackMemory)
+	{
+		_allocatedMemory += size * sizeof(T);
+		_allocatedPointers[bufferPointer] = size * sizeof(T);
+	}
 }

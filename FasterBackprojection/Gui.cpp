@@ -156,6 +156,8 @@ void Gui::render(SceneContent* sceneContent)
 
 		ImGui::SameLine(0, 20);
 		ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+		ImGui::SameLine(0, 20);
+		ImGui::Text("CUDA Allocated memory (GB): %.3f", CudaHelper::getAllocatedMemory() / (1024.0f * 1024.0f * 1024.0f));
 		ImGui::EndMainMenuBar();
 	}
 

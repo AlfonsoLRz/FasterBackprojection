@@ -30,8 +30,8 @@ namespace rtnlos
         void Stop() const;
 
     private:
-        void Work();
-        void BuildHistogram_OMP(
+        void Work() const;
+        void BuildHistogram(
             const uint32_t* indexData,
             const float* timeData,
             const float* frequencyData,

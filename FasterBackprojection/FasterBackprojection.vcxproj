@@ -173,12 +173,13 @@
     <ClInclude Include="rtnlos\data\SensorData.h" />
     <ClInclude Include="rtnlos\data\SceneParameters.h" />
     <ClInclude Include="rtnlos\NlosDataProcessor.h" />
+    <ClInclude Include="rtnlos\reconstruction\FastReconstructionAlgorithm.h" />
     <ClInclude Include="rtnlos\SPADStreamingEngine.h" />
     <ClInclude Include="rtnlos\parsing\RawSensorDataParser.h" />
-    <ClInclude Include="rtnlos\reconstruction\FastRSDImageReconstructor.h" />
+    <ClInclude Include="rtnlos\reconstruction\FastImageReconstructor.h" />
     <ClInclude Include="rtnlos\reconstruction\rsd_cuda_kernels.h" />
-    <ClInclude Include="rtnlos\reconstruction\rsd_reconstructor.h" />
-    <ClInclude Include="rtnlos\util\SafeQueue.h" />
+    <ClInclude Include="rtnlos\reconstruction\FastRSDReconstruction.h" />
+    <ClInclude Include="SafeQueue.h" />
     <ClInclude Include="SceneContent.h" />
     <ClInclude Include="ShaderProgram.h" />
     <ClInclude Include="ShaderProgramDB.h" />
@@ -199,7 +200,7 @@
     <ClInclude Include="Vao.h" />
     <ClInclude Include="ViewportSurface.h" />
     <ClInclude Include="Window.h" />
-    <CudaCompile Include="rtnlos\reconstruction\rsd_reconstructor.cu" />
+    <CudaCompile Include="rtnlos\reconstruction\FastRSDReconstruction.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AABB.cpp">
@@ -318,6 +319,9 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
+    <CudaCompile Include="rtnlos\reconstruction\FastReconstructionAlgorithm.cu">
+      <FileType>Document</FileType>
+    </CudaCompile>
     <ClCompile Include="rtnlos\SPADStreamingEngine.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
@@ -326,7 +330,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="rtnlos\reconstruction\FastRSDImageReconstructor.cpp">
+    <ClCompile Include="rtnlos\reconstruction\FastImageReconstructor.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>

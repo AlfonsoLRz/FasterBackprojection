@@ -11,7 +11,7 @@ namespace rtnlos
     class RawSensorDataParser: public NlosDataProcessor
 	{
     public:
-        std::string                         _rawDataFileName; // If set to file name, read raw data from this file rather than from device
+        std::string                         _rawDataFileName; // If set to file _name, read raw data from this file rather than from device
         RawSensorDataQueue&                 _incomingRaw;
         ParsedSensorDataQueue&              _outgoingParsed;
 

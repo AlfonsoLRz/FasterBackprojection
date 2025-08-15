@@ -68,7 +68,7 @@ namespace rtnlos
 				break;
 
 			// Wait a bit (for demo purposes only)
-			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			//std::this_thread::sleep_for(std::chrono::milliseconds(50));
 			spdlog::trace("Pushed {} records to the outgoing queue (incoming queue size={})", chunk->_numRecords, _outgoingRaw.Size());
 		}
 

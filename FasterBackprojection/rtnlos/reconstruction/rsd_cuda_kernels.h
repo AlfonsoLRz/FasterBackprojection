@@ -3,13 +3,12 @@
 #include "../stdafx.h"
 
 #include <cufft.h>
-
 #include "../math.cuh"
 
 // RsdKernel, fills kernel with real and imaginary components of RSD kernel multiplied with expontial harmonic
 inline __global__ void rsdKernel(cufftComplex* __restrict__ kernel, float z_hat2, float mulSquare, glm::uint width, glm::uint height)
 {
-	const glm::uint y = blockIdx.x * blockDim.x + threadIdx.x, x = blockIdx.y * blockDim.y + threadIdx.y;
+	const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
 	if (x >= width || y >= height)
 		return;
 
@@ -25,15 +24,14 @@ inline __global__ void rsdKernel(cufftComplex* __restrict__ kernel, float z_hat2
 }
 
 // MulSpectrum (not used, this operation has been incorporated into rsdKernel)
-inline __global__ void multiplySpectrumExpHarmonic(cufftComplex* __restrict__ ker1, float omega, float t, glm::uint width, glm::uint height)
+inline __global__ void multiplySpectrumExpHarmonic(cufftComplex* __restrict__ ker1, cufftComplex harmonic, glm::uint sliceSize)
 {
-	const glm::uint y = blockIdx.x * blockDim.x + threadIdx.x, x = blockIdx.y * blockDim.y + threadIdx.y;
-	if (x >= width || y >= height)
+	const glm::uint tid = blockIdx.x * blockDim.x + threadIdx.x;
+	if (tid >= sliceSize)
 		return;
 
-	glm::uint idx = y * width + x;
-	cufftComplex& k1 = ker1[idx];
-	const cufftComplex k2 = { cos(omega * t), sin(omega * t) };
+	cufftComplex& k1 = ker1[tid];
+	const cufftComplex k2 = harmonic;
 	k1 = cuCmulf(k1, k2);
 }
 

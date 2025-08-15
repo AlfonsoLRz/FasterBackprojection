@@ -2,7 +2,6 @@
 #include "Window.h"
 
 #include "CudaContext.h"
-#include "CudaHelper.h"
 #include "Gui.h"
 
 Window::Window() : _window(nullptr)

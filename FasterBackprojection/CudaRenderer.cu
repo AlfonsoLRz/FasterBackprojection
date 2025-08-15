@@ -43,9 +43,13 @@ void CudaRenderer::setStreamingFocus(StreamingEngine* streamingEngine)
 
 void CudaRenderer::render()
 {
-	assert(_streamingEngine != nullptr);
+    using clock = std::chrono::high_resolution_clock;
+    static auto lastTime = clock::now();
+    static int imageFrameCount = 0;             // only count frames with valid images
+    static double fps = 0.0;
 
-    // Compute-based rendering
+    assert(_streamingEngine != nullptr);
+
     ViewportSurface& viewportSurface = _streamingEngine->getViewportSurface();
     float4* drawTexture = viewportSurface.acquirePresentSurface();
 
@@ -54,17 +58,33 @@ void CudaRenderer::render()
 
     if (drawTexture)
     {
-        glm::uint width = _streamingEngine->getImageWidth(),
-    			  height = _streamingEngine->getImageHeight();
+        imageFrameCount++; // count only if we got an image
 
-        writeImage<<<CudaHelper::getNumBlocks(width * height, 512), 512>>>(
+        glm::uint width = _streamingEngine->getImageWidth();
+        glm::uint height = _streamingEngine->getImageHeight();
+
+        writeImageInSurface<<<CudaHelper::getNumBlocks(width * height, 512), 512>>>(
             drawTexture, width, width * height, _viewportTexture.getSurfaceObject()
             );
 
-        CudaHelper::synchronize("writeImage");
         viewportSurface.presented();
+    }
+
+    // Measure FPS for frames with images
+    auto now = clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTime).count();
+
+    if (elapsed > 1000) // every ~1s
+    {
+        fps = imageFrameCount * 1000.0 / elapsed;
+        spdlog::info("Rendered images FPS: {:.2f}", fps);
+
+        imageFrameCount = 0;
+        lastTime = now;
     }
 
     _viewportTexture.bind();
     _quadVAO->drawObject(Vao::TRIANGLE, GL_TRIANGLES, 6);
 }
+
+

@@ -48,4 +48,15 @@ namespace rtnlos
 		std::vector<std::vector<float>> _t0Gated;
 		std::vector<std::vector<float>> _d4;
 	};
+
+	struct DatasetInfo
+	{
+		std::string _name;
+		float		_apertureDstWidth;
+		float		_apertureDstHeight;
+		float		_minDistance;
+		float		_maxDistance;
+		float		_deltaDistance;
+		float		_distanceOffset;
+	};
 }

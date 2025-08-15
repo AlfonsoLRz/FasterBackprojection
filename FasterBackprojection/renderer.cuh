@@ -2,9 +2,7 @@
 
 #include "stdafx.h"
 
-//
-
-inline __global__ void writeImage(const float4* __restrict__ image, glm::uint width, glm::uint numPixels, cudaSurfaceObject_t surfaceObj)
+inline __global__ void writeImageInSurface(const float4* __restrict__ image, glm::uint width, glm::uint numPixels, cudaSurfaceObject_t surfaceObj)
 {
 	const glm::uint tid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (tid >= numPixels)

@@ -41,11 +41,15 @@ size_t CudaHelper::getMaxAllocatableMemory()
     return prop.totalGlobalMem;
 }
 
-void CudaHelper::initializeBuffer(void*& bufferPointer, size_t size)
+void CudaHelper::initializeBuffer(void*& bufferPointer, size_t size, bool trackMemory)
 {
     CudaHelper::checkError(cudaMalloc(&bufferPointer, size));
-    _allocatedMemory += size;
-    _allocatedPointers[bufferPointer] = size;
+
+    if (trackMemory)
+    {
+        _allocatedMemory += size;
+        _allocatedPointers[bufferPointer] = size;
+    }
 }
 
 void CudaHelper::synchronize(const std::string& kernelName)

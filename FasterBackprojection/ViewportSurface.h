@@ -1,7 +1,7 @@
 #pragma once
 
+#include "SafeQueue.h"
 #include "stdafx.h"
-#include "Singleton.h"
 #include "Texture.h"
 
 class ViewportSurface 
@@ -9,7 +9,7 @@ class ViewportSurface
 private:
     glm::uint                   _width = 0, _height = 0, _numSurfaces = 0;
     std::vector<float4*>        _surfaces;
-    std::queue<glm::uint>       _freeQueue, _presentQueue;
+    SafeQueue<glm::uint, 3>     _freeQueue, _presentQueue;
     glm::uint                   _drawIndex = 0, _presentIndex = 0;
 
 public:
@@ -22,12 +22,11 @@ public:
 
     void init(
         glm::uint width,
-        glm::uint height,
-        glm::uint numSurfaces = 3)
+        glm::uint height)
     {
 	    _width = width;
         _height = height;
-        _numSurfaces = numSurfaces;
+        _numSurfaces = 3;
 		createSurfaces();
     }
 
@@ -35,11 +34,10 @@ public:
     float4* acquireDrawSurface()
 	{
         // If no free surface is available, wait for one to complete
-        if (_freeQueue.empty())
+        if (!_freeQueue.Size())
             return nullptr;
 
-        _drawIndex = _freeQueue.front();
-        _freeQueue.pop();
+        _freeQueue.Pop(_drawIndex);
 
         return _surfaces[_drawIndex];
     }
@@ -47,17 +45,17 @@ public:
     // Mark the draw surface as ready for presentation
     void present()
 	{
-        _presentQueue.push(_drawIndex);
+        _presentQueue.Push(_drawIndex);
+		//spdlog::info("ViewportSurface: Presenting surface {}", _drawIndex);
     }
 
     // Get the surface ready to display
     float4* acquirePresentSurface()
 	{
-        if (_presentQueue.empty())
+        if (!_presentQueue.Size())
             return nullptr;
 
-        _presentIndex = _presentQueue.front();
-        _presentQueue.pop();
+        _presentQueue.Pop(_presentIndex);
 
         return _surfaces[_presentIndex];
     }
@@ -65,7 +63,7 @@ public:
     void presented()
     {
         // After presentation, surface becomes free again
-        _freeQueue.push(_presentIndex);
+        _freeQueue.Push(_presentIndex);
     }
 
 private:
@@ -76,8 +74,8 @@ private:
         for (glm::uint i = 0; i < _numSurfaces; ++i) 
         {
             _surfaces[i] = nullptr;
-			CudaHelper::initializeBuffer(_surfaces[i], _width * _height);
-            _freeQueue.push(i); 
+			CudaHelper::initializeBuffer(_surfaces[i], _width * _height, static_cast<float4*>(nullptr), false);
+            _freeQueue.Push(i); 
         }
     }
 

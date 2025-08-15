@@ -2,7 +2,7 @@
 
 #include "cufft.h"
 #include "opencv4/opencv2/core.hpp"
-#include "util/SafeQueue.h"
+#include "../SafeQueue.h"
 
 #define NUMBER_OF_SPAD_ROWS 190
 #define NUMBER_OF_SPAD_COLS 190
@@ -73,7 +73,7 @@ namespace rtnlos
 	class FrameHistogramData
 	{
 	public:
-		cufftComplex	_histogram[NINDICES * NFREQUENCIES * 2];
+		cufftComplex	_histogram[NINDICES * NFREQUENCIES];
 		uint32_t		_frameNumber;
 
 	public:
@@ -82,30 +82,14 @@ namespace rtnlos
 		}
 	};
 
-	template<int NROWS, int NCOLS>
-	class ReconstructedImageData
-	{
-	public:
-		cv::Mat		_image;
-		uint32_t	_frameNumber;
-
-	public:
-		ReconstructedImageData(uint32_t frameNumber = 0) : _image(cv::Size(NROWS, NCOLS), CV_32FC1), _frameNumber(frameNumber) {}
-		ReconstructedImageData(uint32_t frameNumber, cv::Mat img) : _image(std::move(img)), _frameNumber(frameNumber) {}
-	};
-
 	using RawSensorDataType = RawSensorData<RAW_SENSOR_READ_BLOCK_SIZE>;
 	using FrameHistogramDataType = FrameHistogramData<NUMBER_OF_SPAD_ROWS* NUMBER_OF_SPAD_COLS, NUMBER_OF_SPAD_FREQUENCIES>;
-	using ReconstructedImageDataType = ReconstructedImageData<NUMBER_OF_SPAD_ROWS, NUMBER_OF_SPAD_COLS>;
 
 	using RawSensorDataPtr = std::shared_ptr<RawSensorDataType>;
 	using ParsedSensorDataPtr = std::shared_ptr<ParsedSensorData>;
 	using FrameHistogramDataPtr = std::shared_ptr<FrameHistogramDataType>;
-	using ReconstructedImageDataPtr = std::shared_ptr<ReconstructedImageDataType>;
 
 	using RawSensorDataQueue = SafeQueue<RawSensorDataPtr, 200>;
 	using ParsedSensorDataQueue = SafeQueue<ParsedSensorDataPtr, 10>;
 	using FrameHistogramDataQueue = SafeQueue<FrameHistogramDataPtr, 10>;
-	using ReconstructedImageDataQueue = SafeQueue<ReconstructedImageDataPtr, 10>;
-	using KeyboardInputQueue = SafeQueue<char, 100>;
 }

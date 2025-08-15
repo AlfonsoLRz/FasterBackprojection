@@ -16,27 +16,11 @@ class SceneContent;
 class Reconstruction
 {
 protected:
-	template <typename T>
-	class DeleteQueue {
-	public:
-		void add(T* ptr)
-		{
-			queue.emplace_back(ptr);
-		}
-		void clear()
-		{
-			for (auto ptr : queue) delete ptr;
-			queue.clear();
-		}
+	NLosData*							_nlosData = nullptr;
+	CudaPerf							_perf;
+	std::vector<std::function<void()>>	_cleanupQueue;
 
-	private:
-		std::vector<T*> queue;
-	};
-
-protected:
-	NLosData* _nlosData = nullptr;
-	CudaPerf  _perf;
-
+	// Strategy pattern for post-processing filters
 	static const PostprocessingFilters* _postprocessingFilters[PostprocessingFilterType::NUM_POSTPROCESSING_FILTERS];
 
 protected:
@@ -49,12 +33,14 @@ protected:
 	void compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
 	void normalizeMatrix(float* v, glm::uint size);
 
+	// Save functions
 	void saveMaxImage(const std::string& filename, const float* volumeGpu, const glm::uvec3& volumeResolution, bool flip = true);
 	static bool saveReconstructedAABB(const std::string& filename, float* voxels, glm::uint numVoxels);
 
 public:
 	virtual ~Reconstruction() = default;
 
+	// This is not implemented in most cases. Mainly useful for backprojection whether depth is known
 	virtual void reconstructDepths(
 		NLosData* nlosData, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers,
 		const TransientParameters& transientParams, const std::vector<float>& depths) = 0;
