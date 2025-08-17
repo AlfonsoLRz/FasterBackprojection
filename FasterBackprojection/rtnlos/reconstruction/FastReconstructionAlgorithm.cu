@@ -52,8 +52,8 @@ namespace rtnlos
 	void FastReconstructionAlgorithm::precalculate()
 	{
 		// Now allocate all the storage that the ReconstructImage() function will need
-		CudaHelper::initializeBuffer(_imageResult, sliceNumPixels());
 		CudaHelper::initializeBuffer(_spadData, sliceNumPixels() * _numFrequencies);
+		CudaHelper::initializeBuffer(_imageResult, sliceNumPixels());
 		precalculateDDAWeights();
 
 		// Allocate intermediate storage used for ffts during reconstruction

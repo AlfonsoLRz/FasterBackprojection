@@ -15,6 +15,8 @@ namespace rtnlos
     private:
         ParsedSensorDataQueue&      _incomingParsed;
         FrameHistogramDataQueue&    _outgoingHistograms;
+        bool                        _frequencyMajorOrder = true;
+
         float                       _frequencies[NFREQ];
 
     public:
@@ -28,6 +30,7 @@ namespace rtnlos
         void Initialize(const rtnlos::SceneParameters& sceneParameters);
 		void DoWork();
         void Stop() const;
+		void setFrequencyMajorOrder(bool order) { _frequencyMajorOrder = order; }
 
     private:
         void Work() const;

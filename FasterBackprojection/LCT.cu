@@ -299,13 +299,6 @@ void LCT::multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const
 		(dataResolution.x + blockSize.z - 1) / blockSize.z
 	);
 
-	glm::uint rollStride = 16;
-	dim3 blockSizeRolled(8, 8, 8);
-	dim3 gridSizeRolled(
-		(dataResolution.z / rollStride + blockSize.x - 1) / blockSize.x,
-		(dataResolution.y + blockSize.y - 1) / blockSize.y,
-		(dataResolution.x + blockSize.z - 1) / blockSize.z
-	);
 	padIntensityFFT<<<gridSize, blockSize>>>(volumeGpu, d_H, dataResolution, newDims);
 
 	//

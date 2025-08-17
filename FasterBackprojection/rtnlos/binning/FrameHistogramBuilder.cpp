@@ -120,20 +120,44 @@ namespace rtnlos
         // Optimal ordering for cuda rsd input
 		cufftComplex* histogram = histData;
 
-        // Note, the -2PI/MaxT coefficient is already in the frequencyData
-#pragma omp parallel for
-        for (int f = 0; f < NFREQ; f++) 
+        auto frequencyMajorIndex = [](int i, int f) -> int { return f * NINDICES + i; };
+    	auto indexMajorIndex = [](int i, int f) -> int { return i * NFREQ + f; };
+		auto func = _frequencyMajorOrder ? frequencyMajorIndex : indexMajorIndex;
+
+        if (_frequencyMajorOrder)
         {
-            for (uint32_t s = 0; s < nSamples; s++) 
+#pragma omp parallel for
+            for (int f = 0; f < NFREQ; f++)
             {
+                for (uint32_t s = 0; s < nSamples; s++)
+                {
 #if USE_FDH_LOOKUP_TABLE
-                int idx = static_cast<int>(timeData[s] + 0.5f - _photonMinTime) * NFREQ + f;
-                histogram[f * NINDICES + indexData[s]].x += _cosLookup[idx];    // std::cos(frequencyData[f] * timeData[s]);
-                histogram[f * NINDICES + indexData[s]].y += _sinLookup[idx];    // std::sin(frequencyData[f] * timeData[s]);
+                    int idx = static_cast<int>(timeData[s] + 0.5f - _photonMinTime) * NFREQ + f;
+                    histogram[f * NINDICES + indexData[s]].x += _cosLookup[idx];    // std::cos(frequencyData[f] * timeData[s]);
+                    histogram[f * NINDICES + indexData[s]].y += _sinLookup[idx];    // std::sin(frequencyData[f] * timeData[s]);
 #else
-                histogram[f * NINDICES + indexData[s]].x += std::cos(frequencyData[f] * timeData[s]);
-                histogram[f * NINDICES + indexData[s]].y += std::sin(frequencyData[f] * timeData[s]);
+                    histogram[f * NINDICES + indexData[s]].x += std::cos(frequencyData[f] * timeData[s]);
+                    histogram[f * NINDICES + indexData[s]].y += std::sin(frequencyData[f] * timeData[s]);
 #endif
+                }
+            }
+        }
+        else
+        {
+#pragma omp parallel for
+            for (int f = 0; f < NFREQ; f++)
+            {
+                for (uint32_t s = 0; s < nSamples; s++)
+                {
+#if USE_FDH_LOOKUP_TABLE
+                    int idx = static_cast<int>(timeData[s] + 0.5f - _photonMinTime) * NFREQ + f;
+                    histogram[indexData[s] * NFREQ + f].x += _cosLookup[idx];    // std::cos(frequencyData[f] * timeData[s]);
+                    histogram[indexData[s] * NFREQ + f].y += _sinLookup[idx];    // std::sin(frequencyData[f] * timeData[s]);
+#else
+                    histogram[indexData[s] * NFREQ + f].x += std::cos(frequencyData[f] * timeData[s]);
+                    histogram[indexData[s] * NFREQ + f].y += std::sin(frequencyData[f] * timeData[s]);
+#endif
+                }
             }
         }
     }

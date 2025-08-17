@@ -48,8 +48,6 @@ void CudaRenderer::render()
     static int imageFrameCount = 0;             // only count frames with valid images
     static double fps = 0.0;
 
-    assert(_streamingEngine != nullptr);
-
     ViewportSurface& viewportSurface = _streamingEngine->getViewportSurface();
     float4* drawTexture = viewportSurface.acquirePresentSurface();
 
@@ -70,7 +68,7 @@ void CudaRenderer::render()
         viewportSurface.presented();
     }
 
-    // Measure FPS for frames with images
+    // Show frames per second
     auto now = clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTime).count();
 
