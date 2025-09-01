@@ -32,6 +32,8 @@ public:
 	// Call after each time full set of images has been added
 	void reconstructImage(ViewportSurface* viewportSurface) override;
 
+	bool isFrequencyMajorOrder() const override { return false; }
+
 private:
 	void RSDKernelConvolution(cufftComplex* dKernel, cufftHandle fftPlan, const float lambda, const float omega, const float depth, const float t, cudaStream_t cudaStream) const;
 };

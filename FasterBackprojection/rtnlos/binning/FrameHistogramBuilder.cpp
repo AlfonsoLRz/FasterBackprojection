@@ -117,7 +117,6 @@ namespace rtnlos
         cufftComplex* histData,
         const uint32_t nSamples) const
     {
-        // Optimal ordering for cuda rsd input
 		cufftComplex* histogram = histData;
 
         auto frequencyMajorIndex = [](int i, int f) -> int { return f * NINDICES + i; };

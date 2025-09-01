@@ -230,7 +230,7 @@ void Reconstruction::saveMaxImage(const std::string& filename, const float* volu
 	);
 
 	composeImage<<<gridSize, blockSize >>>(volumeGpu, maxZ, volumeResolution);
-	//CudaHelper::synchronize("formImage");
+	CudaHelper::synchronize("formImage");
 
 	// Normalize the maximum Z values
 	normalizeMatrix(maxZ, sliceSize);

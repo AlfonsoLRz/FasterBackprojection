@@ -26,19 +26,19 @@ void SceneContent::buildScenario()
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_mannequin.mat");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_exit_sign.mat");
 	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/lct/data_resolution_chart_65cm.mat");
-	//NLosData* transientVoxels = new NLosData("C:/Datasets/transient/fk/bike/meas_180min.mat");
+	NLosData* transientVoxels = new NLosData("C:/Datasets/transient/fk/bike/meas_180min.mat");
 
 	//transientVoxels.saveImages("output/");
 
 	//NLosDataVisualizer* nlosVisualizer = new NLosDataVisualizer(transientVoxels);
 	//this->addNewModel(nlosVisualizer);
-	//Laser::reconstruct(transientVoxels, transientParameters);
+	Laser::reconstruct(transientVoxels, transientParameters);
 
 	// Open the streaming engine
-	_reconstructionEngine = new rtnlos::ReconstructionEngine(
-		"C:/Datasets/rt-nlos/data_raw_NGC_newmovement3.out", "C:/Datasets/rt-nlos/sample_parameters.yml"
-	);
-	_reconstructionEngine->Start();
+	//_reconstructionEngine = new rtnlos::ReconstructionEngine(
+	//	"C:/Datasets/rt-nlos/data_raw_NGC_newmovement3.out", "C:/Datasets/rt-nlos/sample_parameters.yml"
+	//);
+	//_reconstructionEngine->Start();
 }
 
 SceneContent::SceneContent() : _reconstructionEngine(nullptr)

@@ -25,6 +25,9 @@ public:
 	template<typename T>
 	static void free(T* bufferPointer);
 	template<typename T>
+	static void freeAsync(T* bufferPointer, cudaStream_t stream);
+
+	template<typename T>
 	static void reset(T*& bufferPointer);
 	template<typename T>
 	static void freeHost(T*& bufferPointer);
@@ -38,11 +41,15 @@ public:
 
 	template<typename T>
 	static void initializeBuffer(T*& bufferPointer, size_t size, T* buffer = nullptr, bool trackMemory = true);
+	template<typename T>
+	static void initializeBufferAsync(T*& bufferPointer, size_t size, T* buffer = nullptr, cudaStream_t stream = nullptr, bool trackMemory = true);
 	static void initializeBuffer(void*& bufferPointer, size_t size, bool trackMemory = true);
 	template<typename T>
 	static void initializeHostBuffer(T*& bufferPointer, size_t size, T* buffer = nullptr, bool trackMemory = true);
 	template<typename T>
 	static void initializeZeroBuffer(T*& bufferPointer, size_t size, bool trackMemory = true);
+	template<typename T>
+	static void initializeZeroBufferAsync(T*& bufferPointer, size_t size, cudaStream_t stream = nullptr, bool trackMemory = true);
 
 	static void synchronize(const std::string& kernelName = "");
 
@@ -78,6 +85,20 @@ void CudaHelper::free(T* bufferPointer)
 {
 	if (!bufferPointer) return;
 	cudaFree(bufferPointer);
+
+	const auto it = _allocatedPointers.find(bufferPointer);
+	if (it != _allocatedPointers.end())
+	{
+		_allocatedMemory -= it->second;
+		_allocatedPointers.erase(it);
+	}
+}
+
+template <typename T>
+void CudaHelper::freeAsync(T* bufferPointer, cudaStream_t stream)
+{
+	if (!bufferPointer) return;
+	cudaFreeAsync(bufferPointer, stream);
 
 	const auto it = _allocatedPointers.find(bufferPointer);
 	if (it != _allocatedPointers.end())
@@ -131,6 +152,20 @@ void CudaHelper::initializeBuffer(T*& bufferPointer, size_t size, T* buffer, boo
 }
 
 template <typename T>
+void CudaHelper::initializeBufferAsync(T*& bufferPointer, size_t size, T* buffer, cudaStream_t stream, bool trackMemory)
+{
+	CudaHelper::checkError(cudaMallocAsync((void**)(&bufferPointer), size * sizeof(T), stream));
+	if (buffer)
+		CudaHelper::checkError(cudaMemcpyAsync(bufferPointer, buffer, size * sizeof(T), cudaMemcpyHostToDevice, stream));
+
+	if (trackMemory)
+	{
+		_allocatedMemory += size * sizeof(T);
+		_allocatedPointers[bufferPointer] = size * sizeof(T);
+	}
+}
+
+template <typename T>
 void CudaHelper::initializeHostBuffer(T*& bufferPointer, size_t size, T* buffer, bool trackMemory)
 {
 	CudaHelper::checkError(cudaHostAlloc((void**)(&bufferPointer), size * sizeof(T), cudaHostAllocDefault));
@@ -149,6 +184,19 @@ void CudaHelper::initializeZeroBuffer(T*& bufferPointer, size_t size, bool track
 {
 	CudaHelper::checkError(cudaMalloc((void**)(&bufferPointer), size * sizeof(T)));
 	CudaHelper::checkError(cudaMemset(bufferPointer, 0, size * sizeof(T)));
+
+	if (trackMemory)
+	{
+		_allocatedMemory += size * sizeof(T);
+		_allocatedPointers[bufferPointer] = size * sizeof(T);
+	}
+}
+
+template <typename T>
+void CudaHelper::initializeZeroBufferAsync(T*& bufferPointer, size_t size, cudaStream_t stream, bool trackMemory)
+{
+	CudaHelper::checkError(cudaMallocAsync((void**)(&bufferPointer), size * sizeof(T), stream));
+	CudaHelper::checkError(cudaMemsetAsync(bufferPointer, 0, size * sizeof(T), stream));
 
 	if (trackMemory)
 	{

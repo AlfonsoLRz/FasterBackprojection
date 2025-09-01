@@ -3,9 +3,11 @@
 #include "data/SceneParameters.h"
 #include "data/SensorData.h"
 
+#include "FastLCTReconstruction.h"
 #include "FastRSDReconstruction.h"
 #include "NlosDataProcessor.h"
 
+class FastLCTReconstruction;
 class ViewportSurface;
 
 namespace rtnlos
@@ -25,7 +27,7 @@ namespace rtnlos
     private:
         inline static FastReconstructionAlgorithm* _reconstructor[FastReconstructionType::NUM_ALGORITHMS] = {
             new FastRSDReconstruction,
-			nullptr
+			new FastLCTReconstruction
 		};
 
         bool                                    _enableDDA;             // If true, do NOT use depth-dependent averaging

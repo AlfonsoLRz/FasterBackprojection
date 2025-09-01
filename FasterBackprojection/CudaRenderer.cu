@@ -37,52 +37,58 @@ void CudaRenderer::setStreamingFocus(StreamingEngine* streamingEngine)
 {
 	_streamingEngine = streamingEngine;
 
-    _viewportTexture.init(streamingEngine->getImageWidth(), streamingEngine->getImageHeight());
-    _viewportTexture.mapPersistently();
+    if (_streamingEngine)
+    {
+        _viewportTexture.init(streamingEngine->getImageWidth(), streamingEngine->getImageHeight());
+        _viewportTexture.mapPersistently();
+    }
 }
 
 void CudaRenderer::render()
 {
-    using clock = std::chrono::high_resolution_clock;
-    static auto lastTime = clock::now();
-    static int imageFrameCount = 0;             // only count frames with valid images
-    static double fps = 0.0;
-
-    ViewportSurface& viewportSurface = _streamingEngine->getViewportSurface();
-    float4* drawTexture = viewportSurface.acquirePresentSurface();
-
-    _quadShader->use();
-    _quadShader->applyActiveSubroutines();
-
-    if (drawTexture)
+    if (_streamingEngine)
     {
-        imageFrameCount++; // count only if we got an image
+        using clock = std::chrono::high_resolution_clock;
+        static auto lastTime = clock::now();
+        static int imageFrameCount = 0;             // only count frames with valid images
+        static double fps = 0.0;
 
-        glm::uint width = _streamingEngine->getImageWidth();
-        glm::uint height = _streamingEngine->getImageHeight();
+        ViewportSurface& viewportSurface = _streamingEngine->getViewportSurface();
+        float4* drawTexture = viewportSurface.acquirePresentSurface();
 
-        writeImageInSurface<<<CudaHelper::getNumBlocks(width * height, 512), 512>>>(
-            drawTexture, width, width * height, _viewportTexture.getSurfaceObject()
-            );
+        _quadShader->use();
+        _quadShader->applyActiveSubroutines();
 
-        viewportSurface.presented();
+        if (drawTexture)
+        {
+            imageFrameCount++; // count only if we got an image
+
+            glm::uint width = _streamingEngine->getImageWidth();
+            glm::uint height = _streamingEngine->getImageHeight();
+
+            writeImageInSurface << <CudaHelper::getNumBlocks(width * height, 512), 512 >> > (
+                drawTexture, width, width * height, _viewportTexture.getSurfaceObject()
+                );
+
+            viewportSurface.presented();
+        }
+
+        // Show frames per second
+        auto now = clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTime).count();
+
+        if (elapsed > 1000) // every ~1s
+        {
+            fps = imageFrameCount * 1000.0 / elapsed;
+            spdlog::info("Rendered images FPS: {:.2f}", fps);
+
+            imageFrameCount = 0;
+            lastTime = now;
+        }
+
+        _viewportTexture.bind();
+        _quadVAO->drawObject(Vao::TRIANGLE, GL_TRIANGLES, 6);
     }
-
-    // Show frames per second
-    auto now = clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTime).count();
-
-    if (elapsed > 1000) // every ~1s
-    {
-        fps = imageFrameCount * 1000.0 / elapsed;
-        spdlog::info("Rendered images FPS: {:.2f}", fps);
-
-        imageFrameCount = 0;
-        lastTime = now;
-    }
-
-    _viewportTexture.bind();
-    _quadVAO->drawObject(Vao::TRIANGLE, GL_TRIANGLES, 6);
 }
 
 

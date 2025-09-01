@@ -30,7 +30,7 @@ void Laser::reconstruct(NLosData* nlosData, const TransientParameters& transient
 	// Transfer data to GPU
 	nlosData->discardDistanceToSensorAndLaser();
 	nlosData->reduceToConfocal();
-	nlosData->downsampleTime(4);
+	nlosData->downsampleTime(2);
 	//nlosData->downsampleSpace(2);
 	nlosData->toGpu(recInfo, recBuffers, transientParams);
 

@@ -1,4 +1,4 @@
-#include "../stdafx.h"
+#include "stdafx.h"
 #include "FastReconstructionAlgorithm.h"
 
 #include <cccl/cub/device/device_reduce.cuh>
@@ -75,7 +75,7 @@ namespace rtnlos
 	void FastReconstructionAlgorithm::setFFTData(const cufftComplex* data)
 	{
 		assert(_numFrequencies);
-		assert(_imgWidth != 0 && _imgHeight != 0);
+		assert(_imageWidth != 0 && _imageHeight != 0);
 
 		cudaMemcpyAsync(_spadData, data, static_cast<size_t>(_numFrequencies) * sliceNumPixels() * sizeof(cufftComplex), cudaMemcpyHostToDevice);
 	}
@@ -229,5 +229,13 @@ namespace rtnlos
 		}
 
 		CudaHelper::initializeBuffer(_ddaWeights, _numDepths * 3, weights.data());
+	}
+
+	void FastReconstructionAlgorithm::emptyCleanupQueue()
+	{
+		for (auto& func : _cleanupQueue)
+			func();
+
+		_cleanupQueue.clear();
 	}
 }

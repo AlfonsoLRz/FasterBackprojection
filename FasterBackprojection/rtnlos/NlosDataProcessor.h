@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../stdafx.h"
-#include "../InputManager.h"
+#include "stdafx.h"
+#include "InputManager.h"
 
 namespace rtnlos
 {

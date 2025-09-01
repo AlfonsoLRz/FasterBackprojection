@@ -3,7 +3,7 @@
 #include <cufft.h>
 
 #include "data/SceneParameters.h"
-#include "../ViewportSurface.h"
+#include "ViewportSurface.h"
 
 namespace rtnlos
 {
@@ -34,6 +34,7 @@ namespace rtnlos
 		size_t						_tempStorageBytes;
 
 		std::vector<cudaStream_t>	_cudaStreams;
+		std::vector<std::function<void()>>	_cleanupQueue;
 
 	public:
 		FastReconstructionAlgorithm();
@@ -63,6 +64,7 @@ namespace rtnlos
 
 		// Query
 		void dumpInfo() const;
+		virtual bool isFrequencyMajorOrder() const { return true; }
 
 		void writeImageResult(const std::string& filename) const;
 
@@ -72,6 +74,8 @@ namespace rtnlos
 		void synchronizeStreams(glm::uint numStreams) const;
 
 		void precalculateDDAWeights();
+
+		void emptyCleanupQueue();
 
 		glm::uint sliceNumPixels() const { return _sliceSize; }
 		glm::uint cubeNumPixels() const { return _sliceSize * _numDepths; }

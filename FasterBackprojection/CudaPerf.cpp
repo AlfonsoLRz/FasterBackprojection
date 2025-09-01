@@ -69,7 +69,7 @@ void CudaPerf::summarize() const
 	pprint::PrettyPrinter printer;
 
 	// Beautifully print the timings
-	std::cout << "CudaPerf Summary for algorithm: " << _algName << '\n';
+	spdlog::info("CudaPerf Summary for algorithm {}", _algName);
 
 	// Per stage timings
 	auto timings = _timings;
@@ -86,7 +86,7 @@ void CudaPerf::summarize() const
 			return sum + timing.second / TimeMeasurementDivisor; // ms
 		});
 
-	std::cout << std::left << "Total Time" << ": " << globalElapsedTime << " milliseconds\n";
+	spdlog::info("Total elapsed time: {} ms", globalElapsedTime);
 }
 
 void CudaPerf::write(const std::string& outPath) const

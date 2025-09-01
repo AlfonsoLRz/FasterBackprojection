@@ -1,14 +1,13 @@
-﻿#include "../stdafx.h"
+﻿#include "stdafx.h"
 #include "FastRSDReconstruction.h"
 
 #include <cccl/cub/device/device_reduce.cuh>
 
-#include "rsd_cuda_kernels.h"
-#include "../CudaHelper.h"
-#include "../../fourier.cuh"
-#include "../../transient_postprocessing.cuh"
-#include "../../CudaPerf.h"
-#include "../../ViewportSurface.h"
+#include "CudaHelper.h"
+#include "fast_rsd.cuh"
+#include "fourier.cuh"
+#include "transient_postprocessing.cuh"
+#include "ViewportSurface.h"
 
 //
 
@@ -91,7 +90,7 @@ void FastRSDReconstruction::precalculate()
 
 		synchronizeStreams(_numFrequencies);
 	}
-	assert(i == _numDepths);
+	assert(depthIdx == _numDepths);
 
 	// Now allocate all the storage that the reconstructImage() function will need
 	CudaHelper::initializeBuffer(_dWeights, _weights.size(), _weights.data());
