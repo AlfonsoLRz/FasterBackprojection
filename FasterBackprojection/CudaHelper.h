@@ -55,6 +55,10 @@ public:
 
 	static void		startTimer(cudaEvent_t& startEvent, cudaEvent_t& stopEvent);
 	static float	stopTimer(const cudaEvent_t& startEvent, const cudaEvent_t& stopEvent);
+
+	static void createStreams(std::initializer_list<cudaStream_t*> streams);
+	static void waitFor(std::initializer_list<cudaStream_t*> streams);
+	static void destroyStreams(std::initializer_list<cudaStream_t*> streams);
 };
 
 template <typename T>

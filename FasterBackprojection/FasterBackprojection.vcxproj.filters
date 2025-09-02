@@ -243,28 +243,13 @@
     <ClInclude Include="PcResourceTracker.h">
       <Filter>header</Filter>
     </ClInclude>
-    <ClInclude Include="rtnlos\reconstruction\rsd_reconstructor.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
     <ClInclude Include="rtnlos\data\SensorData.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\util\SafeQueue.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\reconstruction\rsd_cuda_kernels.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\reconstruction\FastRSDImageReconstructor.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
     <ClInclude Include="rtnlos\parsing\RawSensorDataParser.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
     <ClInclude Include="rtnlos\data\SceneParameters.h">
-      <Filter>rt-nlos\headers</Filter>
-    </ClInclude>
-    <ClInclude Include="rtnlos\NlosStreamingEngine.h">
       <Filter>rt-nlos\headers</Filter>
     </ClInclude>
     <ClInclude Include="rtnlos\acquisition\RawSensorDataReader.h">
@@ -285,6 +270,15 @@
     <ClInclude Include="CudaRenderer.h">
       <Filter>header</Filter>
     </ClInclude>
+    <ClInclude Include="rtnlos\reconstruction\FastLCTReconstruction.h" />
+    <ClInclude Include="rtnlos\reconstruction\FastReconstructionAlgorithm.h" />
+    <ClInclude Include="rtnlos\reconstruction\fast_lct.cuh" />
+    <ClInclude Include="rtnlos\SPADStreamingEngine.h" />
+    <ClInclude Include="rtnlos\reconstruction\FastImageReconstructor.h" />
+    <ClInclude Include="rtnlos\reconstruction\fast_rsd.cuh" />
+    <ClInclude Include="rtnlos\reconstruction\FastRSDReconstruction.h" />
+    <ClInclude Include="SafeQueue.h" />
+    <ClInclude Include="StreamingEngine.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Window.cpp">
@@ -407,16 +401,10 @@
     <ClCompile Include="rtnlos\data\SceneParameters.cpp">
       <Filter>rt-nlos\source</Filter>
     </ClCompile>
-    <ClCompile Include="rtnlos\reconstruction\FastRSDImageReconstructor.cpp">
-      <Filter>rt-nlos\source</Filter>
-    </ClCompile>
     <ClCompile Include="rtnlos\parsing\RawSensorDataParser.cpp">
       <Filter>rt-nlos\source</Filter>
     </ClCompile>
     <ClCompile Include="rtnlos\acquisition\RawSensorDataReader.cpp">
-      <Filter>rt-nlos\source</Filter>
-    </ClCompile>
-    <ClCompile Include="rtnlos\NlosStreamingEngine.cpp">
       <Filter>rt-nlos\source</Filter>
     </ClCompile>
     <ClCompile Include="rtnlos\binning\FrameHistogramBuilder.cpp">
@@ -425,6 +413,8 @@
     <ClCompile Include="Renderer.cpp">
       <Filter>source</Filter>
     </ClCompile>
+    <ClCompile Include="rtnlos\SPADStreamingEngine.cpp" />
+    <ClCompile Include="rtnlos\reconstruction\FastImageReconstructor.cpp" />
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="GpuStructs.cu">
@@ -454,12 +444,12 @@
     <CudaCompile Include="PhasorFields.cu">
       <Filter>source</Filter>
     </CudaCompile>
-    <CudaCompile Include="rtnlos\reconstruction\rsd_reconstructor.cu">
-      <Filter>rt-nlos\headers</Filter>
-    </CudaCompile>
     <CudaCompile Include="CudaRenderer.cu">
       <Filter>source</Filter>
     </CudaCompile>
+    <CudaCompile Include="rtnlos\reconstruction\FastLCTReconstruction.cu" />
+    <CudaCompile Include="rtnlos\reconstruction\FastRSDReconstruction.cu" />
+    <CudaCompile Include="rtnlos\reconstruction\FastReconstructionAlgorithm.cu" />
   </ItemGroup>
   <ItemGroup>
     <None Include="assets\shaders\shading\quad-fs.glsl">

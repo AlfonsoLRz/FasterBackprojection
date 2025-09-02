@@ -30,7 +30,7 @@ protected:
 	void filter_H_cuda(float* intensityGpu, float wl_mean, float wl_sigma = .0f, const std::string& border = "zero");
 
 	// Pre-processing functions
-	void compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
+	void compensateLaserCosDistance(const TransientParameters& transientParams, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
 	void normalizeMatrix(float* v, glm::uint size);
 
 	// Save functions

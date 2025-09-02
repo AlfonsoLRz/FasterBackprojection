@@ -77,6 +77,24 @@ float CudaHelper::stopTimer(const cudaEvent_t& startEvent, const cudaEvent_t& st
     return ms;
 }
 
+void CudaHelper::createStreams(std::initializer_list<cudaStream_t*> streams)
+{
+    for (auto stream : streams)
+		checkError(cudaStreamCreate(stream));
+}
+
+void CudaHelper::waitFor(std::initializer_list<cudaStream_t*> streams)
+{
+    for (auto stream : streams)
+		checkError(cudaStreamSynchronize(*stream));
+}
+
+void CudaHelper::destroyStreams(std::initializer_list<cudaStream_t*> streams)
+{
+    for (auto stream : streams)
+		checkError(cudaStreamDestroy(*stream));
+}
+
 // Protected methods
 
 void CudaHelper::checkError(cudaError_t result)

@@ -122,9 +122,8 @@ void NLosData::downsampleTime(glm::uint times)
 	_dims.back() = newTimeDimension;
 	_deltaT *= static_cast<float>(times);
 
-	std::cout << "NLosData: Downsampled time dimension by a factor of " << times << ". New temporal resolution: " 
-				<< _dims.back() << ", new deltaT: " << _deltaT << '\n';
-	std::cout << "Time taken to downsample: " << ChronoUtilities::getElapsedTime() << " milliseconds.\n";
+	spdlog::info("NLosData: Downsampled time dimension by a factor of {}. New temporal resolution: {}, new deltaT: {}", times, _dims.back(), _deltaT);
+	spdlog::info("Time taken to downsample: {} milliseconds.", ChronoUtilities::getElapsedTime());
 }
 
 void NLosData::toGpu(ReconstructionInfo& recInfo, ReconstructionBuffers& recBuffers, const TransientParameters& transientParameters)
@@ -311,8 +310,6 @@ void NLosData::reduceToConfocal()
 				return newLaserPositions[a].x > newLaserPositions[b].x; // descending x
 			return newLaserPositions[a].z > newLaserPositions[b].z;     // descending z
 		});
-
-
 
 	std::vector<glm::vec3> sortedLaserPositions(newLaserPositions.size());
 	std::vector<glm::vec3> sortedCameraNormals(newCameraNormals.size());
