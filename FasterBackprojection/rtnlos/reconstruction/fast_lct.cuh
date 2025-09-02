@@ -182,7 +182,7 @@ inline __global__ void multiplyTransformTranspose(
     }
 }
 
-inline __global__ void multiplyTransformTransposeInv_d(
+inline __global__ void multiplyTransformTransposeInv(
     const float* __restrict__ volumeGpu, const float* __restrict__ mtx, float* __restrict__ mult, glm::uvec3 dataResolution)
 {
     const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y, t = blockIdx.z * blockDim.z + threadIdx.z;

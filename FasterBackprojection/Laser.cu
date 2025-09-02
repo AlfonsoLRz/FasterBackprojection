@@ -28,9 +28,9 @@ void Laser::reconstruct(NLosData* nlosData, const TransientParameters& transient
 	ReconstructionBuffers recBuffers;
 
 	// Transfer data to GPU
-	//nlosData->discardDistanceToSensorAndLaser();
-	//nlosData->reduceToConfocal();
-	//nlosData->downsampleTime(2);
+	nlosData->discardDistanceToSensorAndLaser();
+	nlosData->reduceToConfocal();
+	nlosData->downsampleTime(2);
 	//nlosData->downsampleSpace(2);
 	nlosData->toGpu(recInfo, recBuffers, transientParams);
 
@@ -40,7 +40,8 @@ void Laser::reconstruct(NLosData* nlosData, const TransientParameters& transient
 	CudaHelper::checkError(cudaMemcpyToSymbol(sensorTargets, &recBuffers._sensorTargets, sizeof(glm::vec3*)));
 	CudaHelper::checkError(cudaMemcpyToSymbol(intensityCube, &recBuffers._intensity, sizeof(float*)));
 
-	spdlog::info("Reconstructing scene...");
+	std::cout << "Reconstructing shape...\n";
+
 	_reconstruction[transientParams._reconstructionType]->reconstructVolume(nlosData, recInfo, recBuffers, transientParams);
 
 	CudaHelper::free(recBuffers._laserTargets);

@@ -165,33 +165,26 @@ void Reconstruction::filter_H_cuda(float* intensityGpu, float wl_mean, float wl_
 	_perf.toc();
 }
 
-void Reconstruction::compensateLaserCosDistance(
-	const TransientParameters& transientParams, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
+void Reconstruction::compensateLaserCosDistance(const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
 {
-	if (transientParams._compensateLaserCosDistance &&
-		// Not really ok, TBD: how to check if positions are set properly otherwise?
-		!glm::all(glm::epsilonEqual(_nlosData->_laserPosition, glm::vec3(0.0f), glm::epsilon<float>())) &&
-		!glm::all(glm::epsilonEqual(_nlosData->_cameraPosition, glm::vec3(0.0f), glm::epsilon<float>())))
-	{
-		_perf.tic("Compensate Laser Cosine & Distance");
+	_perf.tic("Compensate Laser Cosine & Distance");
 
-		glm::uint spatialSize = static_cast<glm::uint>(_nlosData->_dims[0] * _nlosData->_dims[1]);
-		if (recInfo._captureSystem == CaptureSystem::Exhaustive)
-			spatialSize *= static_cast<glm::uint>(_nlosData->_dims[2] * _nlosData->_dims[3]);
+	glm::uint spatialSize = static_cast<glm::uint>(_nlosData->_dims[0] * _nlosData->_dims[1]);
+	if (recInfo._captureSystem == CaptureSystem::Exhaustive)
+		spatialSize *= static_cast<glm::uint>(_nlosData->_dims[2] * _nlosData->_dims[3]);
 
-		dim3 blockSize(64, 8);
-		dim3 gridSize(
-			(spatialSize + blockSize.x - 1) / blockSize.x,
-			(recInfo._numTimeBins + blockSize.y - 1) / blockSize.y
-		);
+	dim3 blockSize(64, 8);
+	dim3 gridSize(
+		(spatialSize + blockSize.x - 1) / blockSize.x,
+		(recInfo._numTimeBins + blockSize.y - 1) / blockSize.y
+	);
 
-		compensateLaserPosition << <gridSize, blockSize >> > (
-			recBuffers._intensity,
-			recInfo._captureSystem == CaptureSystem::Confocal ? 1 : recInfo._numSensorTargets,
-			spatialSize, recInfo._numTimeBins);
+	compensateLaserPosition<<<gridSize, blockSize>>>(
+		recBuffers._intensity, 
+		recInfo._captureSystem == CaptureSystem::Confocal ? 1 : recInfo._numSensorTargets, 
+		spatialSize, recInfo._numTimeBins);
 
-		_perf.toc();
-	}
+	_perf.toc();
 }
 
 void Reconstruction::normalizeMatrix(float* v, glm::uint size)

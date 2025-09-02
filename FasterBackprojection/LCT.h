@@ -9,10 +9,11 @@ protected:
 	void reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers);
 	static void reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo);
 
-	cufftComplex* definePSFKernel(const glm::uvec3& dataResolution, float slope, cufftHandle fftPlan, cudaStream_t stream);
-	static void defineTransformOperator(glm::uint M, float*& d_mtx, cudaStream_t stream);
+	cufftComplex* definePSFKernel(const glm::uvec3& dataResolution, float slope, cudaStream_t stream);
+	static void defineTransformOperator(glm::uint M, float*& d_mtx);
 
-	static void multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const glm::uvec3& dataResolution, cufftHandle fftPlan);
+	void multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const glm::uvec3& dataResolution);
+
 	static float* transformData(float* volumeGpu, const glm::uvec3& dataResolution, const float* mtx, cudaStream_t stream);
 	static void inverseTransformData(const float* volumeGpu, float* multResult, const glm::uvec3& dataResolution, float*& inverseMtx);
 

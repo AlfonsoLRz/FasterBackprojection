@@ -34,7 +34,10 @@ void PhasorFields::reconstructVolume(
 	const glm::uvec3 volumeResolution = glm::uvec3(nlosData->_dims[0], nlosData->_dims[1], nlosData->_dims[2]);
 	float* volumeGpu = recBuffers._intensity;
 
-	compensateLaserCosDistance(transientParams, recInfo, recBuffers);
+	if (transientParams._compensateLaserCosDistance &&
+		!glm::all(glm::epsilonEqual(_nlosData->_laserPosition, glm::vec3(0.0f), glm::epsilon<float>())) &&
+		!glm::all(glm::epsilonEqual(_nlosData->_cameraPosition, glm::vec3(0.0f), glm::epsilon<float>())))
+		compensateLaserCosDistance(recInfo, recBuffers);
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
 		reconstructVolumeConfocal(volumeGpu, recInfo, recBuffers);
@@ -393,7 +396,8 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 
 	// Define two cuda streams for asynchronous operations
 	cudaStream_t stream1, stream2;
-	CudaHelper::createStreams({ &stream1, &stream2 });
+	CudaHelper::checkError(cudaStreamCreate(&stream1));
+	CudaHelper::checkError(cudaStreamCreate(&stream2));
 
 	// Forward transform operator (mtxi is simply the transpose of mtx) ---- STREAM 
 	std::future<void> future = std::async(std::launch::async,
@@ -413,7 +417,8 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 	// Transform data using previous operators
 	transformData(volumeResolution, mtx, phasorCos, phasorSin, phasorDataCos, phasorDataSin, stream1);
 
-	CudaHelper::waitFor({ &stream1, &stream2 });
+	cuStreamSynchronize(stream1);
+	cuStreamSynchronize(stream2);
 	emptyCleanupQueue();
 
 	_perf.toc();
@@ -427,17 +432,14 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 	computeMagnitude(phasorDataCos, phasorDataSin, mtx, phasorCos, intensityGpu, volumeResolution);
 	_perf.toc();
 
-	spdlog::info("Allocated memory: {} MB", CudaHelper::getAllocatedMemory() / static_cast<size_t>(1024 * 1024));
-
-	CudaHelper::freeAsync(psfKernel, stream1);
-	CudaHelper::freeAsync(mtx, stream1);
-	CudaHelper::freeAsync(phasorCos, stream1);
-
-	CudaHelper::freeAsync(phasorSin, stream2);
-	CudaHelper::freeAsync(phasorDataCos, stream2);
-	CudaHelper::freeAsync(phasorDataSin, stream2);
-
-	CudaHelper::destroyStreams({ &stream1, &stream2 });
+	CudaHelper::free(psfKernel);
+	CudaHelper::free(mtx);
+	CudaHelper::free(phasorCos);
+	CudaHelper::free(phasorSin);
+	CudaHelper::free(phasorDataCos);
+	CudaHelper::free(phasorDataSin);
+	cudaStreamDestroy(stream1);
+	cudaStreamDestroy(stream2);
 }
 
 void PhasorFields::reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo)
