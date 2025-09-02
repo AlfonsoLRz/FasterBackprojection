@@ -40,7 +40,7 @@ void Laser::reconstruct(NLosData* nlosData, const TransientParameters& transient
 	CudaHelper::checkError(cudaMemcpyToSymbol(sensorTargets, &recBuffers._sensorTargets, sizeof(glm::vec3*)));
 	CudaHelper::checkError(cudaMemcpyToSymbol(intensityCube, &recBuffers._intensity, sizeof(float*)));
 
-	std::cout << "Reconstructing shape...\n";
+	spdlog::info("Reconstructing scene...");
 
 	_reconstruction[transientParams._reconstructionType]->reconstructVolume(nlosData, recInfo, recBuffers, transientParams);
 

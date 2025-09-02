@@ -34,10 +34,7 @@ void PhasorFields::reconstructVolume(
 	const glm::uvec3 volumeResolution = glm::uvec3(nlosData->_dims[0], nlosData->_dims[1], nlosData->_dims[2]);
 	float* volumeGpu = recBuffers._intensity;
 
-	if (transientParams._compensateLaserCosDistance &&
-		!glm::all(glm::epsilonEqual(_nlosData->_laserPosition, glm::vec3(0.0f), glm::epsilon<float>())) &&
-		!glm::all(glm::epsilonEqual(_nlosData->_cameraPosition, glm::vec3(0.0f), glm::epsilon<float>())))
-		compensateLaserCosDistance(recInfo, recBuffers);
+	compensateLaserCosDistance(transientParams, recInfo, recBuffers);
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
 		reconstructVolumeConfocal(volumeGpu, recInfo, recBuffers);

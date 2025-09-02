@@ -23,10 +23,7 @@ void FK::reconstructVolume(
 	_perf.setAlgorithmName("fk-migration");
 	_perf.tic();
 
-	if (transientParams._compensateLaserCosDistance &&
-		!glm::all(glm::epsilonEqual(_nlosData->_laserPosition, glm::vec3(0.0f), glm::epsilon<float>())) &&
-		!glm::all(glm::epsilonEqual(_nlosData->_cameraPosition, glm::vec3(0.0f), glm::epsilon<float>())))
-		compensateLaserCosDistance(recInfo, recBuffers);
+	compensateLaserCosDistance(transientParams, recInfo, recBuffers);
 
 	if (recInfo._captureSystem == CaptureSystem::Confocal)
 		reconstructVolumeConfocal(nullptr, recInfo, recBuffers);
@@ -68,10 +65,19 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 
 	_perf.tic("Resource allocation");
 
+	cudaStream_t stream1, stream2;
+	CudaHelper::createStreams({ &stream1, &stream2 });
+
 	cufftHandle planH;
 	cufftComplex* fft = nullptr, *fftAux = nullptr;
-	CudaHelper::initializeZeroBuffer(fft, static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z);
-	CudaHelper::initializeBuffer(fftAux, static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z);
+	CudaHelper::initializeZeroBufferAsync(
+		fft, static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z,
+		stream1
+	);
+	CudaHelper::initializeBufferAsync(
+		fftAux, static_cast<size_t>(fftVolumeResolution.x) * fftVolumeResolution.y * fftVolumeResolution.z,
+		static_cast<cufftComplex*>(nullptr), stream2
+	);
 	float* intensityGpu = recBuffers._intensity;
 
 	_perf.toc();
@@ -99,11 +105,12 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 	);
 
 	// Perform forward FFT on the intensity data
+	CudaHelper::waitFor({ &stream1 });
 	{
 		_perf.tic("Pad Intensity FFT");
 
 		float divisor = 1.0f / static_cast<float>(volumeResolution.z);
-		padIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fft, volumeResolution, fftVolumeResolution, divisor);
+		fk::padIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fft, volumeResolution, fftVolumeResolution, divisor);
 
 		_perf.toc();
 	}
@@ -126,6 +133,7 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 	}
 
 	// Stolt interpolation
+	CudaHelper::waitFor({ &stream2 });
 	{
 		_perf.tic("Stolt");
 
@@ -139,7 +147,7 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 			(fftVolumeResolution.x + paddedBlockSizeFFT.z - 1) / paddedBlockSizeFFT.z
 		);
 
-		stoltKernel<<<paddedGridSizeFFT, paddedBlockSizeFFT>>>(
+		fk::stoltKernel<<<paddedGridSizeFFT, paddedBlockSizeFFT>>>(
 			fft, fftAux,
 			fftVolumeResolution, fftVolumeResolution / 2u, 
 			sqrtConst * sqrtConst);
@@ -164,16 +172,18 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 	{
 		_perf.tic("Unpad intensity FFT");
 
-		unpadIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fftAux, volumeResolution, fftVolumeResolution);
+		fk::unpadIntensityFFT_FK<<<gridSize, blockSize>>>(intensityGpu, fftAux, volumeResolution, fftVolumeResolution);
 
 		_perf.toc();
 	}
 
-	std::cout << "Allocated memory: " << CudaHelper::getAllocatedMemory() / (1024 * 1024) << " MB" << std::endl;
+	spdlog::info("Allocated memory: {} MB", CudaHelper::getAllocatedMemory() / static_cast<size_t>(1024 * 1024));
 
-	CudaHelper::free(fft);
-	CudaHelper::free(fftAux);
+	CudaHelper::freeAsync(fft, stream1);
+	CudaHelper::freeAsync(fftAux, stream2);
 	CUFFT_CHECK(cufftDestroy(planH));
+	CudaHelper::waitFor({ &stream1, &stream2 });
+	CudaHelper::destroyStreams({ &stream1, &stream2 });
 }
 
 void FK::reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo)
