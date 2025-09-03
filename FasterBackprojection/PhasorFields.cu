@@ -96,7 +96,7 @@ void PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, float slope
 
 	// RSD
 	{
-		computePSFKernel_pf<<<gridSize, blockSize, 0, stream>>>(psf, totalRes, slope);
+		pf::computePSFKernel<<<gridSize, blockSize, 0, stream>>>(psf, totalRes, slope);
 	}
 
 	// Find minimum along z-axis and binarize (only 1 value per xy, or a few at most)
@@ -107,7 +107,7 @@ void PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, float slope
 			(totalRes.y + blockSize2D.y - 1) / blockSize2D.y
 		);
 
-		findMinimumBinarize_pf<<<gridSize2D, blockSize2D, 0, stream>>>(psf, totalRes);
+		pf::findMinimumBinarize<<<gridSize2D, blockSize2D, 0, stream>>>(psf, totalRes);
 	}
 
 	// Normalization according to center 
@@ -119,7 +119,7 @@ void PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, float slope
 		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z, stream);
 		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z, stream);
 
-		normalizePSF_pf<<<gridSize, blockSize, 0, stream>>>(psf, singleFloat, totalRes);
+		pf::normalizePSF<<<gridSize, blockSize, 0, stream>>>(psf, singleFloat, totalRes);
 	}
 
 	// L2 normalization
@@ -129,10 +129,10 @@ void PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, float slope
 		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf, singleFloat, size, stream);
 		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf, singleFloat, size, stream);
 
-		l2NormPSF_pf <<<gridSize, blockSize, 0, stream>>>(psf, singleFloat, totalRes);
+		pf::l2NormPSF<<<gridSize, blockSize, 0, stream>>>(psf, singleFloat, totalRes);
 	}
 
-	rollPSF_pf<<<gridSize, blockSize, 0, stream>>>(psf, rolledPsf, dataResolution, totalRes);
+	pf::rollPSF<<<gridSize, blockSize, 0, stream>>>(psf, rolledPsf, dataResolution, totalRes);
 
 	// Fourier transform the PSF kernel
 	{
@@ -141,23 +141,22 @@ void PhasorFields::definePSFKernel(const glm::uvec3& dataResolution, float slope
 
 	// Get the conjugate of the PSF kernel
 	{
-		extractConjugate_pf<<<gridSize, blockSize, 0, stream>>>(rolledPsf, totalRes);
+		pf::extractConjugate<<<gridSize, blockSize, 0, stream>>>(rolledPsf, totalRes);
 	}
 
-	_cleanupQueue.push_back([psf, singleFloat, tempStorage, fftPlan]
+	_cleanupQueue.push_back([psf, singleFloat, tempStorage, fftPlan, stream]
 	{
-		CudaHelper::free(psf);
-		CudaHelper::free(singleFloat);
-		CudaHelper::free(tempStorage);
+		CudaHelper::freeAsync(psf, stream);
+		CudaHelper::freeAsync(singleFloat, stream);
+		CudaHelper::freeAsync(tempStorage, stream);
 		cufftDestroy(fftPlan);
 	});
 }
 
-void PhasorFields::defineTransformOperator(glm::uint M, float*& d_mtx)
+void PhasorFields::defineTransformOperator(glm::uint M, float*& d_mtx, cudaStream_t stream)
 {
 	using namespace Eigen;
 	using SparseMatrixF_RowMajor = SparseMatrix<float, Eigen::RowMajor>;  // For efficient row access
-	using SparseMatrixF_ColMajor = Eigen::SparseMatrix<float, Eigen::ColMajor>;  // For efficient column access
 	using TripletF = Triplet<float>;
 
 	glm::uint M2 = M * M;
@@ -258,7 +257,7 @@ void PhasorFields::defineTransformOperator(glm::uint M, float*& d_mtx)
 		for (SparseMatrixF_RowMajor::InnerIterator it(mtx, k); it; ++it)
 			mtxHost[it.col() * M + it.row()] = it.value();
 
-	CudaHelper::initializeBuffer(d_mtx, mtxHost.size(), mtxHost.data());
+	CudaHelper::initializeBufferAsync(d_mtx, mtxHost.size(), mtxHost.data(), stream);
 }
 
 void PhasorFields::virtualWaveConvolution(
@@ -286,8 +285,8 @@ void PhasorFields::virtualWaveConvolution(
 		(dataResolution.x + blockSize3D.z - 1) / blockSize3D.z
 	);
 
-	createVirtualWaves<<<gridSize, blockSize, 0, stream>>>(virtualWaveCos, virtualWaveSin, numSamples, numCycles, sigma);
-	convolveVirtualWaves<<<gridSize3D, blockSize3D, 0, stream>>>(data, dataResolution, virtualWaveSin, virtualWaveCos, phasorCos, phasorSin, numSamples);
+	pf::createVirtualWaves<<<gridSize, blockSize, 0, stream>>>(virtualWaveCos, virtualWaveSin, numSamples, numCycles, sigma);
+	pf::convolveVirtualWaves<<<gridSize3D, blockSize3D, 0, stream>>>(data, dataResolution, virtualWaveSin, virtualWaveCos, phasorCos, phasorSin, numSamples);
 }
 
 void PhasorFields::transformData(
@@ -310,8 +309,7 @@ void PhasorFields::transformData(
 		(dataResolution.x + blockSize.z - 1) / blockSize.z
 	);
 
-	multiplyTransformTranspose<<<gridSize, blockSize, 0, stream>>>(phasorCos, phasorSin, mtx, phasorDataCos, phasorDataSin, dataResolution, fftResolution);
-	CudaHelper::synchronize("multiplyTransformTranspose");
+	pf::multiplyTransformTranspose<<<gridSize, blockSize, 0, stream>>>(phasorCos, phasorSin, mtx, phasorDataCos, phasorDataSin, dataResolution, fftResolution);
 }
 
 void PhasorFields::convolveBackprojection(cufftComplex* phasorDataCos, cufftComplex* phasorDataSin, cufftComplex* psf, const glm::uvec3& dataResolution)
@@ -342,7 +340,7 @@ void PhasorFields::convolveBackprojection(cufftComplex* phasorDataCos, cufftComp
 		(fftResolution.y + blockSize.y - 1) / blockSize.y,
 		(fftResolution.x + blockSize.z - 1) / blockSize.z
 	);
-	convolveBackprojectionKernel<<<gridSize, blockSize>>>(phasorDataCos, phasorDataSin, psf, fftResolution);
+	pf::convolveBackprojectionKernel<<<gridSize, blockSize>>>(phasorDataCos, phasorDataSin, psf, fftResolution);
 
 	CUFFT_CHECK(cufftPlanMany(&planH, rank, n,
 		NULL, 1, 0,
@@ -372,11 +370,8 @@ void PhasorFields::computeMagnitude(cufftComplex* phasorDataCos, cufftComplex* p
 		(dataResolution.x + blockSize.z - 1) / blockSize.z
 	);
 
-	computePhasorFieldMagnitude<<<gridSize, blockSize>>>(phasorDataCos, phasorDataSin, result1, fftResolution, dataResolution);
-	CudaHelper::synchronize("computePhasorFieldMagnitude");
-
-	multiplyTransformTransposeInv<<<gridSize, blockSize>>>(result1, mtx, result2, dataResolution);
-	CudaHelper::synchronize("multiplyTransformTranspose");
+	pf::computePhasorFieldMagnitude<<<gridSize, blockSize>>>(phasorDataCos, phasorDataSin, result1, fftResolution, dataResolution);
+	pf::multiplyTransformTransposeInv<<<gridSize, blockSize>>>(result1, mtx, result2, dataResolution);
 }
 
 void PhasorFields::reconstructVolumeConfocal(float*& volume, const ReconstructionInfo& recInfo, const ReconstructionBuffers& recBuffers)
@@ -393,14 +388,13 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 
 	// Define two cuda streams for asynchronous operations
 	cudaStream_t stream1, stream2;
-	CudaHelper::checkError(cudaStreamCreate(&stream1));
-	CudaHelper::checkError(cudaStreamCreate(&stream2));
+	CudaHelper::createStreams({ &stream1, &stream2 });
 
 	// Forward transform operator (mtxi is simply the transpose of mtx) ---- STREAM 
 	std::future<void> future = std::async(std::launch::async,
 		defineTransformOperator,
 		recInfo._numTimeBins,
-		std::ref(mtx));
+		std::ref(mtx), stream1);
 
 	// Waveconv & convolve data with the virtual waves
 	float lambdaLimit = _nlosData->_wallWidth * 2.0f / static_cast<float>(volumeResolution.x - 1);
@@ -414,8 +408,7 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 	// Transform data using previous operators
 	transformData(volumeResolution, mtx, phasorCos, phasorSin, phasorDataCos, phasorDataSin, stream1);
 
-	cuStreamSynchronize(stream1);
-	cuStreamSynchronize(stream2);
+	CudaHelper::waitFor({ &stream1, &stream2 });
 	emptyCleanupQueue();
 
 	_perf.toc();
@@ -435,8 +428,7 @@ void PhasorFields::reconstructVolumeConfocal(float*& volume, const Reconstructio
 	CudaHelper::free(phasorSin);
 	CudaHelper::free(phasorDataCos);
 	CudaHelper::free(phasorDataSin);
-	cudaStreamDestroy(stream1);
-	cudaStreamDestroy(stream2);
+	CudaHelper::destroyStreams({ &stream1, &stream2 });
 }
 
 void PhasorFields::reconstructVolumeExhaustive(float* volume, const ReconstructionInfo& recInfo)

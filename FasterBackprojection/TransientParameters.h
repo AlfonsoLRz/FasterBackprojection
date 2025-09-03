@@ -21,7 +21,7 @@ enum ReconstructionType
 class TransientParameters
 {
 public:
-	ReconstructionType			_reconstructionType = ReconstructionType::LCT_REC;
+	ReconstructionType			_reconstructionType = ReconstructionType::FK_MIGRATION;
 	bool						_useFourierFilter = false;
 	bool						_compensateLaserCosDistance = true;
 	bool						_reconstructAABB = true;

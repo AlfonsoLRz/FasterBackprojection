@@ -1,6 +1,6 @@
 #pragma once
 
-#define SYNCHRONIZE_KERNELS
+//#define SYNCHRONIZE_KERNELS
 
 class PcResourceTracker;
 

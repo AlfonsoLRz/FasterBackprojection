@@ -5,6 +5,7 @@
 #include <cufft.h>
 #include "math.cuh"
 
+
 namespace fk
 {
     inline __global__ void padIntensityFFT_FK(

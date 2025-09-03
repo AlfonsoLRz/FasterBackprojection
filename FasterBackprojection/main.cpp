@@ -10,7 +10,7 @@ int main(int argc, char* argv)
 
     try
     {
-        window->init("Ray Tracing");
+        window->init("Fast Reconstruction");
         window->loop();
     }
     catch (const std::exception& exception)

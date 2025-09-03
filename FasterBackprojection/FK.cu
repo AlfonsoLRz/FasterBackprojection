@@ -96,14 +96,6 @@ void FK::reconstructVolumeConfocal(float* volume, const ReconstructionInfo& recI
 		(fftVolumeResolution.x + blockSizeFFT.z - 1) / blockSizeFFT.z
 	);
 
-	constexpr glm::uint strides = 8;
-	dim3 strideBlockSizeFFT(8, 8, 8);
-	dim3 strideGridSizeFFT(
-		(volumeResolution.z / strides + strideBlockSizeFFT.x - 1) / strideBlockSizeFFT.x,
-		(volumeResolution.y + strideBlockSizeFFT.y - 1) / strideBlockSizeFFT.y,
-		(volumeResolution.x + strideBlockSizeFFT.z - 1) / strideBlockSizeFFT.z
-	);
-
 	// Perform forward FFT on the intensity data
 	CudaHelper::waitFor({ &stream1 });
 	{

@@ -8,7 +8,7 @@ protected:
 	//
 	void definePSFKernel(const glm::uvec3& dataResolution, float slope, cufftComplex*& rolledPsf, cudaStream_t stream);
 
-	static void defineTransformOperator(glm::uint M, float*& d_mtx);
+	static void defineTransformOperator(glm::uint M, float*& d_mtx, cudaStream_t stream);
 
 	void virtualWaveConvolution(
 		float* data, const glm::uvec3& dataResolution, float deltaDistance, float virtualWavelength, float cycles, 
