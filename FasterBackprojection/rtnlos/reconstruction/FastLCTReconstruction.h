@@ -26,8 +26,7 @@ class FastLCTReconstruction: public rtnlos::FastReconstructionAlgorithm
 	cufftComplex*			_psfKernel;
 	float*					_mtx;
 	cufftComplex*			_multResult;
-
-	cufftHandle				_fftPlan;
+	cufftHandle				_fftPlan2D;
 
 	glm::uint				_blockSize1D, _gridSize1D;
 	dim3					_blockSize3D, _gridSize3D;

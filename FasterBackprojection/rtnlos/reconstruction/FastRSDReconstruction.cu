@@ -127,7 +127,7 @@ void FastRSDReconstruction::reconstructImage(ViewportSurface* viewportSurface)
 
 	for (depth = _info._minDistance, depthIndex = 0; depth < _info._maxDistance; depth += _info._deltaDistance, ++depthIndex)
 	{
-		multiplySpectrumManyAndScale<<<_gridSize2D_freq, _blockSize2D_freq, 0, _cudaStreams[depthIndex]>>>(
+		fast_rsd::multiplySpectrumManyAndScale<<<_gridSize2D_freq, _blockSize2D_freq, 0, _cudaStreams[depthIndex]>>>(
 			_spadData,
 			_rsd + depthIndex * _frequencyCubeSize,
 			_imageConvolution + depthIndex * _sliceSize,
@@ -141,7 +141,7 @@ void FastRSDReconstruction::reconstructImage(ViewportSurface* viewportSurface)
 		));
 
 		// Store this slice
-		abs<<<_gridSize1D, _blockSize1D, 0, _cudaStreams[depthIndex]>>>(
+		fast_rsd::abs<<<_gridSize1D, _blockSize1D, 0, _cudaStreams[depthIndex]>>>(
 				_imageConvolution + depthIndex * _sliceSize,
 				_cubeImages + idx * cubeNumPixels() + depthIndex * sliceNumPixels(), 
 				_sliceSize);
@@ -155,18 +155,18 @@ void FastRSDReconstruction::reconstructImage(ViewportSurface* viewportSurface)
 		if (_useDDA) 
 		{
 			// perform depth dependent averaging across the 3 stored frames
-			DDA<<<_gridSize2D_depth, _blockSize2D_depth>>>(
+			fast_rsd::DDA<<<_gridSize2D_depth, _blockSize2D_depth>>>(
 				_cubeImages, previousIdx, _ddaWeights,
 				_sliceSize, _sliceSize * _numDepths, _numDepths);
 
-			maxZ<<<_gridSize2D_pix, _blockSize2D_pix>>>(
+			fast_rsd::maxZ<<<_gridSize2D_pix, _blockSize2D_pix>>>(
 				_cubeImages + 3 * _sliceSize * _numDepths, _imageResult,
 				_imageWidth, _imageHeight, _numDepths, _sliceSize, glm::uvec2(_imageWidth / 2, _imageHeight / 2));
 		}
 		else 
 		{
 			// Depth dependent averaging is turned off, just pick the max from the current (previous) single frame.
-			maxZ<<<_gridSize2D_pix, _blockSize2D_pix>>>(
+			fast_rsd::maxZ<<<_gridSize2D_pix, _blockSize2D_pix>>>(
 				_cubeImages + previousIdx * _sliceSize * _numDepths, _imageResult,
 				_imageWidth, _imageHeight, _numDepths, _sliceSize, glm::uvec2(_imageWidth / 2, _imageHeight / 2));
 		}
@@ -184,7 +184,7 @@ void FastRSDReconstruction::reconstructImage(ViewportSurface* viewportSurface)
 			float lf = _bandpassInterval.x, hf = _bandpassInterval.y;
 			float scale = 1.0f / (hf - lf);
 
-			bandpassFilter<<<_gridSize1D, _blockSize1D>>>(_imageResult, _sliceSize, lf, scale);
+			fast_rsd::bandpassFilter<<<_gridSize1D, _blockSize1D>>>(_imageResult, _sliceSize, lf, scale);
 		}
 
 		// Write result into cudaSurface
@@ -194,7 +194,7 @@ void FastRSDReconstruction::reconstructImage(ViewportSurface* viewportSurface)
 			texture = viewportSurface->acquireDrawSurface();
 		} while (!texture);
 
-		writeImage<<<_gridSize1D, _blockSize1D>>>(_imageResult, _sliceSize, texture);
+		fast_rsd::writeImage<<<_gridSize1D, _blockSize1D>>>(_imageResult, _sliceSize, texture);
 
 		CudaHelper::synchronize();
 		viewportSurface->present();
@@ -213,7 +213,7 @@ void FastRSDReconstruction::RSDKernelConvolution(
 	// Apply RSD convolution kernel equation
 	float z_hat = depth / dx;
 	float mulSquare = lambda * z_hat / (static_cast<float>(dim_x) * dx);
-	rsdKernel<<<_gridSize2D_pix, _blockSize2D_pix, 0, cudaStream>>>(dKernel, z_hat * z_hat, mulSquare, dim_x, dim_y);
+	fast_rsd::rsdKernel<<<_gridSize2D_pix, _blockSize2D_pix, 0, cudaStream>>>(dKernel, z_hat * z_hat, mulSquare, dim_x, dim_y);
 
 	// Perform fft on gpu
 	CUFFT_CHECK(cufftSetStream(fftPlan, cudaStream));
@@ -221,5 +221,5 @@ void FastRSDReconstruction::RSDKernelConvolution(
 
 	// Convolve the two by pointwise multiplication of the spectrums
 	cufftComplex harmonic = { cos(omega * t), sin(omega * t) };
-	multiplySpectrumExpHarmonic<<<_gridSize1D, _blockSize1D, 0, cudaStream>>>(dKernel, harmonic, _sliceSize);
+	fast_rsd::multiplySpectrumExpHarmonic<<<_gridSize1D, _blockSize1D, 0, cudaStream>>>(dKernel, harmonic, _sliceSize);
 }

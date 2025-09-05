@@ -18,7 +18,7 @@
 FastLCTReconstruction::FastLCTReconstruction()
 	: _volumeResolution(0)
 	  , _psfKernel(nullptr), _mtx(nullptr)
-	  , _multResult(nullptr), _fftPlan(0), _blockSize1D(0), _gridSize1D(0)
+	  , _multResult(nullptr), _fftPlan2D(0), _blockSize1D(0), _gridSize1D(0)
 {
 }
 
@@ -35,10 +35,11 @@ void FastLCTReconstruction::destroyResources()
 	CudaHelper::reset(_psfKernel);
 	CudaHelper::reset(_mtx);
 	CudaHelper::reset(_multResult);
-	if (_fftPlan != 0)
+
+	if (_fftPlan2D != 0)
 	{
-		CUFFT_CHECK(cufftDestroy(_fftPlan));
-		_fftPlan = 0;
+		CUFFT_CHECK(cufftDestroy(_fftPlan2D));
+		_fftPlan2D = 0;
 	}
 }
 
@@ -50,14 +51,14 @@ void FastLCTReconstruction::precalculate()
 	_volumeResolution = glm::uvec3(_imageHeight, _imageWidth, _numFrequencies);
 
 	// FFT
-	int rank = 3;
-	int n[3] = { static_cast<int>(_volumeResolution.x),
-				 static_cast<int>(_volumeResolution.y),
-				 static_cast<int>(_volumeResolution.z) };
-	CUFFT_CHECK(cufftPlanMany(&_fftPlan, rank, n,
-		NULL, 1, 0,			// idist and odist do not matter when the number of batches is 1
-		NULL, 1, 0,
-		CUFFT_C2C, 1));
+	//int rank = 3;
+	//int n[3] = { static_cast<int>(_volumeResolution.x),
+	//			 static_cast<int>(_volumeResolution.y),
+	//			 static_cast<int>(_volumeResolution.z) };
+	//CUFFT_CHECK(cufftPlanMany(&_fftPlan, rank, n,
+	//	NULL, 1, 0,			// idist and odist do not matter when the number of batches is 1
+	//	NULL, 1, 0,
+	//	CUFFT_C2C, 1));
 
 	// Launch dims
 	_blockSize1D = 512;
@@ -95,16 +96,16 @@ void FastLCTReconstruction::reconstructImage(ViewportSurface* viewportSurface)
 	perf.tic();
 
 	perf.tic("FFT");
-	//for (int frequencyIdx = 0; frequencyIdx < _numFrequencies; ++frequencyIdx)
-	//{
-	//	CUFFT_CHECK(cufftSetStream(_fftPlan2D, _cudaStreams[frequencyIdx]));
-	//	CUFFT_CHECK(cufftExecC2C(_fftPlan2D,
-	//		_spadData + frequencyIdx * _sliceSize,
-	//		_spadData + frequencyIdx * _sliceSize,
-	//		CUFFT_FORWARD));
-	//}
-	//synchronizeStreams(_numFrequencies);
-	//perf.toc();
+	for (int frequencyIdx = 0; frequencyIdx < _numFrequencies; ++frequencyIdx)
+	{
+		CUFFT_CHECK(cufftSetStream(_fftPlan2D, _cudaStreams[frequencyIdx]));
+		CUFFT_CHECK(cufftExecC2C(_fftPlan2D,
+			_spadData + frequencyIdx * _sliceSize,
+			_spadData + frequencyIdx * _sliceSize,
+			CUFFT_FORWARD));
+	}
+	synchronizeStreams(_numFrequencies);
+	perf.toc();
 
 	perf.tic("Reconstruct Image");
 	transformData(_mtx);
@@ -143,7 +144,7 @@ cufftComplex* FastLCTReconstruction::definePSFKernel(float slope, cudaStream_t s
 
 	// RSD
 	{
-		computePSFKernel<<<_gridSize3D, _blockSize3D, 0, stream>>>(psf, totalRes, slope);
+		fast_lct::computePSFKernel<<<_gridSize3D, _blockSize3D, 0, stream>>>(psf, totalRes, slope);
 	}
 
 	// Find minimum along z-axis and binarize (only 1 value per xy, or a few at most)
@@ -154,7 +155,7 @@ cufftComplex* FastLCTReconstruction::definePSFKernel(float slope, cudaStream_t s
 			(totalRes.y + blockSize2D.y - 1) / blockSize2D.y
 		);
 
-		findMinimumBinarize<<<gridSize2D, blockSize2D, 0, stream>>>(psf, totalRes);
+		fast_lct::findMinimumBinarize<<<gridSize2D, blockSize2D, 0, stream>>>(psf, totalRes);
 	}
 
 	// Normalization according to center 
@@ -166,7 +167,7 @@ cufftComplex* FastLCTReconstruction::definePSFKernel(float slope, cudaStream_t s
 		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z, stream);
 		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf + sumBaseIndex, singleFloat, totalRes.z, stream);
 
-		normalizePSF<<<_gridSize3D, _blockSize3D, 0, stream>>>(psf, singleFloat, totalRes);
+		fast_lct::normalizePSF<<<_gridSize3D, _blockSize3D, 0, stream>>>(psf, singleFloat, totalRes);
 	}
 
 	// L2 normalization
@@ -176,20 +177,20 @@ cufftComplex* FastLCTReconstruction::definePSFKernel(float slope, cudaStream_t s
 		cub::DeviceReduce::Sum(nullptr, tempStorageBytes, psf, singleFloat, size, stream);
 		cub::DeviceReduce::Sum(tempStorage, tempStorageBytes, psf, singleFloat, size, stream);
 
-		l2NormPSF<<<_gridSize3D, _blockSize3D, 0, stream>>>(psf, singleFloat, totalRes);
+		fast_lct::l2NormPSF<<<_gridSize3D, _blockSize3D, 0, stream>>>(psf, singleFloat, totalRes);
 	}
 
-	rollPSF<<<_gridSize3D, _blockSize3D, 0, stream>>>(psf, rolledPsf, _volumeResolution, totalRes);
+	fast_lct::rollPSF<<<_gridSize3D, _blockSize3D, 0, stream>>>(psf, rolledPsf, _volumeResolution, totalRes);
 
 	// Fourier transform the PSF kernel
 	{
-		CUFFT_CHECK(cufftSetStream(_fftPlan, stream));
-		CUFFT_CHECK(cufftExecC2C(_fftPlan, rolledPsf, rolledPsf, CUFFT_FORWARD));
+		//CUFFT_CHECK(cufftSetStream(_fftPlan, stream));
+		//CUFFT_CHECK(cufftExecC2C(_fftPlan, rolledPsf, rolledPsf, CUFFT_FORWARD));
 	}
 
 	// Wiener filter
 	{
-		wienerFilterPsf<<<_gridSize3D, _blockSize3D, 0, stream>>>(rolledPsf, totalRes, 8e-1);
+		fast_lct::wienerFilterPsf<<<_gridSize3D, _blockSize3D, 0, stream>>>(rolledPsf, totalRes, 8e-1);
 	}
 
 	CudaHelper::freeAsync(psf, stream);
@@ -313,10 +314,10 @@ void FastLCTReconstruction::transformData(const float* mtx)
 {
 	// Scale the intensity values according to the material type (diffuse or not)
 	float divisor = 1.0f / (static_cast<float>(_volumeResolution.z) - 1.0f);
-	scaleIntensity<false><<<_gridSize1D, _blockSize1D>>>(_spadData, _volumeResolution, _frequencyCubeSize, divisor);
+	fast_lct::scaleIntensity<false><<<_gridSize1D, _blockSize1D>>>(_spadData, _volumeResolution, _frequencyCubeSize, divisor);
 
 	// Multiply intensity by the transform matrix
-	multiplyTransformTranspose<<<_gridSize3D, _blockSize3D >>>(_spadData, mtx, _multResult, _volumeResolution);
+	fast_lct::multiplyTransformTranspose<<<_gridSize3D, _blockSize3D >>>(_spadData, mtx, _multResult, _volumeResolution);
 }
 
 void FastLCTReconstruction::inverseTransformData()

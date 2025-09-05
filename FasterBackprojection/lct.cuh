@@ -19,6 +19,40 @@ namespace lct
         psf[getKernelIdx(x, y, t, dataResolution)] = fabsf((4 * slope) * (4 * slope) * (grid.x * grid.x + grid.y * grid.y) - grid.z);
     }
 
+    inline __inline__ __device__ float warpReduceMin(float val) {
+        // warp reduction using shuffle
+        for (int offset = 16; offset > 0; offset /= 2)
+            val = fminf(val, __shfl_down_sync(0xffffffff, val, offset));
+        return val;
+    }
+
+    inline __global__ void reduceMinZ_warp(const float* __restrict__ data,
+        float* __restrict__ out,
+        int X, int Y, int Z)
+    {
+        int x = blockIdx.x * blockDim.x + threadIdx.x;   // one thread per x
+        int y = blockIdx.y;                              // one block row per y
+        if (x >= X || y >= Y) return;
+
+        int strideXY = X * Y;
+        int baseIdx = y * X + x;
+
+        // Each warp processes one (x,y)
+        float minVal = FLT_MAX;
+        for (int z = threadIdx.y; z < Z; z += blockDim.y) {
+            float v = data[z * strideXY + baseIdx];
+            minVal = fminf(minVal, v);
+        }
+
+        // Reduce within warp (threadIdx.y dimension)
+        minVal = warpReduceMin(minVal);
+
+        // Write result from lane 0 of each warp
+        if (threadIdx.y == 0)
+            out[baseIdx] = minVal;
+    }
+
+
     inline __global__ void findMinimumBinarize(float* __restrict__ psf, glm::uvec3 dataResolution)
     {
         const glm::uint x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -169,7 +203,7 @@ namespace lct
             const glm::uint spatialIndex = y * dataResolution.x + x;
 
             float sum = 0.0f;
-#pragma unroll
+			#pragma unroll 8
             for (glm::uint k = 0; k < dataResolution.z; ++k)
                 sum += mtx[k * dataResolution.z + t] * volumeGpu[spatialIndex * dataResolution.z + k];
 

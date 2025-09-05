@@ -172,7 +172,6 @@ void LCT::defineTransformOperator(glm::uint M, float*& d_mtx, cudaStream_t strea
 {
 	using namespace Eigen;
 	using SparseMatrixF_RowMajor = Eigen::SparseMatrix<float, Eigen::RowMajor>;  // For efficient row access
-	using SparseMatrixF_ColMajor = Eigen::SparseMatrix<float, Eigen::ColMajor>;  // For efficient column access
 	using TripletF = Eigen::Triplet<float>;
 
 	glm::uint M2 = M * M;
@@ -317,7 +316,7 @@ void LCT::multiplyKernel(float* volumeGpu, const cufftComplex* inversePSF, const
 float* LCT::transformData(float* volumeGpu, const glm::uvec3& dataResolution, const float* mtx, cudaStream_t stream)
 {
 	float* multResult = nullptr;
-	CudaHelper::initializeZeroBuffer(multResult, static_cast<size_t>(dataResolution.x) * dataResolution.y * dataResolution.z, stream);
+	CudaHelper::initializeZeroBufferAsync(multResult, static_cast<size_t>(dataResolution.x) * dataResolution.y * dataResolution.z, stream);
 
 	glm::uint numElements = dataResolution.x * dataResolution.y * dataResolution.z;
 
@@ -386,7 +385,7 @@ void LCT::reconstructVolume(
 	_perf.summarize();
 
 	if (transientParams._saveMaxImage)
-		LCT::saveMaxImage(
+		saveMaxImage(
 			transientParams._outputFolder + transientParams._outputMaxImageName,
 			volumeGpu,
 			volumeResolution,
